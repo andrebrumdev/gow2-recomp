@@ -1,0 +1,52 @@
+# ---- Game data (copyright — NEVER commit) ----
+extracted/
+EBOOT.ELF
+EBOOT.BIN
+*.psarc
+*.self
+*.sprx
+spu_images/
+spu_miss_*.bin
+*_text.bin
+
+# ---- Build artifacts (regenerable) ----
+*.o
+*.obj
+*.exe
+*.a
+*.lib
+*.dll
+*.pdb
+
+# ---- Generated lift chunks (regenerable from functions.json + lifter) ----
+recomp/
+recomp_full/
+recomp_mid/
+recomp_compile/
+recomp_vmxfast/
+recomp_stubcheck/
+recomp_ovtest/
+# recomp_mid_v2: keep ONLY the curated funcs.json + launcher (see !rules below),
+# drop the multi-hundred-MB generated .cpp/.h/.o
+recomp_mid_v2/*.cpp
+recomp_mid_v2/*.h
+recomp_mid_v2/*.o
+recomp_mid_v2/*.bin
+
+# ---- Misc junk ----
+*.log
+*.err
+*.cclog
+*.tmp
+
+# ---- Re-include the curated artifacts we DO want ----
+!recomp_mid_v2/
+!recomp_mid_v2/*funcs*.json
+!recomp_mid_v2/rodar_gow2.cmd
+!recomp_mid_v2/*.py
+
+# run/debug dumps
+*.out
+nm_*.txt
+*.txt
+!SPURS*.md
