@@ -8,6 +8,10 @@ EBOOT.BIN
 spu_images/
 spu_miss_*.bin
 *_text.bin
+movie_cache/
+*.m2v
+*.wad_ps3
+*.wav
 
 # ---- Build artifacts (regenerable) ----
 *.o
