@@ -36,10 +36,16 @@ void gow2_register_spu_workloads(void)
      * stable 40fps loop into a SIGSEGV. Toggle with PS3_SPU_ALL. */
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU1"))
         spu_workload_register(0x2A5C4E67A14505B8ull, spu1_spu_func_00003050, "gow2_spu1");
-    if (getenv("PS3_SPU_ALL")) {
+    /* spu2/3 stay opt-in: their lifted entries may still fault mid-run. The
+     * host is now protected by the SEH isolation in spu_workload.c (a job crash
+     * kills only the job thread, not the process), so they can be registered
+     * for bring-up without regressing the stable loop. Fine gates PS3_SPU2 /
+     * PS3_SPU3 allow enabling one at a time; PS3_SPU_ALL enables both. NOT a
+     * default -- promotion waits on a full no-kill boot validation. */
+    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU2"))
         spu_workload_register(0xABCD0BA4D18DED49ull, spu2_spu_func_00004080, "gow2_spu2");
+    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU3"))
         spu_workload_register(0xED6A0C318DEB46C6ull, spu3_spu_func_00004080, "gow2_spu3");
-    }
 }
 
 #if defined(__GNUC__)
