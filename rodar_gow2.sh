@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Roda o God of War II HD nativo no macOS/arm64.
+# Equivalente POSIX do recomp_mid_v2/rodar_gow2.cmd.
+#
+# Uso:
+#   ./rodar_gow2.sh                 # backend sdl (padrao), com janela
+#   PS3_RSX_BACKEND=vulkan ./rodar_gow2.sh
+#   PS3_RSX_BACKEND=metal  ./rodar_gow2.sh
+#   PS3_NO_RSX=1 ./rodar_gow2.sh    # headless (caminho CPU/SPURS)
+#
+# Sair com timeout (exit 124) e normal: o guest fica em loop.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE"
+
+if [ ! -x ./boot_gow2 ]; then
+    echo "boot_gow2 nao encontrado -- rode ./build_macos.sh primeiro" >&2
+    exit 1
+fi
+if [ ! -f EBOOT.ELF ]; then
+    echo "EBOOT.ELF nao encontrado. Extraia e decripte o PKG antes:" >&2
+    echo "  python extract_pkg.py <PKG> --out extracted" >&2
+    echo "  python decrypt_self.py extracted/USRDIR/EBOOT.BIN EBOOT.ELF --rap <arquivo.rap>" >&2
+    exit 1
+fi
+
+# Env canonico (ver docs/MACOS_PORT_PLAN.md secao 4).
+export PS3_MOVIE_HLE=1
+export PS3_NOMOVIES=1
+export PS3_PAD_AUTOSTART=1
+export PS3_RSX_FIFO=1
+export PS3_CELLSYS_REORDER=1
+export PS3_VFS_ROOT="${PS3_VFS_ROOT:-$HERE/extracted/USRDIR}"
+export PS3_RSX_BACKEND="${PS3_RSX_BACKEND:-sdl}"
+
+TIMEOUT="${TIMEOUT:-120}"
+
+echo "[rodar] backend=${PS3_NO_RSX:+none (PS3_NO_RSX)}${PS3_NO_RSX:-$PS3_RSX_BACKEND} timeout=${TIMEOUT}s"
+echo "[rodar] vfs=$PS3_VFS_ROOT"
+
+./boot_gow2 EBOOT.ELF &
+BPID=$!
+for _ in $(seq "$TIMEOUT"); do
+    kill -0 "$BPID" 2>/dev/null || break
+    sleep 1
+done
+
+if kill -0 "$BPID" 2>/dev/null; then
+    echo "[rodar] timeout de ${TIMEOUT}s -- encerrando (loop do guest e o esperado)"
+    kill -9 "$BPID" 2>/dev/null
+    exit 124
+fi
+
+wait "$BPID"
+rc=$?
+echo "[rodar] boot_gow2 saiu com rc=$rc"
+exit $rc

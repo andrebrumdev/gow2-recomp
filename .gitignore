@@ -1,4 +1,6 @@
 # ---- Game data (copyright — NEVER commit) ----
+*.pkg
+*.rap
 extracted/
 EBOOT.ELF
 EBOOT.BIN
@@ -24,6 +26,8 @@ movie_cache/
 
 # ---- Generated lift chunks (regenerable from functions.json + lifter) ----
 recomp/
+recomp_macos/
+boot_gow2
 recomp_full/
 recomp_mid/
 recomp_compile/
