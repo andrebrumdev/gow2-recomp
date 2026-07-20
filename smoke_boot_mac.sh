@@ -52,6 +52,7 @@ grep -q  '151 imports'                  "$LOG" || fail "imports PRX nao resolvid
 grep -q  '_SPU_printf_server'           "$LOG" || fail "thread do printf server nao criada"
 grep -q  'THREAD 1] host thread started' "$LOG" || fail "trampolim de thread do guest nao correu"
 grep -q  'cellSpursInitializeWithAttribute' "$LOG" || fail "boot nao chega ao SPURS init"
+grep -q  '\[spurs kernel\] initialize' "$LOG" || fail "o guest nao inicializa o kernel SPURS HLE"
 
 # --- regressoes proibidas ------------------------------------------------
 grep -q 'lv2_syscall 141 (stub)' "$LOG" && fail "sys_timer_usleep voltou a ser stub"
