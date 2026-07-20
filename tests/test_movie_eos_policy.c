@@ -136,9 +136,34 @@ int main(void)
     /* obj valido com o span inteiro dentro do commit -> aceita. */
     CHECK(movie_eos_can_sample(0x100) == 1,      "can_sample aceita obj com span commitado");
 
-    printf("== arm: proibido nesta task ==\n");
-    /* Nada em movie_eos_arm.c pode mexer no g_movie_eos_ea na Task 1. */
-    CHECK(g_movie_eos_ea == 0, "g_movie_eos_ea continua 0 (sem arm na Task 1)");
+    printf("== arm: politica movie_eos_should_arm (Task 3) ==\n");
+    /* A decisao de armar o read-hook de EOS passa TODA por esta funcao pura, a
+     * mesma condicao do boot_main.cpp do Windows (linha 367):
+     *     eos_env && eos_ea == 0 && overlay_done != 0
+     * Testada aqui na funcao REAL de movie_eos_arm.c (nao numa copia): uma
+     * mutacao na condicao do sampler parte estes asserts. */
+
+    /* M0: sem PS3_MOVIE_EOS nunca arma, mesmo com o produtor de done a 1. */
+    CHECK(movie_eos_should_arm(0, 0, 1) == 0, "M0: sem env nao arma");
+    CHECK(movie_eos_should_arm(0, 0, 0) == 0, "M0: sem env e sem done nao arma");
+    CHECK(movie_eos_should_arm(0, 0x1234, 1) == 0, "M0: sem env, ja armado, com done -> nao arma");
+
+    /* M3 FORGE-TRAP (obrigatorio, inegociavel): EOS ligado mas SEM produtor de
+     * done -> NAO pode armar. Se isto devolvesse 1, o arm seria forjado -- e'
+     * exactamente a armadilha que o plano exige que se prove. */
+    CHECK(movie_eos_should_arm(1, 0, 0) == 0, "M3: EOS sem done NAO arma (forge-trap)");
+
+    /* NATURAL: EOS ligado, ainda nao armado, e o produtor de done disparou. */
+    CHECK(movie_eos_should_arm(1, 0, 1) == 1, "NATURAL: EOS + done -> arma");
+
+    /* ONE-SHOT: ja armado (eos_ea != 0) nao re-arma, mesmo com done a 1 -- a
+     * guarda !g_movie_eos_ea do sampler garante um unico arm. */
+    CHECK(movie_eos_should_arm(1, 0x1234, 1) == 0, "ONE-SHOT: ja armado nao re-arma");
+    CHECK(movie_eos_should_arm(1, 0x00869F1Cu, 1) == 0, "ONE-SHOT: ja armado (EA real) nao re-arma");
+
+    /* A funcao e' PURA: decidir nao escreve no g_movie_eos_ea (o sampler e' que
+     * escreve, e so quando isto devolve 1). */
+    CHECK(g_movie_eos_ea == 0, "movie_eos_should_arm nao mexe no g_movie_eos_ea (decisao pura)");
 
     munmap(buf, PAGE * 2);
     vm_base = NULL;

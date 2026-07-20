@@ -57,9 +57,17 @@ run_boot() {   # $1 = nome, resto = atribuicoes de env
     local name=$1; shift
     ( set -a; . "$HERE/env_gow2.sh"; set +a
       export PS3_NO_RSX=1
-      unset PS3_TRACE_MOVIEOBJ
+      # Task 3 acrescentou PS3_MOVIE_EOS como 2o gate do amostrador (o arm do
+      # canal NATURAL). env_gow2.sh liga PS3_MOVIE_EOS=1 por default, portanto o
+      # caso OFF tem de desligar OS DOIS gates para o amostrador nem se criar --
+      # senao [MOVIEFSM] aparecia no OFF e este smoke reprovava. O caso ON
+      # re-liga o que precisa via os args.
+      unset PS3_TRACE_MOVIEOBJ PS3_MOVIE_EOS
       for kv in "$@"; do export "$kv"; done
-      ./boot_gow2 EBOOT.ELF > "$TMP/$name.log" 2>&1 ) &
+      # exec: a subshell VIRA o boot_gow2, portanto $pid e' o proprio processo e
+      # o kill abaixo mata-o directamente (sem deixar orfao a ~290% CPU, que era
+      # o que acontecia quando o kill atingia so a subshell wrapper).
+      exec ./boot_gow2 EBOOT.ELF > "$TMP/$name.log" 2>&1 ) &
     local pid=$!
     sleep "$SECS"
     kill -9 $pid 2>/dev/null

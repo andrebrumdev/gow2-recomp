@@ -46,6 +46,26 @@ int movie_eos_peek32(uint32_t ea, uint32_t* out);
 /* Leitura big-endian de 8 bits, mesmas regras do movie_eos_peek32. */
 int movie_eos_peek8(uint32_t ea, uint8_t* out);
 
+/*
+ * Politica PURA de arm do read-hook de EOS (Task 3). Mesma condicao do host
+ * Windows (boot_main.cpp:367):
+ *
+ *     return eos_env && eos_ea == 0 && overlay_done != 0;
+ *
+ *   eos_env      -- PS3_MOVIE_EOS ligado.
+ *   eos_ea       -- valor actual de g_movie_eos_ea (0 = ainda nao armado). A
+ *                   guarda ==0 garante um unico arm (one-shot).
+ *   overlay_done -- sinal REAL de "filme acabou" (produtor). No Windows vem do
+ *                   overlay ffmpeg (movie_hle_overlay_done); no POSIX vem do
+ *                   produtor time-based gated por PS3_MOVIE_DONE_MS (ver o .c).
+ *
+ * NAO escreve nada: so decide. O sampler e' que arma, e SO quando isto da 1.
+ * O caso movie_eos_should_arm(1,0,0)==0 (EOS ligado, SEM produtor) e' a
+ * armadilha de forja M3 -- inegociavel. Exposta para o teste offline bater na
+ * funcao REAL, nao numa copia: uma mutacao aqui parte o test_movie_eos_policy.
+ */
+int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done);
+
 #ifdef __cplusplus
 }
 #endif

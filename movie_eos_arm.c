@@ -1,41 +1,72 @@
 /*
- * Amostrador portatil do objecto do movie player -- ver movie_eos_arm.h.
+ * Amostrador portatil do objecto do movie player + canal NATURAL de EOS.
+ * Ver movie_eos_arm.h para a API.
  *
- * Task 1: SO OBSERVACAO. Nao arma o read-hook de EOS, nao escreve no guest.
+ * Task 1 era so observacao. Task 3 acrescenta o ARM do read-hook de EOS pelo
+ * MESMO caminho do host Windows (boot_main.cpp:367): quando o produtor de
+ * "done" dispara, arma-se g_movie_eos_ea = obj+0x744 e o vm_read8 do runtime
+ * passa a devolver 1 na proxima leitura NORMAL que o guest faca a esse EA. NAO
+ * se escreve o byte no guest nem se toca no st620 -- so se arma o hook.
  *
- * Porque existe: o host de referencia do Windows (boot_main.cpp) tem esta
- * thread inline no main() e usa VirtualQuery para so ler paginas commitadas.
- * O boot_macos.cpp nao tinha amostrador NENHUM, entao no macOS nao ha maneira
- * de ver onde a FSM do player pára. Como VirtualQuery nao tem equivalente
- * POSIX barato (e chamar mach_vm_region 5x/s seria pior), a verificacao de
- * commit passa pelo ppu_guest_range_committed do runtime -- a mesma lista de
- * ranges registada pelo host, partilhada com o guard dos vm_read*.
+ * A LINHA replay/forja (o ponto todo da task):
+ *   - Arma-se SO apos um evento real de conclusao, via a politica pura
+ *     movie_eos_should_arm (PS3_MOVIE_EOS ligado, ainda nao armado, produtor!=0).
+ *   - No Windows o produtor e' o overlay ffmpeg (movie_hle_overlay_done).
+ *   - No macOS nao ha overlay E o .m2v e' servido pelo dearchiver psarc do
+ *     PROPRIO guest (MEDIDO: 0 opens em movie_io / 0 [AREAD] para o filme),
+ *     logo o host NAO ve um evento consumido==total para replicar. O player
+ *     ainda por cima para em st620=3 bloqueado no DMA de EOS do SPU. Na falta
+ *     de sinal observavel, o produtor POSIX e' TIME-BASED (movie_done_*),
+ *     gated por PS3_MOVIE_DONE_MS, com o intervalo medido do stream real (a
+ *     duracao do .wav) e assumido como time-based no log -- nao EOF real.
+ *   - Sem produtor (M3: PS3_MOVIE_EOS=1 e PS3_MOVIE_DONE_MS ausente) NADA arma.
+ *
+ * Commit-check: como VirtualQuery nao tem equivalente POSIX barato, usa-se o
+ * ppu_guest_range_committed do runtime -- a mesma lista de ranges registada
+ * pelo host, partilhada com o guard dos vm_read*.
  *
  * EAs e offsets sao MEDIDOS, nao derivados:
- *   [0x540054]      -> objecto do player (0x008697D8 na sessao de 2026-07-20;
- *                      inicializador estatico em BSS, nao objecto construido)
+ *   [0x540054]      -> objecto do player (0x008697D8 na sessao de 2026-07-20)
  *   obj+0x620       -> estado da FSM (documentado: 1->3->5->11->done)
  *   obj+0x630/0x634 -> handles FIOS (open / o que o poll do estado 1 espera)
  *   obj+0x744       -> byte de EOS que o decoder MPEG do SPU normalmente DMAia
  *   obj+0x746       -> flag adjacente, dumpada junto para contexto
+ *
+ * PARIDADE COM O WINDOWS. O host de referencia (runtime/ppu/tests/boot_main.cpp)
+ * mantem a thread inline com VirtualQuery e o arm em linha (:367). NAO foi
+ * substituido pela chamada partilhada a movie_eos_sampler_start(): esta sessao
+ * corre em macOS/arm64 e nao pode compilar nem correr o host Windows, e uma
+ * troca as cegas (a) perderia o dump [MOVIEOP] que so o boot_main.cpp tem, e
+ * (b) obrigaria a mover este ficheiro para libs/video, entrando no glob de build
+ * do Windows por testar. O que E' partilhado e' a DISCIPLINA de arm: a politica
+ * movie_eos_should_arm implementa exactamente a condicao de boot_main.cpp:367.
+ * Os dois hosts armam pela mesma regra; so o encanamento do amostrador difere
+ * (Windows: VirtualQuery inline; macOS: aqui, via ppu_guest_range_committed).
  */
 #include "movie_eos_arm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <pthread.h>
 #include <time.h>
+#include <dirent.h>     /* scan do .wav no cache para a duracao real do stream */
+#include <strings.h>    /* strcasecmp */
 #endif
 
 /* Fornecidos pelo runtime (ppu_loader.cpp) e pelo host de boot. */
 extern unsigned char* vm_base;
 extern int            ppu_guest_range_committed(uint32_t addr, uint32_t n);
-extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao; fica 0 nesta task */
+extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao (vm_read8 devolve 1) */
 extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage) */
+
+/* Gates do amostrador, latched em movie_eos_sampler_start (thread unica). */
+static int s_sampler_mo  = 0;   /* PS3_TRACE_MOVIEOBJ: dump verboso [MOVIEOBJ]   */
+static int s_sampler_eos = 0;   /* PS3_MOVIE_EOS:      autoriza o arm do read-hook */
 
 #define MOVIE_OBJ_SLOT_EA  0x540054u
 #define MOVIE_OBJ_MAX_EA   0x4F000000u   /* acima disto o slot e' lixo, nao objecto */
@@ -54,6 +85,12 @@ extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage)
  * unica linha em todo o boot e "parado" fica indistinguivel de "nunca lido". */
 #define MOVIE_TICK_MS      200
 #define MOVIE_HEARTBEAT_TICKS (5000 / MOVIE_TICK_MS)
+
+/* Politica pura de arm -- ver movie_eos_arm.h. Mesma condicao do Windows. */
+int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done)
+{
+    return eos_env && eos_ea == 0 && overlay_done != 0;
+}
 
 int movie_eos_peek32(uint32_t ea, uint32_t* out)
 {
@@ -103,6 +140,175 @@ static void movie_sleep_tick(void)
 #endif
 }
 
+/* ======================================================================== */
+/* Produtor time-based de "done" -- canal NATURAL de EOS no POSIX.          */
+/*                                                                          */
+/* NAO e' EOF real, e o log diz isso. No macOS o .m2v e' servido pelo       */
+/* dearchiver psarc + SPU inflate DO PROPRIO guest: MEDIDO neste boot, 0    */
+/* opens em movie_io e 0 linhas [AREAD] para o filme, portanto o host nao   */
+/* ve o consumo do stream para poder replicar um evento consumido==total.   */
+/* Pior: o player PARA em st620=3 bloqueado a espera do DMA de EOS do       */
+/* descodificador SPU -- ou seja, nem chega a consumir o stream todo de     */
+/* forma observavel (o consumo e' que esta bloqueado no EOS que queremos    */
+/* produzir). Na ausencia desse sinal, este produtor arma depois de um      */
+/* intervalo de playback REAL, ancorado no instante em que o proprio FSM do */
+/* player entra em estado activo (st620>=1). Nao e' "armar ao entrar no     */
+/* estado": a ancora so marca o t0; o arm so vem quando decorre o intervalo */
+/* real do filme.                                                            */
+/*                                                                            */
+/* Gate PS3_MOVIE_DONE_MS (independente de PS3_MOVIE_EOS, para a armadilha    */
+/* M3 aguentar):                                                             */
+/*   ausente / vazio / "0" -> DESLIGADO (PS3_MOVIE_EOS=1 sem produtor NAO     */
+/*                            arma -- e' o teste de forja M3).                */
+/*   "auto"                -> intervalo = duracao REAL do .wav no cache (a    */
+/*                            faixa de audio do proprio filme, o mesmo        */
+/*                            comprimento do video; medida do stream real).   */
+/*   inteiro N>0           -> intervalo = N ms.                              */
+/* ======================================================================== */
+
+static unsigned long long movie_now_ms(void)
+{
+#ifdef _WIN32
+    return (unsigned long long)GetTickCount64();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000ull
+         + (unsigned long long)(ts.tv_nsec / 1000000L);
+#endif
+}
+
+/* Duracao real (ms) do unico .wav em PS3_MOVIE_CACHE: le o cabecalho RIFF e
+ * devolve data_bytes/byterate. Medicao do stream real, nao constante inventada.
+ * 0 se nao houver .wav legivel. POSIX-only: no Windows o produtor e' o overlay
+ * ffmpeg (movie_hle_overlay_done), nao este. */
+#ifndef _WIN32
+static long long movie_wav_duration_ms(void)
+{
+    const char* cache = getenv("PS3_MOVIE_CACHE");
+    if (!cache || !*cache) cache = "../movie_cache";
+
+    char path[1024]; path[0] = 0;
+    DIR* d = opendir(cache);
+    if (d) {
+        struct dirent* e;
+        while ((e = readdir(d)) != NULL) {
+            size_t L = strlen(e->d_name);
+            if (L > 4 && strcasecmp(e->d_name + L - 4, ".wav") == 0) {
+                snprintf(path, sizeof path, "%s/%s", cache, e->d_name);
+                break;
+            }
+        }
+        closedir(d);
+    }
+    if (!path[0]) return 0;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) return 0;
+
+    long long dur = 0;
+    unsigned char hdr[12];
+    if (fread(hdr, 1, 12, f) == 12 &&
+        memcmp(hdr, "RIFF", 4) == 0 && memcmp(hdr + 8, "WAVE", 4) == 0) {
+        unsigned  byterate   = 0;
+        long long data_bytes = 0;
+        for (;;) {
+            unsigned char ch[8];
+            if (fread(ch, 1, 8, f) != 8) break;
+            unsigned clen = (unsigned)ch[4] | ((unsigned)ch[5] << 8)
+                          | ((unsigned)ch[6] << 16) | ((unsigned)ch[7] << 24);
+            if (memcmp(ch, "fmt ", 4) == 0) {
+                unsigned char fb[16];
+                unsigned want = clen < 16 ? clen : 16;
+                if (fread(fb, 1, want, f) != want) break;
+                byterate = (unsigned)fb[8] | ((unsigned)fb[9] << 8)
+                         | ((unsigned)fb[10] << 16) | ((unsigned)fb[11] << 24);
+                if (clen > want) fseek(f, (long)(clen - want), SEEK_CUR);
+                if (clen & 1u)   fseek(f, 1, SEEK_CUR);
+            } else if (memcmp(ch, "data", 4) == 0) {
+                data_bytes = (long long)clen;
+                break;
+            } else {
+                fseek(f, (long)(clen + (clen & 1u)), SEEK_CUR);
+            }
+        }
+        if (byterate > 0 && data_bytes > 0)
+            dur = (data_bytes * 1000ll) / (long long)byterate;
+    }
+    fclose(f);
+    return dur;
+}
+#else
+static long long movie_wav_duration_ms(void) { return 0; }
+#endif
+
+/* Intervalo configurado (ms), latched. -1 = por decidir, 0 = desligado. */
+static long long movie_done_interval_ms(void)
+{
+    static long long ivl = -1;
+    if (ivl != -1) return ivl;
+
+    const char* e = getenv("PS3_MOVIE_DONE_MS");
+    if (!e || !e[0] || (e[0] == '0' && e[1] == 0)) {
+        ivl = 0;                                  /* desligado */
+    } else if (strcmp(e, "auto") == 0) {
+        long long ms = movie_wav_duration_ms();
+        if (ms > 0) {
+            ivl = ms;
+            fprintf(stderr, "[MOVIEDONE] PS3_MOVIE_DONE_MS=auto -> duracao REAL do .wav = %lld ms\n", ms);
+        } else {
+            ivl = 0;
+            fprintf(stderr, "[MOVIEDONE] PS3_MOVIE_DONE_MS=auto mas sem .wav legivel no cache -> produtor DESLIGADO\n");
+        }
+    } else {
+        long long ms = strtoll(e, NULL, 10);
+        ivl = ms > 0 ? ms : 0;
+    }
+
+    if (ivl > 0)
+        fprintf(stderr,
+                "[MOVIEDONE] produtor time-based LIGADO: intervalo=%lld ms. AVISO: HLE por temporizador, NAO EOF real do stream.\n",
+                ivl);
+    fflush(stderr);
+    return ivl;
+}
+
+/* Estado parado da FSM onde o player ESPERA o EOS (obj+0x744). O filme chega a
+ * este estado e PARA la: e' o unico sitio onde faz sentido entregar o "done". */
+#define MOVIE_STATE_WAIT_EOS  3u
+
+/* Chamado a cada tick. Ancora o t0 do playback no primeiro st620 activo (o
+ * filme abriu) e devolve 1 (sticky) quando (a) ja decorreu o intervalo REAL do
+ * filme desde essa ancora E (b) o player ja esta no estado parado que espera o
+ * EOS (st>=3). A condicao (b) NAO e' "armar ao entrar no estado 3" -- o
+ * intervalo real do filme tem de ter decorrido primeiro; e' so uma guarda para
+ * nao injectar EOS enquanto o player ainda esta a abrir/bufferizar (st=1), o que
+ * so o faz resetar antes de sequer parar em 3. 0 se desligado ou ainda nao. */
+static long movie_done_timebased_poll(uint32_t st)
+{
+    static unsigned long long start_ms = 0;   /* 0 = playback ainda nao comecou */
+    static int fired = 0;
+
+    long long ivl = movie_done_interval_ms();
+    if (ivl <= 0) return 0;                    /* produtor desligado (M3) */
+    if (fired) return 1;
+
+    unsigned long long now = movie_now_ms();
+    if (start_ms == 0) {
+        if (st >= 1 && st != 0xFFFFFFFFu) start_ms = now;   /* filme abriu (playback comecou) */
+        return 0;
+    }
+    if (now - start_ms < (unsigned long long)ivl) return 0;      /* filme ainda a "decorrer" */
+    if (st < MOVIE_STATE_WAIT_EOS || st == 0xFFFFFFFFu) return 0; /* espera o player parar em >=3 */
+
+    fired = 1;
+    fprintf(stderr,
+            "[MOVIEDONE] done time-based (NAO e' EOF real): %llu ms desde st620 activo >= %lld ms, player parado em st620=%u -> sinal \"filme acabou\"\n",
+            (unsigned long long)(now - start_ms), ivl, st);
+    fflush(stderr);
+    return 1;
+}
+
 static void movie_sampler_loop(void)
 {
     uint32_t prev = 0xFFFFFFFFu;   /* edge-trigger: 1a leitura imprime sempre */
@@ -128,40 +334,53 @@ static void movie_sampler_loop(void)
         movie_eos_peek8(obj + MOVIE_OFF_EOS,  &f744);
         movie_eos_peek8(obj + MOVIE_OFF_EOS2, &f746);
 
+        /* Sinal REAL de "filme acabou" (produtor). No Windows vem do overlay
+         * ffmpeg; no POSIX o overlay nao existe (movie_hle_overlay_done()==0) e
+         * o produtor e' o time-based gated por PS3_MOVIE_DONE_MS. Chamado TODOS
+         * os ticks (poe a ancora e verifica o temporizador), nao so no log. */
+        long done_overlay = movie_hle_overlay_done() ? 1 : 0;
+        long done         = done_overlay ? 1 : movie_done_timebased_poll(st);
+
         /* Mesmo formato do host Windows, para os dois logs se compararem
          * linha a linha. Emitido na transicao OU no heartbeat. */
         since_log++;
         if (st != prev || since_log >= MOVIE_HEARTBEAT_TICKS) {
             fprintf(stderr,
-                    "[MOVIEFSM] st620 %u -> %u  f744=%u f746=%u eos_ea=0x%08X overlay_done=%d\n",
-                    prev, st, f744, f746, g_movie_eos_ea,
-                    movie_hle_overlay_done() ? 1 : 0);
+                    "[MOVIEFSM] st620 %u -> %u  f744=%u f746=%u eos_ea=0x%08X overlay_done=%ld\n",
+                    prev, st, f744, f746, g_movie_eos_ea, done);
             fflush(stderr);
             prev = st;
             since_log = 0;
         }
 
-        /* Handles FIOS que o poll do estado 1 (func_002B4224) espera:
-         * container = obj+0x62C, io = [container+8], done = [io+0x90]. */
-        movie_eos_peek32(obj + MOVIE_OFF_IO_OPEN, &io_open);
-        movie_eos_peek32(obj + MOVIE_OFF_IO_READ, &io_read);
+        /* Canal NATURAL de EOS (Task 3): arma UMA vez o read-hook do vm_read8 em
+         * [obj+0x744], mas SO quando a politica pura movie_eos_should_arm o
+         * autoriza -- PS3_MOVIE_EOS ligado, ainda nao armado, e o produtor de
+         * done disparou. Sem produtor real (M3), done==0 e isto nunca dispara.
+         * Nao escrevemos o byte no guest: so armamos o hook para que a proxima
+         * leitura NORMAL do guest a [obj+0x744] devolva 1. */
+        if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done)) {
+            g_movie_eos_ea = obj + MOVIE_OFF_EOS;
+            fprintf(stderr,
+                    "[MOVIEEOS] %s done (st620=%u) -> arming EOS read-hook at 0x%08X ([obj+0x744])\n",
+                    done_overlay ? "overlay" : "time-based", st, g_movie_eos_ea);
+            fflush(stderr);
+        }
 
-        fprintf(stderr,
-                "[MOVIEOBJ] obj=0x%08X st620=%u f744=%u f746=%u | open=0x%08X d=%lld read=0x%08X d=%lld\n",
-                obj, st, f744, f746,
-                io_open, movie_io_done(io_open),
-                io_read, movie_io_done(io_read));
-        fflush(stderr);
-
-        /*
-         * O arm do g_movie_eos_ea aterra na Task 3 -- AQUI, com a mesma
-         * condicao do boot_main.cpp:367 (s_eos && !g_movie_eos_ea &&
-         * movie_hle_overlay_done()). Nao esta escrito ainda de proposito:
-         * no POSIX o movie_hle_overlay_done() devolve 0 sempre, portanto
-         * qualquer arm hoje seria por tempo/estado, sem evento de conclusao
-         * nenhum -- isto e', forjar progresso do guest. Task 3 traz primeiro
-         * o produtor de "done" e so depois o arm.
-         */
+        /* Dump verboso do objecto SO com PS3_TRACE_MOVIEOBJ: evita encher o log
+         * quando so PS3_MOVIE_EOS esta ligado (recipe normal). Handles FIOS que
+         * o poll do estado 1 (func_002B4224) espera: container=obj+0x62C,
+         * io=[container+8], done=[io+0x90]. */
+        if (s_sampler_mo) {
+            movie_eos_peek32(obj + MOVIE_OFF_IO_OPEN, &io_open);
+            movie_eos_peek32(obj + MOVIE_OFF_IO_READ, &io_read);
+            fprintf(stderr,
+                    "[MOVIEOBJ] obj=0x%08X st620=%u f744=%u f746=%u | open=0x%08X d=%lld read=0x%08X d=%lld\n",
+                    obj, st, f744, f746,
+                    io_open, movie_io_done(io_open),
+                    io_read, movie_io_done(io_read));
+            fflush(stderr);
+        }
     }
 }
 
@@ -181,14 +400,28 @@ static void* movie_sampler_thread(void* unused)
 }
 #endif
 
+static int movie_env_on(const char* name)
+{
+    const char* v = getenv(name);
+    return (v && v[0] && v[0] != '0') ? 1 : 0;
+}
+
 void movie_eos_sampler_start(void)
 {
-    const char* trace = getenv("PS3_TRACE_MOVIEOBJ");
-    if (!trace || !trace[0] || trace[0] == '0') {
-        return;   /* OFF por default: nem thread se cria */
+    /* Duas portas, como o boot_main.cpp do Windows: PS3_TRACE_MOVIEOBJ liga o
+     * dump verboso [MOVIEOBJ]; PS3_MOVIE_EOS autoriza o arm do read-hook. A
+     * thread arranca se QUALQUER uma estiver ligada; sem nenhuma e' no-op total
+     * (nem thread se cria), portanto o baseline fica byte a byte igual. */
+    s_sampler_mo  = movie_env_on("PS3_TRACE_MOVIEOBJ");
+    s_sampler_eos = movie_env_on("PS3_MOVIE_EOS");
+    if (!s_sampler_mo && !s_sampler_eos) {
+        return;   /* OFF por default */
     }
 
-    fprintf(stderr, "[MOVIEFSM] sampler on (PS3_TRACE_MOVIEOBJ), obs-only: nao arma EOS\n");
+    fprintf(stderr, "[MOVIEFSM] sampler on (mo=%d eos=%d)%s\n",
+            s_sampler_mo, s_sampler_eos,
+            s_sampler_eos ? " -- pode armar EOS quando o produtor de done disparar"
+                          : " -- obs-only, nao arma");
     fflush(stderr);
 
 #ifdef _WIN32
