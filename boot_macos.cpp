@@ -163,6 +163,13 @@ void boot_thread_trampoline(ppu_context* ctx)
     } else {
         ctx->ctr = ctx->cia;   /* already a raw code address */
     }
+    /* PS3_TRACE_THRSTACK: r2 (TOC) is the base for every TOC-relative global
+     * access in lifted code; if it stays 0 the thread reads globals at small
+     * negative addresses and the failure only surfaces later as [vm] OOB. */
+    { static int ts = -1; if (ts < 0) ts = getenv("PS3_TRACE_THRSTACK") ? 1 : 0;
+      if (ts) { fprintf(stderr, "[THRTOC] cia=0x%08X code=0x%08X toc=0x%08X -> r2=0x%08llX\n",
+                        (unsigned)ctx->cia, code, toc,
+                        (unsigned long long)ctx->gpr[2]); fflush(stderr); } }
     ps3_indirect_call(ctx);
     while (g_trampoline_fn) { void (*tf)(void*) = g_trampoline_fn; g_trampoline_fn = 0; tf(ctx); }
 }
