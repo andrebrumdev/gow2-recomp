@@ -25,18 +25,17 @@ if [ ! -f EBOOT.ELF ]; then
     exit 1
 fi
 
-# Env canonico (ver docs/MACOS_PORT_PLAN.md secao 4).
-export PS3_MOVIE_HLE=1
-export PS3_NOMOVIES=1
-export PS3_PAD_AUTOSTART=1
-export PS3_RSX_FIFO=1
-export PS3_CELLSYS_REORDER=1
-export PS3_VFS_ROOT="${PS3_VFS_ROOT:-$HERE/extracted/USRDIR}"
+. "$HERE/env_gow2.sh"          # env canonico partilhado com smoke_boot_mac.sh
 export PS3_RSX_BACKEND="${PS3_RSX_BACKEND:-sdl}"
 
 TIMEOUT="${TIMEOUT:-120}"
 
-echo "[rodar] backend=${PS3_NO_RSX:+none (PS3_NO_RSX)}${PS3_NO_RSX:-$PS3_RSX_BACKEND} timeout=${TIMEOUT}s"
+if [ -n "${PS3_NO_RSX:-}" ]; then
+    BACKEND_DESC="none (PS3_NO_RSX)"
+else
+    BACKEND_DESC="$PS3_RSX_BACKEND"
+fi
+echo "[rodar] backend=$BACKEND_DESC timeout=${TIMEOUT}s"
 echo "[rodar] vfs=$PS3_VFS_ROOT"
 
 ./boot_gow2 EBOOT.ELF &

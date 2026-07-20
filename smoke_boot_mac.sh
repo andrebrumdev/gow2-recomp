@@ -28,10 +28,9 @@ if [ ! -f EBOOT.ELF ]; then
     exit 1
 fi
 
-export PS3_NO_RSX=1 PS3_MOVIE_HLE=1 PS3_NOMOVIES=1 PS3_PAD_AUTOSTART=1
-export PS3_RSX_FIFO=1 PS3_CELLSYS_REORDER=1
-export PS3_VFS_ROOT="${PS3_VFS_ROOT:-$HERE/extracted/USRDIR}"
-export PS3_TRACE_SPURS=1
+. "$HERE/env_gow2.sh"          # env canonico partilhado com rodar_gow2.sh
+export PS3_NO_RSX=1            # headless: exercita o caminho CPU/SPURS
+export PS3_TRACE_SPURS=1       # obrigatorio: ver o cabecalho deste ficheiro
 
 LOG=$(mktemp /tmp/gow2_smoke.XXXXXX)
 ./boot_gow2 EBOOT.ELF > "$LOG" 2>&1 &
