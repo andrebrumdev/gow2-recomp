@@ -44,12 +44,21 @@ void gow2_register_spu_workloads(void)
      * ate o inflate de membro ser observavel. Toggle: PS3_SPU1 ou PS3_SPU_ALL. */
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU1"))
         spu_workload_register(0x2A5C4E67A14505B8ull, spu1_spu_func_00003050, "gow2_spu1");
-    /* spu2/3 stay opt-in: their lifted entries may still fault mid-run. The
-     * host is now protected by the SEH isolation in spu_workload.c (a job crash
-     * kills only the job thread, not the process), so they can be registered
-     * for bring-up without regressing the stable loop. Fine gates PS3_SPU2 /
-     * PS3_SPU3 allow enabling one at a time; PS3_SPU_ALL enables both. NOT a
-     * default -- promotion waits on a full no-kill boot validation. */
+    /* spu2/3 stay opt-in: their lifted entries may still fault mid-run. O host
+     * esta' protegido nos DOIS lados agora -- VEH+ExitThread no Windows,
+     * sigaction+siglongjmp em POSIX (spu_workload.c) -- portanto uma falta
+     * aborta o job e nao o processo, e podem ser registados para bring-up sem
+     * regredir o loop estavel. ATE 2026-07-20 esta nota dizia "thanks to SEH
+     * isolation", o que era FALSO no macOS: o bloco SEH e' #ifdef _WIN32 e no
+     * Mac a falta matava o processo inteiro (provado: exit 139 no
+     * test_seh_isolation antes do fix).
+     * Fine gates PS3_SPU2 / PS3_SPU3 allow enabling one at a time; PS3_SPU_ALL
+     * enables both. NOT a default -- promocao continua a espera de uma
+     * validacao de boot completa, agora por FALTA DE PROVA DE PROGRESSO (o job
+     * fazer trabalho util), nao por medo de derrubar o host. Bloqueador
+     * concreto no Mac: o job corre na thread do worker SPURS, medida em 512 KB
+     * de stack (o Windows da'-lhe uma thread dedicada de 256 MB), portanto um
+     * call graph fundo e' isolado de forma limpa mas nao chega ao fim. */
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU2"))
         spu_workload_register(0xABCD0BA4D18DED49ull, spu2_spu_func_00004080, "gow2_spu2");
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU3"))

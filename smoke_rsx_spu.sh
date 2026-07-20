@@ -71,7 +71,8 @@ fi
 echo ""
 echo "=== sanidade SPU: isolacao SEH (Fase D) — crash isolado esperado 0 nesta janela de boot ==="
 SPUCRASH=$(grep -ac "SPUCRASH" "$LOG")
-SPUABORT=$(grep -ac "aborted by SEH" "$LOG")
+# "aborted by SEH" (Windows) ou "aborted by signal" (POSIX): o mesmo evento.
+SPUABORT=$(grep -ac "\[SPUJOB\] aborted by" "$LOG")
 echo "SPUCRASH=$SPUCRASH aborted_by_SEH=$SPUABORT"
 
 echo ""
