@@ -121,6 +121,13 @@ fi
 
 # The guest's CRT recurses deeply under -O0; the default 8 MB main-thread stack
 # is not enough. Windows uses -Wl,--stack,33554432 for the same reason.
+# NB (Task 5, macos-movie-eos plan): 0x2000000 (32 MB) is NOT bumped for the
+# "SIGBUS after recursion cap @0x0045CB90". That was diagnosed as a host stack
+# overflow, but PS3_TRACE_HOST_STACK=1 measures the capped depth-4000 recursion
+# using only ~2 MB of host stack (~514 B/level) -- 32 MB is never threatened.
+# The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
+# an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
+# already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
 clang++ -std=c++20 -O0 \
     "$LIFT"/*.cpp.o \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
