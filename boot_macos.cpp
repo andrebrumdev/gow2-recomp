@@ -260,6 +260,20 @@ int main(int argc, char** argv)
 {
     const char* elf_path = (argc > 1) ? argv[1] : "EBOOT.ELF";
 
+    /*
+     * Line-buffer stdout.
+     *
+     * The runtime logs through both printf and fprintf(stderr): stderr is
+     * unbuffered, stdout is block-buffered as soon as it is redirected to a
+     * file. Every smoke and trace run here ends in kill, which discards
+     * whatever is still sitting in the stdout buffer -- so a captured log
+     * silently loses most of the boot and reads as if the guest stopped much
+     * earlier than it did. That cost real debugging time: the guest was
+     * reaching cellSpursInitializeWithAttribute while the log appeared to stop
+     * at the printf-server thread.
+     */
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+
     fprintf(stderr, "[boot] God of War II HD -- macOS/arm64 host\n");
     fprintf(stderr, "[boot] ELF: %s\n", elf_path);
 
