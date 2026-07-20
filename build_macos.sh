@@ -11,7 +11,11 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PS3="$HERE/../ps3recomp"
-LIFT="${1:-$HERE/recomp_macos}"
+# Default recomp_macos_v2: e o lift em que o apply_all_patches.sh opera (tambem
+# tem esse default). recomp_macos e' um lift ANTIGO sem os patches da sessao --
+# nomeadamente sem o ps3_indirect_tail (fix do bctr), sem o qual o pump da intro
+# bate na recursao de host. Compilar o lift errado dava um boot sem os fixes.
+LIFT="${1:-$HERE/recomp_macos_v2}"
 OUT="$HERE/boot_gow2"
 
 if [ ! -f "$LIFT/ppu_recomp.h" ]; then
