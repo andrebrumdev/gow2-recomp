@@ -1,49 +1,65 @@
-# Task 3.3 — ligacao das imagens SPU do GoW2 (PARQUEADO)
+# Task 3.3 — ligacao das imagens SPU do GoW2 (FEITO)
 
-Feito e revertido em 2026-07-20. **Nao esta no `build_macos.sh`** porque nao
-funciona com o runtime SPU desta branch. Fica aqui para nao ser reescrito.
+Parqueado em 2026-07-20 de manha por incompatibilidade de ABI; **desparqueado e
+aplicado no mesmo dia**, depois do merge do `origin/master`. O patch abaixo esta
+agora no `build_macos.sh` (etapa `3b`).
 
-## Porque esta parqueado
+## O que desbloqueou
 
-`spu_lifted/spu{0..3}_v2/` foi gerado por um `spu_lifter.py` mais novo, do
-`origin/master`. Esse output referencia `g_spu_trampoline_fn` e `SPU_DRAIN`, que
-**nao existem** em lado nenhum desta branch (saida de `spurs-bringup`).
+Os tres bloqueios da versao parqueada cairam:
 
-Portar os tres ficheiros do runtime SPU do master (`spu_context.h`,
-`spu_channels.c`, `spu_lifted_job.h`, 241 linhas) resolve a compilacao **mas
-muda a ABI da task SPU**, e o proprio master documenta porque:
-
-> "(Two earlier attempts -- arg EA as a pointer in r3, then the words spread
-> across r3..r6 -- left the base registers zero and sent the task into base-0
-> DMA loops.)"
-
-`r3` deixou de ser o EA do argumento e passou a ser o `CellSpursTaskArgument` de
-128 bits carregado inteiro. Isso invalida, nesta branch:
-
-| O que | Porque |
+| Bloqueio | Estado |
 |---|---|
-| `test_adapter`, `test_workload` | passam `args_ea` esperando `r3 = EA` (SIGBUS / assert) |
-| `libs/spurs/spurs_kernel.c` | `gpr[3]._u32[0] = wl->args_ea` (Task 2.2) |
-| `gen_test_spurs_{job_dma,completion,printf}.py` | os tres fazem `ai r10, r3, 0` |
+| `g_spu_trampoline_fn` / `SPU_DRAIN` nao existiam nesta branch | resolvido pelo merge |
+| ABI da task mudou (`r3` = `CellSpursTaskArgument` de 128 bits, nao o EA) | os testes e o kernel passaram a ser os do master; `test_adapter`/`test_workload` corrigidos (suite 10/10) |
+| Sem isolamento de falha de job (`SEH` e so Windows) | o `spu_lifted_job.h` do master usa `setjmp`/`longjmp`, portavel |
 
-Ou seja: a Phase 2 inteira foi construida sobre a convencao **antiga**, que o
-master ja descobriu estar errada. Os testes passam por serem consistentes entre
-si, nao por a convencao estar certa.
+**Ressalva que se mantem:** `setjmp`/`longjmp` apanha a saida do job, **nao** um
+SIGBUS/SIGSEGV. No macOS um job que falta continua a levar o processo inteiro —
+e por isso que spu1/2/3 ficam opt-in e so o spu0 entra por default.
 
-**Desbloqueia com:** rebase dos commits macOS em `origin/master` (83 commits a
-frente), depois adaptar o kernel e os tres geradores a nova ABI, e so entao
-aplicar o patch abaixo.
+## Resultado medido (2026-07-20, Apple M5)
 
-## O patch (para `build_macos.sh`)
+Build: `3b. imagens SPU liftadas do GoW2 -> .o` produz **5 objectos** (spu0..spu3
++ o registador). Binario 112M -> 114M.
+
+Simbolos no `boot_gow2` (`nm`):
+
+```
+T _gow2_register_spu_workloads
+T _spu0_spu_recomp_register   ... spu1/2/3 idem
+spu0_ 450   spu1_ 530   spu2_ 527   spu3_ 433   funcoes liftadas
+```
+
+Registo no dispatcher, agora observavel no log (o `spu_workload_register` passou
+a logar — ver o commit no motor):
+
+```
+default:        [spu_workload] registered 'gow2_spu0' fp=0xDE6DC3A5EA2BE487 (1 no total)
+PS3_SPU_ALL=1:  ... 'gow2_spu1' 0x2A5C4E67A14505B8 (2) ... 'gow2_spu2' (3) ... 'gow2_spu3' (4)
+```
+
+Processo **vivo** nas duas configuracoes; `smoke_boot_mac.sh` PASS em ambas.
+
+## O que NAO foi exercitado (honesto)
+
+**Nenhum job SPU foi despachado.** O boot regista `AddWorkload = 0` e
+`CreateTask = 0`: o titulo trava no wall `func_002B3CB0` antes de submeter
+qualquer workload, portanto as imagens estao ligadas e registadas mas nunca
+correm. O Step 4 do plano ("se SIGBUS em job, validar a ABI") **nao se aplicou**
+— nao houve job, logo nao ha prova de que a ABI esta certa em execucao real
+neste titulo. A prova que existe e a da suite (`test_adapter`, `test_workload`,
+`spurs_job_dma`, `taskset`), que e offline/unit, nao in-boot.
+
+Desbloquear o dispatch depende da Task 3.2 (destravar o wall M2), nao de mais
+wiring.
+
+## O patch (ja aplicado ao `build_macos.sh`)
 
 Entre a etapa 3 (tabela de NIDs) e a 4 (boot host):
 
 ```bash
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
-# spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
-# logo os quatro coexistem no mesmo binario. gow2_spu_register.c regista-os no
-# dispatcher por fingerprint; spu0 entra sempre, spu1/2/3 sao opt-in por env
-# (PS3_SPU1/2/3, PS3_SPU_ALL).
 SPU_OBJS=()
 for d in "$HERE"/spu_lifted/spu?_v2; do
     [ -f "$d/spu_recomp.c" ] || continue
@@ -67,11 +83,3 @@ E no link, a seguir a `boot_macos.o`:
 ```bash
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
 ```
-
-## Aviso separado, valido ja hoje
-
-O comentario em `recomp_mid_v2/gow2_spu_register.c` diz que um job que rebenta
-mata so a thread, gracas a "SEH isolation in spu_workload.c". **Isso e Windows.**
-Nesta branch nao ha `__try` nem guarda nenhuma no `spu_workload.c` -- verificado
-por grep. No macOS um job que falta leva o processo inteiro. O `spu_lifted_job.h`
-do master usa `setjmp`/`longjmp`, que e portavel; mais um motivo para o rebase.

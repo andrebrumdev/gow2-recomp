@@ -51,6 +51,12 @@ grep -qE '5[0-9]{4} lifted functions'   "$LOG" || fail "tabela de funcoes nao re
 grep -q  '151 imports'                  "$LOG" || fail "imports PRX nao resolvidos"
 grep -q  'cellSpursInitializeWithAttribute' "$LOG" || fail "boot nao chega ao SPURS init"
 grep -q  '\[spurs kernel\] started'     "$LOG" || fail "o kernel SPURS HLE nao arrancou"
+# Task 3.3: as imagens SPU liftadas tem de estar ligadas E registadas. spu0 entra
+# sempre; spu1/2/3 sao opt-in (PS3_SPU1/2/3, PS3_SPU_ALL). Se o constructor de
+# gow2_spu_register.c deixar de correr, ou um simbolo spuN_* sumir do link, e aqui
+# que se ve -- caso contrario uma imagem ausente e indistinguivel de uma que
+# simplesmente nunca e despachada (o boot regista AddWorkload=0).
+grep -q "\[spu_workload\] registered 'gow2_spu0'" "$LOG" || fail "imagem SPU spu0 nao registada"
 
 # O SPURS tem de receber um ponteiro VALIDO: com spurs=0 o handler so faz memset
 # e o titulo perde o contexto todo. Foi o que o tblsize_guard passou a corrigir

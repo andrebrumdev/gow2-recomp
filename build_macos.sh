@@ -75,6 +75,35 @@ LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
 clang++ -std=c++20 -O0 -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
 
+echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
+# spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
+# logo os quatro coexistem no mesmo binario. gow2_spu_register.c regista-os no
+# dispatcher por fingerprint; spu0 entra sempre, spu1/2/3 sao opt-in por env
+# (PS3_SPU1/2/3, PS3_SPU_ALL).
+#
+# Cuidado herdado do Windows: o comentario do gow2_spu_register.c diz que um job
+# que rebenta mata so a thread "gracas a SEH isolation" -- isso e Windows. Aqui a
+# proteccao e o setjmp/longjmp do spu_lifted_job.h do master, que apanha a saida
+# do job mas NAO um SIGBUS/SIGSEGV: um job que falta leva o processo inteiro.
+# E por isso que spu1/2/3 continuam opt-in.
+SPU_OBJS=()
+for d in "$HERE"/spu_lifted/spu?_v2; do
+    [ -f "$d/spu_recomp.c" ] || continue
+    n=$(basename "$d")
+    o="$LIFT/${n}_spu_recomp.o"
+    if [ ! -f "$o" ] || [ "$d/spu_recomp.c" -nt "$o" ]; then
+        clang -std=c11 -O1 -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
+              "$d/spu_recomp.c" -o "$o"
+    fi
+    SPU_OBJS+=("$o")
+done
+if [ ${#SPU_OBJS[@]} -gt 0 ]; then
+    clang -std=c11 -O1 -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
+          "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$LIFT/gow2_spu_register.o"
+    SPU_OBJS+=("$LIFT/gow2_spu_register.o")
+fi
+echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
+
 echo "=== 4. boot host -> .o ==="
 clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
 
@@ -92,6 +121,7 @@ clang++ -std=c++20 -O0 \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o \
+    ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
     -framework Metal -framework QuartzCore -framework Foundation \
     -framework Cocoa \
