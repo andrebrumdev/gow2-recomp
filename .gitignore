@@ -62,3 +62,6 @@ recomp_mid_v2/*.bin
 nm_*.txt
 *.txt
 !SPURS*.md
+
+# Oracle session outputs (RPCS3 diff)
+oracle_out/
