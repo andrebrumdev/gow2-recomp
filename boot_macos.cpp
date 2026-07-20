@@ -3,12 +3,14 @@
  *
  * Phase F4 of ps3recomp/docs/MACOS_PORT_PLAN.md: the POSIX counterpart of the
  * Windows boot_v2_new.exe launcher. Brings up guest memory, loads the
- * decrypted EBOOT, registers the lifted function table and enters the guest.
+ * decrypted EBOOT, wires the HLE registries and enters the guest.
  *
- * The plan's acceptance for this phase is deliberately modest: the native
- * arm64 binary should start and reach the same hang point the Windows build
- * reaches (the SPURS chain), rather than dying on a platform problem. Anything
- * further is SPURS work (F6), shared with Windows and not macOS-specific.
+ * Mirrors ps3recomp/runtime/ppu/tests/boot_main.cpp, the reference host, which
+ * is the authority on the init contract. Diverging from it silently is how the
+ * first version of this file ended up hanging on stubbed timer syscalls: it
+ * skipped lv2_init_syscalls(), left ppu_vm_size at 0 (OOB guard off, so a
+ * stray guest pointer took the process down instead of being logged), and
+ * installed neither of the two hooks the runtime needs to re-enter guest code.
  *
  * Graphics backend is chosen with PS3_RSX_BACKEND (sdl | metal | vulkan),
  * mirroring the d3d12 selection on Windows. PS3_NO_RSX=1 skips the window
@@ -30,7 +32,7 @@ extern "C" {
  * Guest address space. ppu_loader.cpp declares this and expects the host to
  * own it; vm_init() in vm.h fills it in.
  *
- * Note for anyone porting further: the guest's 4 GB window is mapped with
+ * Note for anyone porting further: the guest's window is mapped with
  * mmap(NULL, ...) and every guest address is an offset from vm_base, so macOS
  * reserving the low 4 GB as __PAGEZERO never comes into it. No -pagezero_size
  * link flag is needed.
@@ -41,18 +43,36 @@ uint8_t* vm_base = nullptr;
  * ppu_loader.cpp, which also drains it in its run loop. Do not define it here
  * as well -- the lifted chunks only declare it extern. */
 
+/* Guest address-space size. Setting this arms the runtime's bounds check, so a
+ * stray guest pointer is logged and reads back 0 rather than faulting the
+ * host: a first boot then reveals the next wall instead of dying at the first
+ * one. */
+extern uint32_t ppu_vm_size;
+
 uint32_t ppu_load_elf(const char* path);
 void     ppu_recomp_register(void);
 int      ppu_run(uint32_t entry_opd, uint32_t stack_top);
+int      ppu_opd_resolve(uint32_t opd, uint32_t* code, uint32_t* toc);
+void     ps3_indirect_call(ppu_context* ctx);
 uint32_t ppu_function_count(void);
 
 /* HLE registries. These have to be populated before ppu_resolve_imports runs,
  * otherwise the guest's PRX import stubs have nothing to bind to and the first
  * indirect call through one jumps into whatever the slot happened to hold. */
 void     ppu_hle_init(void);
-void     ppu_fs_register(void);
 void     ppu_sysprx_register(void);
+void     ppu_fs_register(void);
+void     lv2_init_syscalls(void);
 uint32_t ppu_resolve_imports(void);
+
+extern thread_local void (*g_trampoline_fn)(void*);
+extern const char* ppu_vfs_root;
+
+typedef void (*ps3_guest_caller_fn)(uint32_t opd, uint64_t, uint64_t, uint64_t, uint64_t);
+extern ps3_guest_caller_fn g_ps3_guest_caller;
+
+typedef void (*ppu_thread_entry_fn)(ppu_context*);
+extern ppu_thread_entry_fn g_ppu_thread_entry_trampoline;
 
 int  rsx_null_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_null_backend_shutdown(void);
@@ -70,11 +90,102 @@ int  rsx_vulkan_backend_pump_messages(void);
 
 #include "vm.h"
 
+/*
+ * Guest memory layout, matching the reference host.
+ *
+ * VM_SIZE has to cover every region the address map uses, including the PPU
+ * thread-stack region at 0xD0000000 -- a smaller window leaves spawned thread
+ * stacks outside the VM, where the OOB guard silently drops their writes and
+ * the threads die.
+ *
+ * The main thread's stack goes in the free area below the image rather than in
+ * the 0xD0000000 band, which is reserved for threads the guest spawns.
+ */
+#define GUEST_VM_SIZE   0xE0000000u
+#define GUEST_LOW_MB    0x51000000u   /* image + heap + main stack + TLS + mmapper */
+#define GUEST_STACK_TOP 0x0FF00000u
+#define CB_STACK_TOP    0x0D000000u
+
 namespace {
 
 enum class Backend { None, Sdl, Metal, Vulkan };
 
 Backend g_backend = Backend::None;
+char    s_vfs_root[1024];
+
+/*
+ * Re-enter guest code from an HLE bridge (callbacks: cellSysutil, cellGcm
+ * flip handlers, and so on). Each nested call gets its own stack slice so a
+ * callback issued from inside a callback cannot land on its caller's frame.
+ */
+void boot_guest_caller(uint32_t opd_addr, uint64_t a0, uint64_t a1,
+                       uint64_t a2, uint64_t a3)
+{
+    if (!opd_addr) {
+        return;
+    }
+    uint32_t code = 0, toc = 0;
+    ppu_opd_resolve(opd_addr, &code, &toc);
+    if (!code) {
+        return;
+    }
+
+    static uint32_t cb_depth = 0;
+    ++cb_depth;
+
+    ppu_context ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.gpr[1] = CB_STACK_TOP - 0x10000u * cb_depth;
+    ctx.gpr[2] = toc;
+    ctx.gpr[3] = a0;
+    ctx.gpr[4] = a1;
+    ctx.gpr[5] = a2;
+    ctx.gpr[6] = a3;
+    ctx.ctr    = code;
+
+    ps3_indirect_call(&ctx);
+    while (g_trampoline_fn) { void (*tf)(void*) = g_trampoline_fn; g_trampoline_fn = 0; tf(&ctx); }
+
+    --cb_depth;
+}
+
+/* Entry thunk for guest-spawned PPU threads: resolve the OPD the guest handed
+ * sys_ppu_thread_create and run the lifted code behind it. */
+void boot_thread_trampoline(ppu_context* ctx)
+{
+    uint32_t code = 0, toc = 0;
+    if (ppu_opd_resolve((uint32_t)ctx->cia, &code, &toc) && code) {
+        ctx->ctr = code;
+        if (toc) {
+            ctx->gpr[2] = toc;
+        }
+    } else {
+        ctx->ctr = ctx->cia;   /* already a raw code address */
+    }
+    ps3_indirect_call(ctx);
+    while (g_trampoline_fn) { void (*tf)(void*) = g_trampoline_fn; g_trampoline_fn = 0; tf(ctx); }
+}
+
+/* PS3 mount points resolve under this host directory. PS3_VFS_ROOT wins;
+ * otherwise strip EBOOT.ELF / USRDIR / PS3_GAME off the ELF path. */
+void derive_vfs_root(const char* eboot)
+{
+    const char* env = getenv("PS3_VFS_ROOT");
+    if (env && *env) {
+        ppu_vfs_root = env;
+        return;
+    }
+    strncpy(s_vfs_root, eboot, sizeof s_vfs_root - 1);
+    s_vfs_root[sizeof s_vfs_root - 1] = 0;
+    for (int i = 0; i < 3; i++) {
+        char* s = strrchr(s_vfs_root, '/');
+        if (s) *s = 0;
+    }
+    if (!s_vfs_root[0]) {
+        strcpy(s_vfs_root, ".");
+    }
+    ppu_vfs_root = s_vfs_root;
+}
 
 Backend pick_backend()
 {
@@ -115,6 +226,34 @@ void backend_shutdown(Backend b)
     }
 }
 
+/*
+ * Back the regions the boot actually touches.
+ *
+ * vm_init only makes main memory and the stack band accessible, but the
+ * reference host commits from guest address 0 upward -- which matters: the
+ * GoW2 CRT reads through a null pointer during early init, and with the low
+ * page unbacked that read is a SIGBUS rather than the zero the reference host
+ * returns. The gap between the low region and the thread-stack band stays
+ * reserved, as on Windows.
+ */
+int commit_guest_regions()
+{
+    if (vm_commit(0, GUEST_LOW_MB) != CELL_OK) {
+        fprintf(stderr, "[boot] FATAL: could not commit guest low memory\n");
+        return -1;
+    }
+    memset(vm_base, 0, GUEST_LOW_MB);
+
+    if (vm_commit(VM_STACK_BASE, VM_STACK_REGION) != CELL_OK) {
+        fprintf(stderr, "[boot] FATAL: could not commit guest thread-stack band\n");
+        return -1;
+    }
+
+    fprintf(stderr, "[boot] committed guest 0x0..0x%X and 0x%X..0x%X\n",
+            GUEST_LOW_MB, VM_STACK_BASE, VM_STACK_BASE + VM_STACK_REGION);
+    return 0;
+}
+
 } /* namespace */
 
 int main(int argc, char** argv)
@@ -130,35 +269,11 @@ int main(int argc, char** argv)
     }
     fprintf(stderr, "[boot] guest memory mapped at host %p\n", (void*)vm_base);
 
-    /*
-     * Back the guest pages below main memory with zeros.
-     *
-     * A real PS3 leaves address 0 unmapped and traps on a null dereference,
-     * and so does vm_init. The GoW2 CRT reads through a null pointer during
-     * early init, which on this host is a SIGBUS that ends the process before
-     * anything interesting happens. Mapping the low window as zeros makes that
-     * read return 0 and lets the boot proceed to the real wall.
-     *
-     * This is a bring-up aid, not correct emulation: it hides null
-     * dereferences instead of reporting them. Whether that CRT read is a
-     * faithful reproduction of the guest or a lifting bug is still open.
-     */
-    if (vm_commit(0, VM_MAIN_MEM_BASE) == CELL_OK) {
-        memset(vm_base, 0, VM_MAIN_MEM_BASE);
-        fprintf(stderr, "[boot] zero page mapped for guest 0x0..0x%X (bring-up aid)\n",
-                VM_MAIN_MEM_BASE);
-    } else {
-        fprintf(stderr, "[boot] WARNING: could not map the guest zero page; "
-                        "a null dereference will fault\n");
+    if (commit_guest_regions() != 0) {
+        vm_shutdown();
+        return 1;
     }
-
-    ppu_recomp_register();
-    fprintf(stderr, "[boot] registered %u lifted functions\n", ppu_function_count());
-
-    ppu_hle_init();
-    ppu_fs_register();
-    ppu_sysprx_register();
-    fprintf(stderr, "[boot] HLE, filesystem and sysprx registries populated\n");
+    ppu_vm_size = GUEST_VM_SIZE;
 
     uint32_t entry = ppu_load_elf(elf_path);
     if (!entry) {
@@ -168,11 +283,23 @@ int main(int argc, char** argv)
     }
     fprintf(stderr, "[boot] entry OPD 0x%08X\n", entry);
 
-    /* Binds the guest's PRX import stubs to the registries above. Needs the
-     * PT_PROC_PRX_PARAM address that ppu_load_elf captures, so it runs after
-     * the load, not before. */
-    uint32_t imports = ppu_resolve_imports();
-    fprintf(stderr, "[boot] resolved %u PRX imports\n", imports);
+    derive_vfs_root(elf_path);
+    fprintf(stderr, "[boot] VFS root: %s\n", ppu_vfs_root);
+
+    /* Without these two the runtime has no way back into guest code: HLE
+     * callbacks become no-ops and every thread the guest spawns runs nothing. */
+    g_ps3_guest_caller            = boot_guest_caller;
+    g_ppu_thread_entry_trampoline = boot_thread_trampoline;
+
+    /* Order matters, and matches the reference host. */
+    ppu_recomp_register();   /* lifted function table -> address map          */
+    ppu_hle_init();          /* firmware import NID -> HLE handlers           */
+    ppu_sysprx_register();   /* boot-critical CRT (sys_initialize_tls, ...)   */
+    ppu_fs_register();       /* cellFs VFS over the real game directory       */
+    lv2_init_syscalls();     /* real lv2 table (timer/event/spu/mutex/fs/...) */
+    ppu_resolve_imports();   /* patch .lib.stub slots -> HLE bridge           */
+    fprintf(stderr, "[boot] %u lifted functions registered, HLE wired\n",
+            ppu_function_count());
 
     g_backend = pick_backend();
     if (backend_init(g_backend) != 0) {
@@ -181,24 +308,10 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    vm_stack_alloc sa;
-    vm_stack_alloc_init(&sa);
-    uint32_t stack_base = vm_stack_allocate(&sa, VM_PPU_STACK_SIZE);
-    if (!stack_base) {
-        fprintf(stderr, "[boot] FATAL: could not allocate guest stack\n");
-        backend_shutdown(g_backend);
-        vm_shutdown();
-        return 1;
-    }
-    /* The PPU stack grows down, so the guest starts at the top of the region,
-     * kept 16-byte aligned as the ABI requires. */
-    uint32_t stack_top = (stack_base + VM_PPU_STACK_SIZE) & ~15u;
-    fprintf(stderr, "[boot] guest stack 0x%08X..0x%08X\n", stack_base, stack_top);
-
-    fprintf(stderr, "[boot] entering guest\n");
+    fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
     fflush(stderr);
 
-    int rc = ppu_run(entry, stack_top);
+    int rc = ppu_run(entry, GUEST_STACK_TOP);
 
     fprintf(stderr, "[boot] guest returned rc=%d\n", rc);
 

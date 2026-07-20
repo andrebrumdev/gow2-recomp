@@ -59,10 +59,26 @@ for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
     clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
 
-echo "=== 3. boot host -> .o ==="
+echo "=== 3. HLE NID table -> .o ==="
+# ppu_hle_register_all() is a weak no-op in the runtime; without a strong
+# override every firmware call the game makes logs "unresolved NID" and returns
+# nothing. Regenerated from the /* NID */ annotations in the HLE sources.
+mkdir -p "$LIFT/gen"
+# sceNpCommerce.c and sceNpCommerce2.c both define the whole sceNpCommerce2*
+# API (different context types, same symbols), so linking both objects fails
+# with duplicate symbols. Keep the "2" one, which matches the module name.
+# GoW2 imports neither -- this only avoids dragging the collision in.
+LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
+       | grep -vx 'sceNpCommerce')
+# shellcheck disable=SC2086
+"$PS3/.venv/bin/python" "$PS3/tools/gen_hle_nids.py" \
+    --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
+clang++ -std=c++20 -O0 -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
+
+echo "=== 4. boot host -> .o ==="
 clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
 
-echo "=== 4. link ==="
+echo "=== 5. link ==="
 SDL_FLAGS=$(pkg-config --libs sdl2)
 VK_FLAGS=""
 if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
@@ -74,7 +90,8 @@ fi
 clang++ -std=c++20 -O0 \
     "$LIFT"/*.cpp.o \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
-    "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o "$LIFT"/boot_macos.o \
+    "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
+    "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o \
     "$RUNTIME_LIB" \
     -framework Metal -framework QuartzCore -framework Foundation \
     -framework Cocoa \
