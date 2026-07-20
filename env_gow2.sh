@@ -16,10 +16,25 @@
 export PS3_VFS_ROOT
 
 # Filmes por HLE em vez de decode real. PS3_VDEC_ASYNC=1 e obrigatorio quando
-# se liga decode de video a serio (ver o CLAUDE.md do motor); com NOMOVIES=1
-# nao se aplica.
+# se liga decode de video a serio (ver o CLAUDE.md do motor).
 : "${PS3_MOVIE_HLE:=1}";        export PS3_MOVIE_HLE
-: "${PS3_NOMOVIES:=1}";         export PS3_NOMOVIES
+
+# PS3_NOMOVIES deixou de ser 1 por default. Era, quando o macOS nao tinha
+# caminho de dados nenhum: o movie_hle.c inteiro era #ifdef _WIN32 e os
+# movie_io_* eram stubs no-op. Com o porte POSIX (0318caa) e os membros
+# extraidos do psarc para movie_cache/, o titulo passa a ler WADs a serio --
+# e o R_PermA e' o que alimenta o registry de shaders. Continuar com
+# NOMOVIES=1 mataria exactamente a rota que se quer exercitar (Plano 04
+# Task 3 diz isto por palavras). Quem quiser saltar a intro poe =1 a mao.
+: "${PS3_NOMOVIES:=0}";         export PS3_NOMOVIES
+
+# Caminho de I/O dos membros do psarc ja extraidos (R_PermA, R_LglScA e a
+# intro). Sem MOVIE_IO=1 o movie_io_open nem e' consultado e o jogo cai no
+# cellFs normal, que nao acha estes nomes.
+: "${PS3_MOVIE_IO:=1}";         export PS3_MOVIE_IO
+: "${PS3_MOVIE_CACHE:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/movie_cache}"
+export PS3_MOVIE_CACHE
+: "${PS3_MOVIE_EOS:=1}";        export PS3_MOVIE_EOS
 
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
