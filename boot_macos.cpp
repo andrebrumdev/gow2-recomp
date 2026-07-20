@@ -105,6 +105,7 @@ int  rsx_vulkan_backend_pump_messages(void);
 #define GUEST_LOW_MB    0x51000000u   /* image + heap + main stack + TLS + mmapper */
 #define GUEST_STACK_TOP 0x0FF00000u
 #define CB_STACK_TOP    0x0D000000u
+#define RSX_LOCAL_BASE  0xC0000000u   /* memoria local do RSX (cellGcmGetConfiguration) */
 
 namespace {
 
@@ -247,6 +248,25 @@ int commit_guest_regions()
     if (vm_commit(VM_STACK_BASE, VM_STACK_REGION) != CELL_OK) {
         fprintf(stderr, "[boot] FATAL: could not commit guest thread-stack band\n");
         return -1;
+    }
+
+    /* Memoria local do RSX (0xC0000000, o localAddress/localSize de 256 MB que o
+     * cellGcmGetConfiguration anuncia). O alocador da GPU poe a sua arena aqui e
+     * o caminho de render escreve framebuffers e labels dentro dela. Faltava: o
+     * boot_main.cpp ja a commitava e este host nao, entao o titulo passava o
+     * wall SPURS, entrava no cellGcmSys e morria com SIGBUS no primeiro
+     * vm_write32 para 0xC0F40000 (guest), logo a seguir aos SetTile/
+     * SetDisplayBuffer de 1280x720. Regulavel por PS3_VM_RSX_MB. */
+    {
+        const char* e = getenv("PS3_VM_RSX_MB");
+        uint64_t rsx = e ? ((uint64_t)strtoul(e, nullptr, 10) << 20) : 0x10000000ull;
+        if (rsx && vm_commit(RSX_LOCAL_BASE, (uint32_t)rsx) != CELL_OK) {
+            fprintf(stderr, "[boot] FATAL: could not commit RSX local memory\n");
+            return -1;
+        }
+        if (rsx)
+            fprintf(stderr, "[boot] committed RSX local 0x%X..0x%llX\n",
+                    RSX_LOCAL_BASE, (unsigned long long)RSX_LOCAL_BASE + rsx);
     }
 
     fprintf(stderr, "[boot] committed guest 0x0..0x%X and 0x%X..0x%X\n",
