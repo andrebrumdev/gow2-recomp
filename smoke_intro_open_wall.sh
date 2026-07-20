@@ -48,6 +48,48 @@
 #      func_0045CF50 tem porta de verbosidade ([[TOC+0x604]] < nivel => cala),
 #      e no baseline ela sai 0/8. Medir a ENTRADA do open, nao a mensagem.
 #
+# ---------------------------------------------------------------------------
+# RESULTADO Task 1 -- HOST_ENTRY_AUDIO: **NENHUM** (o open nunca sai do guest)
+#
+#   Medido in-boot com PS3_TRACE_SNDOPEN=1 (patch_snd_open_probe.py):
+#
+#     [SNDOPEN] 0045E230 enter params=0x0FEFF9F0 p_CC=0x0FEFF8F0
+#                        path='/_movies/SmLogo_v2.wav'
+#     [SNDOPEN] 00461658 OPEN enter stream=0x4309EF00 sub=0x4309F120
+#                        f110=0x00000000 ramo=A-004618A0(TOC+0x750)
+#     [SNDOPEN]   004618A0 open() drv=0x009B95BC opd=0x0052F650
+#                        code=0x002B47D4 toc=0x00541178  class=GUEST-code-EA
+#     [SNDOPEN] 004618EC FAIL rc=-2 sub=0x430A26C8
+#
+#   O open aterra em codigo do PROPRIO GUEST -- func_002B47D4 -- e dai em
+#   func_0030D578, o mesmo choke point FIOS que a Task 2 persegue no lado do
+#   video. Nao ha cellFsOpen, nao ha movie_io, nao ha import de firmware no
+#   caminho. Audio e video partilham o MESMO open de membro do psarc.
+#
+#   EVIDENCIA (duas suites M=8 sobre o MESMO binario, probe ON e probe OFF):
+#     path='/_movies/SmLogo_v2.wav'       8/8 com PS3_TRACE_SNDOPEN=1
+#     code=0x002B47D4 (GUEST-code-EA)     8/8
+#     [SNDOPEN] sem a variavel definida   0/8   (OFF por default, no-op)
+#     [fs] open                           1 linha/run, sempre so' o gow2.psarc
+#     smlogo_io                           0/8 nas duas suites
+#     ./smoke_boot_mac.sh 25 com probe OFF -> PASS (sem regressao)
+#
+#   CORRELACAO (input para a Task 3, NAO e' decisao desta task): nas duas
+#   suites deu left_with_wav = 0.
+#     probe ON : parked=6/8 left_ge3=2/8 wav=6/8 wav_and_park=6 left_with_wav=0
+#     probe OFF: parked=7/8 left_ge3=1/8 wav=7/8 wav_and_park=7 left_with_wav=0
+#   Ou seja, em 16 corridas, as 13 que ficam presas em st620=1 imprimem TODAS a
+#   falha do wav e as 3 que chegam a st620>=3 nao imprimem NENHUMA. Pela regra
+#   do Step 1 da Task 3 isto e' WAV_CAUSAL_OR_CORRELATED -- confirmar com o par
+#   D0/D1 antes de agir.
+#
+#   AVISO DE MEDICAO: a suite Task 0 (14:18, binario anterior) correu com load
+#   ~11 e deu wav=0/8; as suites da Task 1 (14:31/14:34) correram com load ~40
+#   (outra sessao com 8 boots concorrentes a fugir) e deram wav=6/8 e 7/8. A
+#   taxa de aparecimento da mensagem e' sensivel a carga da maquina e ao
+#   binario; comparacoes ENTRE suites nao valem -- so' valem os N-de-M DENTRO
+#   de cada suite, que e' o que os numeros acima sao.
+# ---------------------------------------------------------------------------
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
