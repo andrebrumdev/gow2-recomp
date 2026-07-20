@@ -36,6 +36,10 @@ export PS3_VFS_ROOT
 export PS3_MOVIE_CACHE
 : "${PS3_MOVIE_EOS:=1}";        export PS3_MOVIE_EOS
 
+# Decode de video assincrono. Obrigatorio no caminho da intro (o sync voltou a
+# ser default noutro commit; ver CLAUDE.md do motor). Respeitado se ja definido.
+: "${PS3_VDEC_ASYNC:=1}";       export PS3_VDEC_ASYNC
+
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
 
