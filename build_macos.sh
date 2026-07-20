@@ -106,6 +106,11 @@ echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
 echo "=== 4. boot host -> .o ==="
 clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
+# Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ. C puro
+# e portatil de proposito: a Task 3 do plano macos-movie-eos-fsm promove-o para
+# libs/video/movie_eos_arm.c, quando o boot_main.cpp do Windows passar a
+# delegar nele em vez da thread inline que tem hoje.
+clang -std=c11 -O0 -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
 
 echo "=== 5. link ==="
 SDL_FLAGS=$(pkg-config --libs sdl2)
@@ -120,7 +125,7 @@ clang++ -std=c++20 -O0 \
     "$LIFT"/*.cpp.o \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
-    "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o \
+    "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
     -framework Metal -framework QuartzCore -framework Foundation \

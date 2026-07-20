@@ -86,7 +86,19 @@ int  rsx_vulkan_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_vulkan_backend_shutdown(void);
 int  rsx_vulkan_backend_pump_messages(void);
 
+/*
+ * Mapa de commits do runtime (ppu_loader.cpp). O guard dos acessos vm_read e
+ * vm_write nao consulta as tabelas de paginas do SO: consulta esta lista, que o host
+ * tem de preencher, uma entrada por regiao que commita. Com a lista vazia o
+ * guard fica intencionalmente ABERTO (tudo "commitado"), que era o estado
+ * deste host -- ver commit_guest_regions().
+ */
+void ppu_register_committed_range(uint32_t lo, uint32_t hi);
+int  ppu_guest_range_committed(uint32_t addr, uint32_t n);
+
 } /* extern "C" */
+
+#include "movie_eos_arm.h"   /* amostrador [MOVIEFSM], gated, so observa */
 
 #include "vm.h"
 
@@ -243,6 +255,24 @@ void backend_shutdown(Backend b)
  * page unbacked that read is a SIGBUS rather than the zero the reference host
  * returns. The gap between the low region and the thread-stack band stays
  * reserved, as on Windows.
+ *
+ * Cada vm_commit e' seguido de ppu_register_committed_range com o MESMO span.
+ * Faltava: o boot_main.cpp do Windows regista as suas regioes e este host nao
+ * registava nenhuma, portanto g_committed_count ficava 0 e o guard do runtime
+ * ficava aberto -- todo o espaco de 3,5 GB contava como commitado. Consequencia
+ * pratica: ppu_guest_range_committed() devolvia 1 para QUALQUER endereco, e
+ * quem depende dele (o guard dos vm_read*, o DMA do SPU em spu_dma.h, e agora
+ * o amostrador do movie player) nao tinha como distinguir memoria com paginas
+ * por tras de espaco meramente reservado. As paginas fora destas regioes estao
+ * PROT_NONE, logo o que o guard passava a deixar passar acabava em SIGBUS.
+ *
+ * Medido (boot headless de 25 s, 2026-07-20): o guest aloca no maximo ate
+ * 0x4B100000 (sys_memory bump de 0x40000000 para cima) e a imagem TLS fica em
+ * 0x10F00000 -- tudo dentro de 0..GUEST_LOW_MB. Nota para quem vier a seguir:
+ * o sys_memory.c pode ir ate SYS_MEM_ALLOC_END (0x60000000) e faz vm_commit
+ * SEM registar; se um boot mais longo passar de 0x51000000 aparecem linhas
+ * "[vm] UNCOMMITTED" e o sitio certo de corrigir e' o registo na origem, em
+ * sys_memory.c -- nao alargar estas regioes a espaco que nao esta commitado.
  */
 int commit_guest_regions()
 {
@@ -251,11 +281,13 @@ int commit_guest_regions()
         return -1;
     }
     memset(vm_base, 0, GUEST_LOW_MB);
+    ppu_register_committed_range(0, GUEST_LOW_MB);
 
     if (vm_commit(VM_STACK_BASE, VM_STACK_REGION) != CELL_OK) {
         fprintf(stderr, "[boot] FATAL: could not commit guest thread-stack band\n");
         return -1;
     }
+    ppu_register_committed_range(VM_STACK_BASE, VM_STACK_BASE + VM_STACK_REGION);
 
     /* Memoria local do RSX (0xC0000000, o localAddress/localSize de 256 MB que o
      * cellGcmGetConfiguration anuncia). O alocador da GPU poe a sua arena aqui e
@@ -271,13 +303,44 @@ int commit_guest_regions()
             fprintf(stderr, "[boot] FATAL: could not commit RSX local memory\n");
             return -1;
         }
-        if (rsx)
+        if (rsx) {
+            ppu_register_committed_range(RSX_LOCAL_BASE, RSX_LOCAL_BASE + (uint32_t)rsx);
             fprintf(stderr, "[boot] committed RSX local 0x%X..0x%llX\n",
                     RSX_LOCAL_BASE, (unsigned long long)RSX_LOCAL_BASE + rsx);
+        }
     }
 
     fprintf(stderr, "[boot] committed guest 0x0..0x%X and 0x%X..0x%X\n",
             GUEST_LOW_MB, VM_STACK_BASE, VM_STACK_BASE + VM_STACK_REGION);
+
+    /*
+     * PS3_TRACE_COMMITMAP: prova de que o registo acima chegou de facto ao
+     * guard, e nao so ao log. Interroga o ppu_guest_range_committed com um
+     * endereco DENTRO e outro FORA de cada regiao -- se a lista nao tivesse
+     * sido preenchida, todas as respostas seriam "sim" (guard aberto), o que
+     * torna o probe capaz de distinguir os dois estados. Off por default.
+     */
+    if (getenv("PS3_TRACE_COMMITMAP")) {
+        static const struct { const char* name; uint32_t ea; int expect; } probes[] = {
+            { "baixa (imagem/heap)",   0x00540054u, 1 },
+            { "baixa (limite-1)",      GUEST_LOW_MB - 4u, 1 },
+            { "buraco acima da baixa", GUEST_LOW_MB,      0 },
+            { "buraco (0x80000000)",   0x80000000u,       0 },
+            { "RSX local",             RSX_LOCAL_BASE,    1 },
+            { "banda de stacks",       VM_STACK_BASE,     1 },
+            { "acima da VM",           0xE0000000u,       0 },
+        };
+        int bad = 0;
+        for (unsigned i = 0; i < sizeof probes / sizeof probes[0]; i++) {
+            int got = ppu_guest_range_committed(probes[i].ea, 4) ? 1 : 0;
+            if (got != probes[i].expect) bad++;
+            fprintf(stderr, "[commitmap] 0x%08X %-24s commitado=%d esperado=%d%s\n",
+                    probes[i].ea, probes[i].name, got, probes[i].expect,
+                    got == probes[i].expect ? "" : "  <-- DIVERGE");
+        }
+        fprintf(stderr, "[commitmap] divergencias=%d\n", bad);
+        fflush(stderr);
+    }
     return 0;
 }
 
@@ -348,6 +411,13 @@ int main(int argc, char** argv)
         vm_shutdown();
         return 1;
     }
+
+    /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
+     * PS3_TRACE_MOVIEOBJ, no-op sem ela. SO OBSERVA: nao arma o read-hook de
+     * EOS -- isso e' a Task 3 e depende de um produtor real de "done", que no
+     * POSIX ainda nao existe. Arranca aqui, antes do guest, porque o objecto e'
+     * um inicializador estatico em BSS e ja esta presente desde o load. */
+    movie_eos_sampler_start();
 
     fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
     fflush(stderr);
