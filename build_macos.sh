@@ -64,10 +64,10 @@ echo "=== 3. HLE NID table -> .o ==="
 # override every firmware call the game makes logs "unresolved NID" and returns
 # nothing. Regenerated from the /* NID */ annotations in the HLE sources.
 mkdir -p "$LIFT/gen"
-# sceNpCommerce.c and sceNpCommerce2.c both define the whole sceNpCommerce2*
-# API (different context types, same symbols), so linking both objects fails
-# with duplicate symbols. Keep the "2" one, which matches the module name.
-# GoW2 imports neither -- this only avoids dragging the collision in.
+# Espelha a exclusao do CMakeLists do motor: sceNpCommerce.c colide com
+# sceNpCommerce2.c e ficou fora da biblioteca (ver o comentario la para o que
+# se perde). O gerador varre o disco, nao o que o CMake compila, entao tem de
+# saltar o ficheiro tambem -- senao declara simbolos que nao existem na .a.
 LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
        | grep -vx 'sceNpCommerce')
 # shellcheck disable=SC2086
