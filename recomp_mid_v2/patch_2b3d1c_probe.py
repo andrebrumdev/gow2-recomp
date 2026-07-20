@@ -61,7 +61,7 @@ PROBE = r'''        /* AREAD-PROBE: dump gated do op de async-read FIOS (PS3_TRA
          * ABI do lift: r3=op, r4=dst EA, r5=n. So leitura; OFF por default. */
         { static int on=-1; if(on<0){extern char* getenv(const char*);
             const char* e=getenv("PS3_TRACE_AREAD"); on=(e&&*e&&*e!='0')?1:0;}
-          if(on){ static int n=0; if(n++<64){
+          if(on){ static int n=0; if(n++<256){
             uint32_t _op=(uint32_t)ctx->gpr[3];
             fprintf(stderr,
               "[AREAD] #%d op=0x%08X r4=0x%08X r5=%u"
