@@ -192,6 +192,28 @@ try:
 except Exception as e:
     report("decl ps3_call_opd em 000", False, "erro: %r" % (e,))
 
+# 4) `bctr` (salto, SEM link) NAO pode virar chamada host: era isso que fazia o
+#    pump da FSM da intro (func_002C0508, jump table em 0x002C0594) crescer uma
+#    frame host por iteracao ate' ao tecto de recursao de 4000, matando a sonda
+#    de [op+0x90] antes de a "fios scheduler" completar o open (16/16 boots).
+try:
+    bad = []
+    for name in ("ppu_recomp_000.cpp", "ppu_recomp_001.cpp", "ppu_recomp_002.cpp",
+                 "ppu_recomp_003.cpp", "ppu_recomp_004.cpp", "ppu_recomp_005.cpp",
+                 "ppu_recomp_006.cpp"):
+        try:
+            s = src(name)
+        except FileNotFoundError:
+            continue
+        if "ps3_indirect_call(ctx); return;" in s:
+            bad.append(name)
+        elif "ps3_indirect_tail" not in s:
+            bad.append(name + "(sem decl)")
+    report("bctr como salto (ps3_indirect_tail)", not bad,
+           "ainda em chamada host: " + ", ".join(bad))
+except Exception as e:
+    report("bctr como salto (ps3_indirect_tail)", False, "erro: %r" % (e,))
+
 print()
 if fails:
     print("CHECKS: %d FALHA(S) -> %s" % (len(fails), ", ".join(fails)))

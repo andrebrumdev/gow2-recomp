@@ -263,14 +263,43 @@ B4224_PROBE = (
     "         * funcao sai por func_002B4308 e nao ha nada para esperar.\n"
     "         * done=[io+0x90] e' a palavra de conclusao da op FIOS. */\n"
     + GATE
-    + "          if(_on){ static int _n=0; if(_n<4 || (_n%2048)==0){\n"
+    + "          if(_on){ static int _n=0, _p=0, _d=0;\n"
     "            uint32_t _c=(uint32_t)ctx->gpr[3], _io=vm_read32(_c+8);\n"
-    '            fprintf(stderr,"[FIOSOPEN] 002B4224 poll #%d container=0x%08X '
+    "            uint32_t _dn=_io?vm_read32(_io+0x90):0u;\n"
+    "            /* A observacao que interessa e' a UNICA iteracao em que o poll\n"
+    "             * ve [op+0x90]!=0 -- a amostragem periodica quase nunca calha\n"
+    "             * nela, porque logo a seguir func_002B4274 zera [container+8]. */\n"
+    "            if(_dn && _d++<4){\n"
+    '              fprintf(stderr,"[FIOSOPEN] 002B4224 DONE #%d container=0x%08X '
+    'io=0x%08X done=0x%08X apos %d polls\\n",\n'
+    "                _d,_c,_io,_dn,_n);\n"
+    "              fflush(stderr); }\n"
+    "            else if((_n<4 || (_n%2048)==0) && _p++<64){\n"
+    '              fprintf(stderr,"[FIOSOPEN] 002B4224 poll #%d container=0x%08X '
     'io=0x%08X done=0x%08X%s\\n",\n'
-    "              _n,_c,_io,_io?vm_read32(_io+0x90):0u,\n"
-    '              _io?"":"  <-- SEM OP PARA POLLAR");\n'
-    "            fflush(stderr); }\n"
+    "                _n,_c,_io,_dn,\n"
+    '                _io?"":"  <-- SEM OP PARA POLLAR");\n'
+    "              fflush(stderr); }\n"
     "            _n++; } }\n"
+)
+
+# --- func_002B4274: SO' e' alcancavel com [op+0x90] != 0 -------------------
+# A probe de entrada de func_002B4224 NAO consegue observar o "done": le
+# [op+0x90] no topo (ve 0), e o preempt do giant lock (ppu_rsv_on_store, no
+# primeiro vm_write do prologo) deixa a "fios scheduler" escrever a palavra
+# ENTRE a leitura da probe e a leitura do guest. func_002B4274 e' o ramo que
+# o guest so' toma depois de ver != 0 -- e' a observacao sem corrida.
+B4274_PROBE = (
+    "        /* " + MARKER + "(4274): ramo 'done' do poll. Alcancavel apenas com\n"
+    "         * [ [container+8] + 0x90 ] != 0 -- logo esta linha E' a prova de que\n"
+    "         * func_002B4224 observou a palavra de conclusao. */\n"
+    + GATE
+    + "          if(_on){ static int _n=0; if(_n++<8){\n"
+    "            uint32_t _c=(uint32_t)ctx->gpr[31], _io=vm_read32(_c+8);\n"
+    '            fprintf(stderr,"[FIOSOPEN] 002B4274 DONE #%d container=0x%08X '
+    'io=0x%08X done=0x%08X\\n",\n'
+    "              _n,_c,_io,_io?vm_read32(_io+0x90):0u);\n"
+    "            fflush(stderr); } } }\n"
 )
 
 # --- beacon do outro open que partilha func_0030D578 -----------------------
@@ -350,6 +379,8 @@ def main() -> int:
         ("func_0030D5CC", "file_new", FILE_NEEDLE, FILE_PROBE, "abertura do membro"),
         ("func_002B4224", "4224", sig("func_002B4224"),
          sig("func_002B4224") + B4224_PROBE, "poll do estado 1"),
+        ("func_002B4274", "4274", sig("func_002B4274"),
+         sig("func_002B4274") + B4274_PROBE, "ramo 'done' do poll"),
     ]
     for func, tag, needle, repl, what in jobs:
         print(edit(root, func, tag, needle, repl, what))
