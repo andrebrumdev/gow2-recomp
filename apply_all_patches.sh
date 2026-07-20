@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# apply_all_patches.sh — reaplica TODOS os patches de lift sobre um diretorio de lift.
+#
+# Regra 4 do CLAUDE.md: fixes nos ppu_recomp_XXX.cpp (gitignored, regeneraveis) vivem
+# como scripts idempotentes `recomp_mid_v2/patch_*.py` e DEVEM ser reaplicados apos
+# cada re-lift. Este script e o catalogo unico dessa reaplicacao.
+#
+# Uso:
+#   ./apply_all_patches.sh [DIR_DE_LIFT]     # aplica tudo (default: recomp_macos_v2)
+#   ./apply_all_patches.sh --check [DIR]     # so verifica os marcadores, nao escreve
+#
+# Idempotente: a 2a corrida seguida deve deixar a arvore identica e reportar
+# tudo como ALREADY-APPLIED.
+#
+# Classificacao por patch (agnostica ao script: compara o CONTEUDO do lift):
+#   APPLIED         -> rc=0 e o conteudo dos ppu_recomp_*.cpp mudou
+#   ALREADY-APPLIED -> rc=0 e o conteudo nao mudou (no-op)
+#   FAILED          -> rc!=0 (needle nao encontrada / shape do lift mudou)
+#
+# Um FAILED nao e forcado: pode significar que o patch ficou obsoleto para o
+# novo shape do lift. Investigar, nunca forcar.
+# FAILED-PARTIAL = o script escreveu um chunk e so depois falhou noutro.
+#
+# Saida: 0 se nada falhou E os checks passaram; 1 caso contrario. Hoje o rc fica
+# permanentemente em 1 por causa dos 4 FAILED abaixo — o que gateia a correcao
+# de facto sao os CHECKS, todos verdes. Os 4 sao patches de PROBE (diagnostico
+# gated por env, OFF por default), nenhum altera o boot default:
+#
+#   patch_2b0fb4_trace.py    needle exige uma probe [WADLD-T1SZ] preexistente em
+#                            func_002B0FB4 que NENHUM script instala (0 no lift
+#                            fresco). Enhancement de 2a geracao orfao: a 1a
+#                            geracao foi feita a mao numa sessao e nunca virou
+#                            script. Insatisfazivel a partir de um lift limpo.
+#   patch_factory_opd_gate.py  SUPERSEDED na parte funcional: os 2 OPD sites de
+#                            func_0039E6B4 que ele existe para corrigir ja sao
+#                            convertidos por patch_39e5d8_opd.py, que corre antes
+#                            (indirect=0, call_opd=2 no lift). So faltam as probes
+#                            [WADLD-FACT]/[WADLD-GATE].
+#   patch_tymap_18e814.py    a metade do chunk 000 aplica-se toda (TYMAP-LK/HIT/
+#                            RET/VT + 18E814 e 171244 -> ps3_call_opd). Falha so
+#                            na cauda: a probe [TYMAP-REG] em func_00321034 (001)
+#                            exige um bloco PS3_TRACE_SHREG preexistente — mesma
+#                            classe de orfao do 2b0fb4_trace.
+#   patch_tymap_probes2.py   conflito de ordem com patch_tydisp_lr.py: ambos
+#                            reescrevem o MESMO fprintf [TYDISP] e sao variantes
+#                            mutuamente exclusivas. tydisp_lr corre antes (t<y) e
+#                            consome a needle; ficou a variante lr (lr/r3/r4) em
+#                            vez da desc/raw/w1/w2. Alternativas, nao sequencia.
+
+set -uo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+REPO="$PWD"
+PATCH_DIR="$REPO/recomp_mid_v2"
+
+MODE=apply
+LIFT_ARG=""
+for a in "$@"; do
+  case "$a" in
+    --check) MODE=check ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -*) echo "opcao desconhecida: $a" >&2; exit 2 ;;
+    *) LIFT_ARG="$a" ;;
+  esac
+done
+
+LIFT_REL="${LIFT_ARG:-recomp_macos_v2}"
+LIFT="$REPO/${LIFT_REL#./}"
+if [ ! -d "$LIFT" ]; then
+  echo "ERRO: dir de lift nao existe: $LIFT" >&2
+  exit 2
+fi
+
+# ---- interprete python -------------------------------------------------------
+# Os patch_*.py usam Path.write_text(..., newline="\n") — kwarg que so existe a
+# partir do Python 3.10 (e que NAO deve ser removido: e ele que evita CRLF no
+# lado Windows do port). O python3 do sistema no macOS e o 3.9.6 da Apple, que
+# estoura TypeError na escrita DEPOIS de todo o trabalho em memoria. Escolhemos
+# aqui um interprete >= 3.10 em vez de mexer nos 22 scripts.
+pick_python() {
+  local c
+  for c in python3.14 python3.13 python3.12 python3.11 python3.10 python3 \
+           /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    if "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
+      command -v "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+PY="${PS3_PATCH_PYTHON:-$(pick_python)}"
+if [ -z "$PY" ]; then
+  echo "ERRO: nenhum python3 >= 3.10 encontrado (os patches usam" >&2
+  echo "      Path.write_text(newline=...)). Instale um, ou aponte PS3_PATCH_PYTHON." >&2
+  exit 2
+fi
+
+# ---- hash helper (macOS md5 / Linux md5sum / fallback shasum) ----------------
+if command -v md5 >/dev/null 2>&1; then
+  hash_file() { md5 -q "$1"; }
+elif command -v md5sum >/dev/null 2>&1; then
+  hash_file() { md5sum "$1" | cut -d' ' -f1; }
+else
+  hash_file() { shasum -a 1 "$1" | cut -d' ' -f1; }
+fi
+
+# ---- patches nao aplicaveis a este host --------------------------------------
+# Estes aplicam-se ao FONTE sem erro, mas o binario nao LINKA no macOS: os host
+# helpers que eles chamam (host_res_inflate.c, host_wad_tex.c) chamam por sua vez
+# rsx_d3d12_content_hold()/rsx_d3d12_force_bind_rgba(), definidos apenas em
+# libs/video/rsx_d3d12_backend.c — backend D3D12, Windows. Nao ha equivalente no
+# backend SDL do macOS (isso e territorio do Plano 05, nao desta task).
+# Nao sao "obsoletos": no Windows continuam validos.
+SKIP_DARWIN="patch_host_res_inflate.py patch_wad_tex_capture.py"
+SKIP_LIST=""
+if [ "$(uname -s)" = "Darwin" ]; then SKIP_LIST="$SKIP_DARWIN"; fi
+
+is_skipped() {
+  case " $SKIP_LIST " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+# Arquivos vigiados = uniao dos alvos citados pelos proprios patches (auto-mantido).
+TRACKED="$(grep -ohE 'ppu_recomp_[0-9]+\.(cpp|h)' "$PATCH_DIR"/patch_*.py | sort -u)"
+
+snapshot() {
+  local f
+  for f in $TRACKED; do
+    if [ -f "$LIFT/$f" ]; then printf '%s %s\n' "$f" "$(hash_file "$LIFT/$f")"; fi
+  done
+}
+
+# ---- verificacao de marcadores (o "teste") ----------------------------------
+# Falha (rc!=0) enquanto os fixes NAO estiverem no lift. E o vermelho do TDD.
+run_checks() {
+  "$PY" - "$LIFT" <<'PY'
+import sys, pathlib
+
+lift = pathlib.Path(sys.argv[1])
+fails = []
+
+def src(name):
+    return (lift / name).read_text(encoding="utf-8", errors="replace")
+
+def report(name, ok, detail=""):
+    print("  [%s] %s%s" % ("PASS" if ok else "FAIL", name, "" if ok else "\n         -> " + detail))
+    if not ok:
+        fails.append(name)
+
+# 1) Parede [C]: o epilogo de func_002550C8 cai no fallthrough guest 0x255178
+#    (fase fill/next), NUNCA em 0x2550E8 (reentrada do corpo do grow).
+#    Sem isto o stream do R_PermA congela em 5.619.712 de 20.169.344 bytes.
+try:
+    s = src("ppu_recomp_000.cpp")
+    i = s.find("void func_002550C8")
+    j = s.find("void func_00255178", i)
+    if i < 0 or j < 0:
+        report("wall-C fallthrough 2550C8->255178", False,
+               "func_002550C8 ou func_00255178 nao existem no lift")
+    else:
+        region = s[i:j]
+        bad = "g_trampoline_fn = (void(*)(void*))func_002550E8; return;" in region
+        good = "g_trampoline_fn = (void(*)(void*))func_00255178; return;" in region
+        report("wall-C fallthrough 2550C8->255178", (not bad) and good,
+               "epilogo ainda aponta para func_002550E8 (lift nao-patcheado)"
+               if bad else "nao ha trampolim para func_00255178 no corpo de 2550C8")
+except Exception as e:
+    report("wall-C fallthrough 2550C8->255178", False, "erro: %r" % (e,))
+
+# 2) Stream-reader OPD de func_001856A8 (SHADERSRC/ICGLdr): sem isto o
+#    SHADERSRC le sempre N=0 (chama a OPD como se fosse codigo cru).
+try:
+    s = src("ppu_recomp_000.cpp")
+    i = s.find("void func_001856A8")
+    if i < 0:
+        report("1856A8 stream OPD (SHADERSRC N>0)", False, "func_001856A8 ausente no lift")
+    else:
+        j = s.find("void func_", i + 10)
+        region = s[i:j]
+        report("1856A8 stream OPD (SHADERSRC N>0)",
+               "ps3_call_opd(ctx, (uint32_t)ctx->gpr[9])" in region,
+               "ainda usa ps3_indirect_call (OPD tratada como codigo cru)")
+except Exception as e:
+    report("1856A8 stream OPD (SHADERSRC N>0)", False, "erro: %r" % (e,))
+
+# 3) Declaracao do helper de OPD presente (pre-requisito dos patches de OPD).
+try:
+    s = src("ppu_recomp_000.cpp")
+    report("decl ps3_call_opd em 000",
+           "void ps3_call_opd(ppu_context* ctx, uint32_t opd_ea);" in s[:80000],
+           "declaracao ausente no topo de ppu_recomp_000.cpp")
+except Exception as e:
+    report("decl ps3_call_opd em 000", False, "erro: %r" % (e,))
+
+print()
+if fails:
+    print("CHECKS: %d FALHA(S) -> %s" % (len(fails), ", ".join(fails)))
+    sys.exit(1)
+print("CHECKS: todos passaram")
+PY
+}
+
+echo "=============================================================="
+echo " apply_all_patches.sh"
+echo " lift    : $LIFT"
+echo " patches : $PATCH_DIR/patch_*.py"
+echo " modo    : $MODE"
+echo "=============================================================="
+echo
+
+if [ "$MODE" = check ]; then
+  echo "-- verificacao de marcadores --"
+  run_checks
+  exit $?
+fi
+
+n_applied=0
+n_already=0
+n_failed=0
+n_skipped=0
+failed_list=""
+
+for p in "$PATCH_DIR"/patch_*.py; do
+  name="$(basename "$p")"
+  if is_skipped "$name"; then
+    printf '%-16s %s\n' "SKIPPED" "$name"
+    echo "                   | host helper so existe no backend D3D12 (Windows); nao linka no macOS"
+    n_skipped=$((n_skipped + 1))
+    continue
+  fi
+  before="$(snapshot)"
+  out="$("$PY" "$p" "$LIFT" 2>&1)"
+  rc=$?
+  after="$(snapshot)"
+
+  if [ "$rc" -ne 0 ]; then
+    # Varios patches escrevem um chunk e so depois falham noutro: distinguir a
+    # falha limpa (nada escrito) da parcial (parte do patch ja esta no lift).
+    if [ "$before" != "$after" ]; then
+      status="FAILED-PARTIAL"
+    else
+      status="FAILED"
+    fi
+    n_failed=$((n_failed + 1))
+    failed_list="$failed_list $name"
+  elif [ "$before" != "$after" ]; then
+    status="APPLIED"
+    n_applied=$((n_applied + 1))
+  else
+    status="ALREADY-APPLIED"
+    n_already=$((n_already + 1))
+  fi
+
+  printf '%-16s %s\n' "$status" "$name"
+  # Detalhe do script so quando interessa (falha) ou quando mudou algo.
+  if [ "$rc" -ne 0 ] || [ "$status" = "APPLIED" ]; then
+    printf '%s\n' "$out" | sed 's/^/                   | /'
+  fi
+done
+
+echo
+echo "--------------------------------------------------------------"
+printf 'TOTAL: %d patches | APPLIED=%d ALREADY-APPLIED=%d FAILED=%d SKIPPED=%d\n' \
+  "$((n_applied + n_already + n_failed + n_skipped))" \
+  "$n_applied" "$n_already" "$n_failed" "$n_skipped"
+if [ -n "$failed_list" ]; then
+  echo "FALHARAM:$failed_list"
+  echo "(NAO forcar: pode ser patch obsoleto para o novo shape do lift)"
+fi
+echo "--------------------------------------------------------------"
+echo
+echo "-- verificacao de marcadores --"
+run_checks
+checks_rc=$?
+
+if [ "$n_failed" -ne 0 ] || [ "$checks_rc" -ne 0 ]; then
+  exit 1
+fi
+exit 0

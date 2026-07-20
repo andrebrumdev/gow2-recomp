@@ -101,7 +101,11 @@ def patch_funcs(path: Path, names: list[str], tag: str) -> None:
         region2, n = fix_region(region, tag)
         # 329490 residual pattern
         if name == "func_00329490" and OPD_BLOCK3.search(region2):
+            # NB: replacement tem de ser FUNCAO (como o `repl` acima), nao string:
+            # re.sub interpreta escapes no template, e o "\\n" do fprintf virava
+            # newline REAL dentro do literal C -> "error: expected expression".
             region2 = OPD_BLOCK3.sub(
+                lambda _m: (
                 "        ctx->gpr[4] = ctx->gpr[3] | ctx->gpr[3];\n"
                 "        { static int on=-1; if(on<0){extern char* getenv(const char*); "
                 "on=(getenv(\"PS3_TRACE_TYMAP\")||getenv(\"PS3_TRACE_LDRSH\"))?1:0;}\n"
@@ -111,7 +115,8 @@ def patch_funcs(path: Path, names: list[str], tag: str) -> None:
                 "ctx->gpr[11]?vm_read32(ctx->gpr[11]+0x0):0); fflush(stderr);} }\n"
                 "        vm_write64(ctx->gpr[1] + 0x28, ctx->gpr[2]);\n"
                 "        ps3_call_opd(ctx, (uint32_t)ctx->gpr[11]); DRAIN_TRAMPOLINE(ctx);\n"
-                "        ctx->gpr[2] = vm_read64(ctx->gpr[1] + 0x28);",
+                "        ctx->gpr[2] = vm_read64(ctx->gpr[1] + 0x28);"
+                ),
                 region2,
                 count=1,
             )

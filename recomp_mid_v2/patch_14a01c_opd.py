@@ -2,8 +2,9 @@
 """Fix OPD sites in constructors that install vtable with 171244 at +0x8."""
 from pathlib import Path
 import re
+import sys
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
 p = ROOT / "ppu_recomp_000.cpp"
 s = p.read_text(encoding="utf-8", errors="replace")
 
