@@ -655,3 +655,72 @@ HLE actual ainda não dispara.
 - Fix da secção 12.5 **não** implementado — só instrumentação +
   classificação, conforme routing da task (RED → Task 3b Steps 1–2
   apenas, STOP antes do Step 3).
+
+---
+
+## 13. Review + decisão do fix A3b (2026-07-21, pós-4bfb806)
+
+**Review do diag:** APPROVED. Classificação A3b correcta; Task 2 correcta e
+insuficiente; sonda AUDGATE bem ancorada (14 dead copies evitadas); zero
+forja; PID-kill limpo.
+
+**Writer de `session+0x1B8` pinado por RE (fecho da concern do report):**
+
+| Papel | Função | Lift `ppu_recomp_001` |
+|-------|--------|------------------------|
+| Init 0 no open | `func_0045D8F0` | `:428470` `+0x1B8 = 0` |
+| Writer de 1 | `func_00463368` loc_00463480 | `:433926` **só se** `func_00462A70` ≥ 0 |
+| Predicado | `func_00462A70` | `:433688` slot `+0x1E8*0x308+0x220`, campo `+0x138`; vazio → **-1** |
+| Pump | `func_00463598` (+irmãos) | `:434063` chama o writer no loop de serviço |
+| Leitura FSM | `func_0045B2A8` | `:426009` |
+
+Semântica: flag guest de **stream de áudio completo/pronto**, não vdec/SEQDONE.
+
+**Decisão (hierarquia):**
+
+1. **Não** rearmar early `+0x744`. **Não** forjar `st620`/`+0x746`/`+0x720`.
+2. **1 probe discriminadora** (`PS3_TRACE_AUDWR`, read-only) em `00463368` +
+   rc de `00462A70` no site do write → classificar **S1** (pump morto) /
+   **S2** (buffer não avança) / **S3** (write 1 mas resolve errado).
+3. Fix preferido = progresso guest (desbloquear pump ou fill do stream).
+4. **HLE aceite se S1/S2 inalcançável em timebox:** uma escrita
+   `resolve(obj+0x720)+0x1B8 = 1`, gated, **após** open real do wav
+   **e** duração do `.wav` (produtor time-based ~14.7 s) — HLE de
+   stream-complete, não forja de FSM. Preferir invocar guest se o
+   predicado for só tempo/bytes que o host já mede.
+5. Aceite: Task 3 recipe com gate `st>=5` → `open≥1`/`start≥1` (ou
+   `site=002C069C≥1`); st passa 4/5; M0 sem regressão.
+
+Ledger: `gow2-recomp/.superpowers/sdd/progress.md` (Task 3 REVIEW + DECISÃO).
+
+---
+
+## 14. Fix A3b implementado e GREEN in-boot (2026-07-21)
+
+**Commit alvo:** `fix(movie): HLE A3b stream-complete desbloqueia estado 3→4 (Open/StartSeq)`.
+
+### Mecanismo
+1. Host (`movie_eos_arm.c`): quando o produtor time-based dispara (`done=1`,
+   duração real do `.wav` ~14.7 s), `st620==3` e `h720!=0`, marca stream-complete
+   (política pura `movie_audio_should_mark_done`). Opt-out `PS3_AUDIO_STREAM_DONE=0`.
+2. Preferência: `sessao+0x1B8=1` via resolve TOC-0x394 (path fiel ao writer
+   `func_00463368`). Em boot medido o resolve host **não** achou o slot
+   (path guest de match pode ser o indirect `00447A60`).
+3. Fallback (o que desbloqueou): `g_movie_audio_gate_force=1` + patch idempotente
+   `recomp_mid_v2/patch_st3_audio_done_force.py` em `func_002C0FA0` força
+   `gpr3=1` após `func_0045B2A8` — HLE do **resultado** do gate (equiv. a
+   `+0x1B8!=0`), **sem** forjar `st620`/`+0x744`.
+
+### In-boot GREEN (55s recipe Task 3, `/tmp/vdec_a3b_fix2.log`)
+| métrica | valor |
+|---------|-------|
+| `[AUDDONE]` GATE-FORCE | 1 |
+| `site=002C069C` (estado 4, `val=0 branch=wait`) | ≥1 |
+| `[cellVdec] Open` | **1** |
+| `StartSeq` | **1** |
+| `[MOVIEEOS]` arm | em st620=11 (≥5) — gate Task 2 intacto |
+| forja st620/+0x744 | 0 |
+
+Timeline: st 0→1→3 → (done+AUDDONE) → Open/StartSeq → st 11 → arm EOS.
+
+Unit offline: `test_movie_eos_policy` 39/39 (8 CHECKs A3b novos).

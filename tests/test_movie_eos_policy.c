@@ -181,6 +181,26 @@ int main(void)
      * escreve, e so quando isto devolve 1). */
     CHECK(g_movie_eos_ea == 0, "movie_eos_should_arm nao mexe no g_movie_eos_ea (decisao pura)");
 
+    printf("== A3b: politica movie_audio_should_mark_done (HLE stream-complete) ==\n");
+    /* Desbloqueia o park st620=3 sem forjar st620/+0x744: exige done real,
+     * handle de audio real, estado 3, one-shot. M3 (done=0) nunca marca. */
+    CHECK(movie_audio_should_mark_done(1, 1, 3, 0x84000002u, 0) == 1,
+          "A3b: enabled+done+st3+h720 -> marca");
+    CHECK(movie_audio_should_mark_done(0, 1, 3, 0x84000002u, 0) == 0,
+          "A3b: disabled (PS3_AUDIO_STREAM_DONE=0) nao marca");
+    CHECK(movie_audio_should_mark_done(1, 0, 3, 0x84000002u, 0) == 0,
+          "A3b/M3: done=0 nao marca (forge-trap partilhado com EOS)");
+    CHECK(movie_audio_should_mark_done(1, 1, 1, 0x84000002u, 0) == 0,
+          "A3b: st620=1 (ainda a abrir) nao marca");
+    CHECK(movie_audio_should_mark_done(1, 1, 5, 0x84000002u, 0) == 0,
+          "A3b: st620=5 (ja pos-open) nao marca -- so o park em 3");
+    CHECK(movie_audio_should_mark_done(1, 1, 3, 0, 0) == 0,
+          "A3b: h720=0 (sem open real) nao marca");
+    CHECK(movie_audio_should_mark_done(1, 1, 3, 0x84000002u, 1) == 0,
+          "A3b: already_marked one-shot");
+    CHECK(movie_audio_should_mark_done(1, 1, 0xFFFFFFFFu, 0x84000002u, 0) == 0,
+          "A3b: st sentinela nao marca");
+
     munmap(buf, PAGE * 2);
     vm_base = NULL;
 

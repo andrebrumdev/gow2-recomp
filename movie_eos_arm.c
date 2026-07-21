@@ -53,6 +53,14 @@
  * continua diferente (Windows: VirtualQuery inline; macOS: aqui, via
  * ppu_guest_range_committed); agora tambem a POLITICA de arm diverge nesta
  * unica condicao extra, especifica desta build macOS/arm64.
+ *
+ * Task 3b / A3b (2026-07-21): com o arm atrasado, st620 fica preso em 3 porque
+ * o gate real e' func_0045B2A8(obj+0x720) -> *(sessao_audio+0x1B8). O handle
+ * resolve (h720!=0, rc=0 literal) mas +0x1B8 nunca sai de 0 -- o service loop
+ * guest (func_00463368) nao completa o stream no Mac. HLE de stream-complete:
+ * apos o produtor de done (duracao REAL do .wav) e com open de audio real
+ * (h720 valido), escreve-se UMA vez sessao+0x1B8=1. NAO forja st620/+0x744.
+ * Opt-out: PS3_AUDIO_STREAM_DONE=0. Default ON quando o amostrador corre.
  */
 #include "movie_eos_arm.h"
 
@@ -79,6 +87,7 @@ extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage)
 static int s_sampler_mo  = 0;   /* PS3_TRACE_MOVIEOBJ: dump verboso [MOVIEOBJ]   */
 static int s_sampler_eos = 0;   /* PS3_MOVIE_EOS:      autoriza o arm do read-hook */
 static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes) */
+static int s_audio_stream_done = 1; /* HLE A3b: mark sess+0x1B8 (opt-out =0) */
 
 #define MOVIE_OBJ_SLOT_EA  0x540054u
 #define MOVIE_OBJ_MAX_EA   0x4F000000u   /* acima disto o slot e' lixo, nao objecto */
@@ -87,10 +96,26 @@ static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes
 #define MOVIE_OFF_STATE    0x620u
 #define MOVIE_OFF_IO_OPEN  0x630u
 #define MOVIE_OFF_IO_READ  0x634u
+#define MOVIE_OFF_SND_H    0x720u        /* handle snd_stream (audio da intro) */
 #define MOVIE_OFF_EOS      0x744u
 #define MOVIE_OFF_EOS2     0x746u
 
 #define MOVIE_IO_DONE_OFF  0x90u         /* [io+0x90] = palavra de conclusao FIOS */
+
+/* Sessao de audio (tabela geracional TOC-0x394, stride 0x1E4). GoW2 HD
+ * NPUA80491: TOC de entrada 0x541178 (ELF entry OPD). O 1o word de cada slot
+ * e' o handle quando o path de match directo corre; +0x1B8 e' o flag que
+ * func_0045B2A8 le. Fallback: g_movie_audio_gate_force (override no site vivo
+ * func_002C0FA0) quando o resolve host nao encontra o slot. */
+#define MOVIE_AUDIO_TOC           0x541178u
+#define MOVIE_AUDIO_TABLE_TOC_OFF 0x394u
+#define MOVIE_AUDIO_SESS_STRIDE   0x1E4u
+#define MOVIE_AUDIO_SESS_MAX      256u
+#define MOVIE_AUDIO_DONE_OFF      0x1B8u
+
+/* Quando 1, o patch em func_002C0FA0 forca o retorno de func_0045B2A8 a !=0
+ * (equivalente a sessao+0x1B8 != 0). Exportado para o lift (C linkage). */
+int g_movie_audio_gate_force = 0;
 
 /* Cadencia: 200 ms como no Windows. O heartbeat re-emite a linha [MOVIEFSM]
  * de 5 em 5 s mesmo sem transicao -- sem isso um estado PARADO produz uma
@@ -105,6 +130,8 @@ static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes
  * handler do estado 3 salta 3->4->5 sem NUNCA despachar o corpo do estado 4
  * -- o vdec nunca abre e nenhum WAD carrega. */
 #define MOVIE_STATE_POST_OPEN  5u
+/* Estado em que a FSM park a espera do audio-ready (+0x1B8) / EOS. */
+#define MOVIE_STATE_WAIT_EOS   3u
 
 /* Politica pura de arm -- ver movie_eos_arm.h. Task 2 (2026-07-21): ja NAO e'
  * a mesma condicao de 3 argumentos do Windows -- acrescenta o gate
@@ -114,6 +141,21 @@ int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32
     if (!eos_env || eos_ea != 0 || !overlay_done)      return 0;
     if (st620 == 0xFFFFFFFFu)                          return 0; /* sentinela: FSM ainda nao lida */
     if (st620 < MOVIE_STATE_POST_OPEN)                 return 0; /* estado 4 ainda nao correu */
+    return 1;
+}
+
+int movie_audio_should_mark_done(int enabled, long done, uint32_t st620,
+                                 uint32_t h720, int already_marked)
+{
+    /* HLE de stream-complete (A3b). Politica pura -- o sampler e' que escreve.
+     * Exige: gate ON, produtor de done (mesmo do MOVIEDONE -- duracao real do
+     * .wav ou overlay), FSM no park do estado 3 (WAIT_EOS / audio gate),
+     * handle de audio real (open sobreviveu), one-shot. */
+    if (!enabled || already_marked)                    return 0;
+    if (!done)                                         return 0;
+    if (st620 == 0xFFFFFFFFu)                          return 0;
+    if (st620 != MOVIE_STATE_WAIT_EOS)                 return 0; /* so desbloqueia o park em 3 */
+    if (!h720 || h720 == 0xFFFFFFFFu)                  return 0; /* sem open real de audio */
     return 1;
 }
 
@@ -133,6 +175,89 @@ int movie_eos_peek8(uint32_t ea, uint8_t* out)
     if (!vm_base || !out) return 0;
     if (!ppu_guest_range_committed(ea, 1)) return 0;
     *out = vm_base[ea];
+    return 1;
+}
+
+/* Escrita big-endian de 32 bits -- so usada pelo HLE A3b de stream-complete. */
+static int movie_eos_poke32(uint32_t ea, uint32_t val)
+{
+    unsigned char* p;
+    if (!vm_base) return 0;
+    if (!ppu_guest_range_committed(ea, 4)) return 0;
+    p = vm_base + ea;
+    p[0] = (unsigned char)((val >> 24) & 0xFFu);
+    p[1] = (unsigned char)((val >> 16) & 0xFFu);
+    p[2] = (unsigned char)((val >>  8) & 0xFFu);
+    p[3] = (unsigned char)( val        & 0xFFu);
+    return 1;
+}
+
+/* Resolve handle snd_stream -> EA da sessao (tabela geracional). Devolve 0 se
+ * o handle nao bater em nenhum slot. */
+static uint32_t movie_audio_resolve_session(uint32_t handle)
+{
+    uint32_t table = 0;
+    uint32_t toc_slot = MOVIE_AUDIO_TOC - MOVIE_AUDIO_TABLE_TOC_OFF;
+    uint32_t i;
+
+    if (!handle || handle == 0xFFFFFFFFu) return 0;
+    if (!movie_eos_peek32(toc_slot, &table) || !table) return 0;
+    if (table >= MOVIE_OBJ_MAX_EA) return 0;
+
+    for (i = 0; i < MOVIE_AUDIO_SESS_MAX; i++) {
+        uint32_t slot = table + i * MOVIE_AUDIO_SESS_STRIDE;
+        uint32_t h = 0;
+        if (slot + MOVIE_AUDIO_DONE_OFF + 4u >= MOVIE_OBJ_MAX_EA) break;
+        if (!movie_eos_peek32(slot, &h)) continue;
+        if (h == handle) return slot;
+    }
+    return 0;
+}
+
+/* HLE one-shot de stream-complete. Preferencia:
+ *  1) escrever sessao+0x1B8=1 se o resolve host achar o slot (fiel ao writer
+ *     guest func_00463368);
+ *  2) senao armar g_movie_audio_gate_force=1 e o patch em func_002C0FA0 forca
+ *     o retorno do gate a 1 (HLE do resultado de 0045B2A8, mesmo efeito na FSM).
+ * Em ambos os casos NAO se toca st620 nem +0x744. */
+static int movie_audio_mark_stream_done(uint32_t obj, uint32_t h720)
+{
+    uint32_t sess, cur = 0;
+    (void)obj;
+
+    sess = movie_audio_resolve_session(h720);
+    if (sess) {
+        if (!movie_eos_peek32(sess + MOVIE_AUDIO_DONE_OFF, &cur)) {
+            fprintf(stderr, "[AUDDONE] FAIL peek sess+0x1B8 @0x%08X\n",
+                    sess + MOVIE_AUDIO_DONE_OFF);
+            fflush(stderr);
+            /* cai no force-flag */
+        } else if (cur != 0) {
+            fprintf(stderr,
+                    "[AUDDONE] ja marcado sess=0x%08X +0x1B8=%u (h720=0x%08X)\n",
+                    sess, cur, h720);
+            fflush(stderr);
+            g_movie_audio_gate_force = 1;
+            return 1;
+        } else if (movie_eos_poke32(sess + MOVIE_AUDIO_DONE_OFF, 1u)) {
+            g_movie_audio_gate_force = 1; /* belt+suspenders: force gate too */
+            fprintf(stderr,
+                    "[AUDDONE] HLE stream-complete FIELD: h720=0x%08X sess=0x%08X "
+                    "+0x1B8 0->1 (desbloqueia func_0045B2A8 / estado 3)\n",
+                    h720, sess);
+            fflush(stderr);
+            return 1;
+        }
+    }
+
+    /* Fallback: force no site vivo (resolve host falhou -- path de match do
+     * guest pode ser o indirect 00447A60, nao o slot linear). */
+    g_movie_audio_gate_force = 1;
+    fprintf(stderr,
+            "[AUDDONE] HLE stream-complete GATE-FORCE: h720=0x%08X sess_resolve=%s "
+            "-> g_movie_audio_gate_force=1 (patch func_002C0FA0; NAO forja st620/+0x744)\n",
+            h720, sess ? "poke_failed" : "0");
+    fflush(stderr);
     return 1;
 }
 
@@ -298,10 +423,6 @@ static long long movie_done_interval_ms(void)
     return ivl;
 }
 
-/* Estado parado da FSM onde o player ESPERA o EOS (obj+0x744). O filme chega a
- * este estado e PARA la: e' o unico sitio onde faz sentido entregar o "done". */
-#define MOVIE_STATE_WAIT_EOS  3u
-
 /* Chamado a cada tick. Ancora o t0 do playback no primeiro st620 activo (o
  * filme abriu) e devolve 1 (sticky) quando (a) ja decorreu o intervalo REAL do
  * filme desde essa ancora E (b) o player ja esta no estado parado que espera o
@@ -395,6 +516,22 @@ static void movie_sampler_loop(void)
             fflush(stderr);
         }
 
+        /* A3b: HLE stream-complete do audio. Com o arm EOS atrasado (st>=5), o
+         * estado 3 park em func_0045B2A8 ate sessao+0x1B8 != 0. O service loop
+         * guest nao completa isso no Mac; apos o produtor de done (duracao real
+         * do .wav) e com handle de audio real, marca-se o campo UMA vez. Opt-out
+         * PS3_AUDIO_STREAM_DONE=0. Nao toca st620 nem +0x744. */
+        {
+            static int s_aud_marked = 0;
+            uint32_t h720 = 0;
+            movie_eos_peek32(obj + MOVIE_OFF_SND_H, &h720);
+            if (movie_audio_should_mark_done(s_audio_stream_done, done, st,
+                                             h720, s_aud_marked)) {
+                if (movie_audio_mark_stream_done(obj, h720))
+                    s_aud_marked = 1;
+            }
+        }
+
         /* Dump verboso do objecto SO com PS3_TRACE_MOVIEOBJ: evita encher o log
          * quando so PS3_MOVIE_EOS esta ligado (recipe normal). Handles FIOS que
          * o poll do estado 1 (func_002B4224) espera: container=obj+0x62C,
@@ -444,14 +581,20 @@ void movie_eos_sampler_start(void)
     s_sampler_mo   = movie_env_on("PS3_TRACE_MOVIEOBJ");
     s_sampler_eos  = movie_env_on("PS3_MOVIE_EOS");
     s_sampler_perf = movie_env_on("PS3_PERF_FSM");
+    /* A3b HLE: default ON (fix, nao probe). Opt-out explicito =0. */
+    {
+        const char* a = getenv("PS3_AUDIO_STREAM_DONE");
+        if (a && a[0] == '0' && a[1] == 0) s_audio_stream_done = 0;
+        else s_audio_stream_done = 1;
+    }
     if (!s_sampler_mo && !s_sampler_eos && !s_sampler_perf) {
         return;   /* OFF por default */
     }
 
-    fprintf(stderr, "[MOVIEFSM] sampler on (mo=%d eos=%d perf_fsm=%d)%s\n",
-            s_sampler_mo, s_sampler_eos, s_sampler_perf,
+    fprintf(stderr, "[MOVIEFSM] sampler on (mo=%d eos=%d perf_fsm=%d aud_done=%d)%s\n",
+            s_sampler_mo, s_sampler_eos, s_sampler_perf, s_audio_stream_done,
             s_sampler_eos ? " -- pode armar EOS quando o produtor de done disparar"
-                          : " -- obs-only, nao arma");
+                          : " -- obs-only EOS; A3b HLE audio se aud_done=1 e done disparar");
     fflush(stderr);
 
 #ifdef _WIN32

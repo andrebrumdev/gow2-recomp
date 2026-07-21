@@ -81,6 +81,24 @@ int movie_eos_peek8(uint32_t ea, uint8_t* out);
  */
 int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32_t st620);
 
+/*
+ * Politica PURA do HLE A3b (stream-complete de audio). Decide se o amostrador
+ * deve escrever sessao_audio+0x1B8=1 (o campo que func_0045B2A8 le e que o
+ * estado 3 usa para avancar a 4):
+ *
+ *     enabled && done && st620==3 && h720!=0 && !already_marked
+ *
+ *   enabled        -- PS3_AUDIO_STREAM_DONE nao e' "0" (default ON).
+ *   done           -- mesmo produtor do arm EOS (overlay ou time-based .wav).
+ *   st620          -- so no park do estado 3 (antes de Open).
+ *   h720           -- handle em obj+0x720 (open real do snd_stream).
+ *   already_marked -- one-shot do host.
+ *
+ * NAO escreve: so decide. M3 (done==0) devolve 0. Exposta para o teste offline.
+ */
+int movie_audio_should_mark_done(int enabled, long done, uint32_t st620,
+                                 uint32_t h720, int already_marked);
+
 #ifdef __cplusplus
 }
 #endif
