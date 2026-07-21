@@ -23,6 +23,36 @@ Planos: `ps3recomp/docs/superpowers/plans/2026-07-20-00-wall-chain-INDEX.md`.
 | st620 1→3 | ✅ in-boot |
 | f744 / EOS / 3→5→11 / WAD | ⏳ **parede actual** (plano EOS Task 7) |
 
+---
+
+## Update 2026-07-21 — INTRO VENCIDO (st620 3→11) + higiene 0.1–0.3 fechada
+
+**A "parede actual" da linha acima está VENCIDA.** O intro-movie FSM progride agora 1→3→**11**:
+- Fix A3b (commit `b51013e`, do user): HLE de audio-stream-complete atado à duração real do `.wav`
+  (`movie_audio_should_mark_done`: só marca com produtor real + st==3 + handle de áudio + one-shot;
+  NÃO toca st620/+0x744). Desbloqueia 3→4 → `cellVdecOpenEx`+`StartSeq` correm (site 002C069C).
+- Produtor NOVO e mais fiel: o **overlay VideoToolbox** (sessão Metal concorrente, M0) TOCA o `.m2v`
+  real até ao fim (`[movie-vt] EOS flag set: movie_vt_overlay_done=1 (frames=330)`) → `overlay_done=1`
+  → `[MOVIEEOS] overlay done (st620=11)`. `env_gow2.sh:20` liga `PS3_MOVIE_HLE=1` por default, logo o
+  overlay é agora um produtor REAL sempre presente (o filme toca de verdade, não é timer).
+
+**Higiene (do /goal 0.x):**
+- **0.1 (docs/oracle):** este update. A tabela "Status late" está superada — st620 chega a 11.
+- **0.2 (patch_fios_sticky):** FEITO — `recomp_mid_v2/patch_fios_sticky.py` versiona a metade de lift do
+  sticky do done-word (commit `dbbd2b0`, round-trip byte-idêntico). Sticky durável a re-lift.
+- **0.3 (smoke multi-run, sem forja):** CORRIDO 2026-07-21 (PID-kill only, seguro p/ sessão concorrente):
+  - **Forja-segura** (EOS on, `PS3_MOVIE_HLE=0` + sem produtor tempo): **arm 0/3**, st_max **3** (não 11) —
+    NADA arma sem produtor real, FSM pára em 3. Sem forja. (Nota: a barra M3 antiga do smoke assumia só
+    `PS3_MOVIE_DONE_MS` como produtor; com o overlay VT default-on é preciso `PS3_MOVIE_HLE=0` p/ o teste ser válido.)
+  - **NATURAL** (overlay real toca, `PS3_TRACE_MOVIEOBJ=1`): st620≥3 **3/3** (=11), **002B4274 DONE 3/3**, 0 órfãos.
+
+**A jusante (fora do intro):** os WADs legais (R_LglScA/R_PermA) são PULADOS (o filme auto-completa antes do
+FORCE); o jogo entra no motor/render e bate na parede de shaders — **H2: registry de variantes VAZIO**
+(o jogo constrói combinations válidas, mas o lookup CRC precalc não tem entrada; 49612× Default.ps3fx).
+Registry narrowed a **A1**: o typemap walk (`func_00171244`) nunca é despachado — único dispatcher natural
+`func_0032E200` provado nunca-alcançado por 2 ângulos (direto + census indirecto dos 47 `ps3_call_opd`).
+Planos: `2026-07-21-shader-combination-zeroed.md`, `2026-07-21-shader-registry-typemap-walk.md`.
+
 **Fixes aplicados (motor + port):**
 - `ps3recomp` giant lock POSIX + `lwcond` prio (`a82c594`); sticky API em `ppu_loader.cpp`
 - `gow2-recomp` `patch_fios_play_already_active.py`, `patch_fios_cancel_yield.py` (`c5f718c`)
