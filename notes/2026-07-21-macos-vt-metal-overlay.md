@@ -95,3 +95,34 @@ In-boot (`PS3_RSX_BACKEND=metal PS3_MOVIE_HLE=1`, ~16s, `/tmp/gow2_m0_t2b.log`):
 | cellVdec Open | 1 (paralelo FSM) |
 
 Nota: no Mac o guest **nao** abre o `.m2v` via `movie_io` (so psarc); o sampler chama `movie_hle_autostart_cache_if_needed` quando `st620>=1`.
+
+---
+
+## M0 GREEN closeout (2026-07-21)
+
+| Commit (ps3recomp) | Role |
+|--------------------|------|
+| `297b22d` (gow2 note) | Task 0 spike AVAsset GO |
+| `9d93cf7` | Task 1 `rsx_metal_movie_*` BGRA blit |
+| `e12fbed` | Task 2/3 `movie_vt_metal` + movie_hle Apple |
+| `f48161d` | Fix bridge: metal mode, keep backend (not trace) |
+| `37d9bd3` | Fix: no SDL_PollEvent on movie thread |
+
+| Commit (gow2-recomp) | Role |
+|----------------------|------|
+| `0eb7049` | sampler autostart + AV frameworks link |
+| `ea78ced` | evidencia 330 frames |
+
+**Aceite in-boot (metal + MOVIE_HLE=1):**
+- bridge: `mode=4 keeping pre-registered backend` (nao trace)
+- 330 frames 1280x720 BGRA + EOS `movie_vt_overlay_done=1`
+- audio .wav
+- sem `NSInternalInconsistencyException`
+- Open/StartSeq continua a funcionar (caminho guest paralelo)
+
+**Run:**
+```bash
+export PS3_RSX_BACKEND=metal PS3_MOVIE_HLE=1 PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto
+unset PS3_NO_RSX
+./boot_gow2 EBOOT.ELF
+```

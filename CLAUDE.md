@@ -28,6 +28,18 @@ Atalhos:
 - Recipe de env e **como puxar o upstream sp00nznet sem partir o Mac/GoW2**:
   ver secção **«Integrar melhorias do projeto original»** em `../ps3recomp/CLAUDE.md`
 
+### Port Apple (obrigatório ler no motor)
+
+Qualquer feature **macOS** (janela, vídeo, áudio, RSX, perf): seguir
+`../ps3recomp/Claude.md` § **«Port Apple / macOS — optimização e baixo nível»**.
+
+- Default GPU: **Metal nativo** (`PS3_RSX_BACKEND=metal`), não “port preguiçoso” do Win.
+- Vídeo overlay: **VideoToolbox** (planos M0/M4), não ffmpeg CLI nem reencode Theora.
+- Stack de planos: `../ps3recomp/docs/superpowers/plans/2026-07-21-00-macos-metal-stack-INDEX.md`
+  (M0–M10: overlay, draw, MSL, tex, state, RT, content hold, vdec present, ops).
+- Backlog do que falta portar: `../ps3recomp/docs/superpowers/plans/2026-07-21-00-macos-metal-pending-backlog.md`.
+- Overlay **não** substitui WAD/vdec (cadeia `intro-vdec-open-force-wad`).
+
 ### Não-regressão Mac após merge do motor
 Depois de qualquer integrate de `sp00nznet/ps3recomp` no `../ps3recomp`:
 1. `cmake --build ../ps3recomp/build-macos -j…` + `./build_macos.sh`
