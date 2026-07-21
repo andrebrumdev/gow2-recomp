@@ -1094,3 +1094,46 @@ Likely next: getsize/stream-setup path that consults dearch (no member for
 `PS3_FIOS_STREAM_SEED=1` opt-in only (default OFF). Stamping
 `container+0x10=full_size` did not alone cause freelist (reproduced without it).
 
+## 22. Stream R_PermA FULL via F2B-STREAM-PUMP + freelist tag guard (2026-07-21)
+
+### In-boot GREEN (`/tmp/vdec_pump2.log`)
+
+```
+F2B-STREAM-PUMP fo=… mfd=0x4D560001 pumped=3072/3072 chunks=1          # R_LglScA
+[GATE-FORCE] R_PermA full flagged (bytes_read=20169344 size=20169344 preads=154)
+F2B-STREAM-PUMP fo=… mfd=0x4D560002 pumped=20169344/20169344 chunks=154 # R_PermA
+FREELIST-TAG-GUARD 263178 next=0xA0090002 (tag) node+4@0x00020004 → abort
+```
+
+| Metric | Value |
+|--------|------:|
+| R_PermA `bytes_read` | **20 169 344** |
+| R_PermA `preads` | **154** |
+| R_LglScA full | 3072 |
+| UNCOMMITTED-HI flood | **stopped** (tag guard; was ~1e6) |
+
+### Mechanism
+
+1. **FREELIST-TAG-GUARD** (`func_00263178`): if `[node+4]` has bit31 (boundary tag
+   misread as next), abort split with r3=0 instead of deref `0x84xxxxxx`.
+2. **ALLOC-NULL-GUARD** (`2550C8`/`2550E8`): if sub-alloc returns 0, skip stamp@EA0.
+3. **F2B-STREAM-PUMP** (default ON, `PS3_FIOS_STREAM_PUMP=0` off): after open DONE
+   for an F2B FO, host rebinds container limit/cursor to that FO and loops
+   `ps3_fios_aread_hle` into ring `0x40080000` (128 KiB chunks) until file size.
+
+### Honesty
+
+- Pump is **host-driven** after guest open DONE — not a natural WAD
+  `func_002B3D1C` submit from the asset loader (that path still dies in freelist
+  setup). Fulfillment uses the **same** `ps3_fios_aread_hle` / `movie_io_pread`
+  as the Windows stream path; bytes land in guest VM ring.
+- Natural guest aread for WAD remains open follow-up (getsize/setup without
+  freelist desync at `node+4@0x00020004`).
+
+### Env
+
+| Var | Default | Role |
+|-----|---------|------|
+| `PS3_FIOS_STREAM_PUMP` | ON | host aread loop after F2B DONE |
+| `PS3_FIOS_STREAM_SEED` | OFF | only stamp limit, no pump |
+
