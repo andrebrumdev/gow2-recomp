@@ -9,8 +9,10 @@
  * se escreve o byte no guest nem se toca no st620 -- so se arma o hook.
  *
  * A LINHA replay/forja (o ponto todo da task):
- *   - Arma-se SO apos um evento real de conclusao, via a politica pura
- *     movie_eos_should_arm (PS3_MOVIE_EOS ligado, ainda nao armado, produtor!=0).
+ *   - Arma-se SO apos um evento real de conclusao E com a FSM ja passada do
+ *     estado de abertura, via a politica pura movie_eos_should_arm
+ *     (PS3_MOVIE_EOS ligado, ainda nao armado, produtor!=0, st620>=5 -- Task 2
+ *     do plano 2026-07-21-intro-vdec-open-force-wad.md).
  *   - No Windows o produtor e' o overlay ffmpeg (movie_hle_overlay_done).
  *   - No macOS nao ha overlay E o .m2v e' servido pelo dearchiver psarc do
  *     PROPRIO guest (MEDIDO: 0 opens em movie_io / 0 [AREAD] para o filme),
@@ -32,16 +34,25 @@
  *   obj+0x744       -> byte de EOS que o decoder MPEG do SPU normalmente DMAia
  *   obj+0x746       -> flag adjacente, dumpada junto para contexto
  *
- * PARIDADE COM O WINDOWS. O host de referencia (runtime/ppu/tests/boot_main.cpp)
- * mantem a thread inline com VirtualQuery e o arm em linha (:367). NAO foi
- * substituido pela chamada partilhada a movie_eos_sampler_start(): esta sessao
- * corre em macOS/arm64 e nao pode compilar nem correr o host Windows, e uma
- * troca as cegas (a) perderia o dump [MOVIEOP] que so o boot_main.cpp tem, e
- * (b) obrigaria a mover este ficheiro para libs/video, entrando no glob de build
- * do Windows por testar. O que E' partilhado e' a DISCIPLINA de arm: a politica
- * movie_eos_should_arm implementa exactamente a condicao de boot_main.cpp:367.
- * Os dois hosts armam pela mesma regra; so o encanamento do amostrador difere
- * (Windows: VirtualQuery inline; macOS: aqui, via ppu_guest_range_committed).
+ * PARIDADE COM O WINDOWS (parcial). O host de referencia (runtime/ppu/tests/
+ * boot_main.cpp) mantem a thread inline com VirtualQuery e o arm em linha
+ * (:367). NAO foi substituido pela chamada partilhada a
+ * movie_eos_sampler_start(): esta sessao corre em macOS/arm64 e nao pode
+ * compilar nem correr o host Windows, e uma troca as cegas (a) perderia o
+ * dump [MOVIEOP] que so o boot_main.cpp tem, e (b) obrigaria a mover este
+ * ficheiro para libs/video, entrando no glob de build do Windows por testar.
+ *
+ * A partir da Task 2 (2026-07-21, plano intro-vdec-open-force-wad.md),
+ * movie_eos_should_arm JA NAO espelha byte-a-byte a condicao de 3 argumentos
+ * de boot_main.cpp:367: alem das tres condicoes originais (env, one-shot,
+ * produtor de done), o macOS exige tambem st620>=MOVIE_STATE_POST_OPEN (5) --
+ * o valor que o estado 4 da FSM (Open+StartSeq) escreve DEPOIS de correr. Sem
+ * este gate, o arm cedo (a partir de st620=3) fazia o vm_read8(obj+0x744)
+ * devolver 1 ainda em estado 3, o handler saltava 3->4->5 sem despachar o
+ * corpo do estado 4, e o vdec/WADs nunca abriam. O encanamento do amostrador
+ * continua diferente (Windows: VirtualQuery inline; macOS: aqui, via
+ * ppu_guest_range_committed); agora tambem a POLITICA de arm diverge nesta
+ * unica condicao extra, especifica desta build macOS/arm64.
  */
 #include "movie_eos_arm.h"
 
@@ -87,10 +98,23 @@ static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes
 #define MOVIE_TICK_MS      200
 #define MOVIE_HEARTBEAT_TICKS (5000 / MOVIE_TICK_MS)
 
-/* Politica pura de arm -- ver movie_eos_arm.h. Mesma condicao do Windows. */
-int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done)
+/* Estado da FSM do intro-movie a partir do qual e' seguro armar o read-hook
+ * de EOS: func_002C069C so escreve st620=5 DEPOIS de o estado 4 (Open+
+ * StartSeq) correr. Armar antes disso (em st620=3, onde o handler antigo
+ * arrancava cedo demais) faz o vm_read8(obj+0x744) devolver 1 cedo demais e o
+ * handler do estado 3 salta 3->4->5 sem NUNCA despachar o corpo do estado 4
+ * -- o vdec nunca abre e nenhum WAD carrega. */
+#define MOVIE_STATE_POST_OPEN  5u
+
+/* Politica pura de arm -- ver movie_eos_arm.h. Task 2 (2026-07-21): ja NAO e'
+ * a mesma condicao de 3 argumentos do Windows -- acrescenta o gate
+ * st620>=MOVIE_STATE_POST_OPEN para so armar depois do estado 4 abrir o vdec. */
+int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32_t st620)
 {
-    return eos_env && eos_ea == 0 && overlay_done != 0;
+    if (!eos_env || eos_ea != 0 || !overlay_done)      return 0;
+    if (st620 == 0xFFFFFFFFu)                          return 0; /* sentinela: FSM ainda nao lida */
+    if (st620 < MOVIE_STATE_POST_OPEN)                 return 0; /* estado 4 ainda nao correu */
+    return 1;
 }
 
 int movie_eos_peek32(uint32_t ea, uint32_t* out)
@@ -356,11 +380,14 @@ static void movie_sampler_loop(void)
 
         /* Canal NATURAL de EOS (Task 3): arma UMA vez o read-hook do vm_read8 em
          * [obj+0x744], mas SO quando a politica pura movie_eos_should_arm o
-         * autoriza -- PS3_MOVIE_EOS ligado, ainda nao armado, e o produtor de
-         * done disparou. Sem produtor real (M3), done==0 e isto nunca dispara.
-         * Nao escrevemos o byte no guest: so armamos o hook para que a proxima
+         * autoriza -- PS3_MOVIE_EOS ligado, ainda nao armado, o produtor de
+         * done disparou, E a FSM ja passou o estado de abertura do vdec
+         * (st620>=5, Task 2). Sem produtor real (M3), done==0 e isto nunca
+         * dispara. Sem o gate de estado, armar cedo (st620=3) fazia o handler
+         * do estado 3 saltar para 5 sem nunca abrir o vdec no estado 4. Nao
+         * escrevemos o byte no guest: so armamos o hook para que a proxima
          * leitura NORMAL do guest a [obj+0x744] devolva 1. */
-        if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done)) {
+        if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done, st)) {
             g_movie_eos_ea = obj + MOVIE_OFF_EOS;
             fprintf(stderr,
                     "[MOVIEEOS] %s done (st620=%u) -> arming EOS read-hook at 0x%08X ([obj+0x744])\n",

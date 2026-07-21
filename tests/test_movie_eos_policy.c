@@ -136,30 +136,46 @@ int main(void)
     /* obj valido com o span inteiro dentro do commit -> aceita. */
     CHECK(movie_eos_can_sample(0x100) == 1,      "can_sample aceita obj com span commitado");
 
-    printf("== arm: politica movie_eos_should_arm (Task 3) ==\n");
-    /* A decisao de armar o read-hook de EOS passa TODA por esta funcao pura, a
-     * mesma condicao do boot_main.cpp do Windows (linha 367):
-     *     eos_env && eos_ea == 0 && overlay_done != 0
-     * Testada aqui na funcao REAL de movie_eos_arm.c (nao numa copia): uma
-     * mutacao na condicao do sampler parte estes asserts. */
+    printf("== arm: politica movie_eos_should_arm (Task 3 arma; Task 2 decide QUANDO) ==\n");
+    /* A decisao de armar o read-hook de EOS passa TODA por esta funcao pura.
+     * Task 2 (2026-07-21, plano intro-vdec-open-force-wad.md) acrescentou um
+     * quarto argumento, st620: alem das tres condicoes originais do produtor
+     * de "done", agora tambem exige que a FSM ja tenha passado o estado de
+     * abertura do vdec (st620>=5). Ja NAO e' a condicao de 3 argumentos
+     * byte-a-byte identica ao boot_main.cpp do Windows (linha 367) -- esse
+     * gate extra e' politica desta build macOS/arm64 (ver o .c/.h). Testada
+     * aqui na funcao REAL de movie_eos_arm.c (nao numa copia): uma mutacao na
+     * condicao do sampler parte estes asserts. */
 
-    /* M0: sem PS3_MOVIE_EOS nunca arma, mesmo com o produtor de done a 1. */
-    CHECK(movie_eos_should_arm(0, 0, 1) == 0, "M0: sem env nao arma");
-    CHECK(movie_eos_should_arm(0, 0, 0) == 0, "M0: sem env e sem done nao arma");
-    CHECK(movie_eos_should_arm(0, 0x1234, 1) == 0, "M0: sem env, ja armado, com done -> nao arma");
+    /* M0: sem PS3_MOVIE_EOS nunca arma, mesmo com done a 1 e st ja pos-open. */
+    CHECK(movie_eos_should_arm(0, 0, 1, 5) == 0, "M0: sem env nao arma (mesmo com st pos-open)");
+    CHECK(movie_eos_should_arm(0, 0, 0, 5) == 0, "M0: sem env e sem done nao arma");
+    CHECK(movie_eos_should_arm(0, 0x1234, 1, 5) == 0, "M0: sem env, ja armado, com done -> nao arma");
 
     /* M3 FORGE-TRAP (obrigatorio, inegociavel): EOS ligado mas SEM produtor de
-     * done -> NAO pode armar. Se isto devolvesse 1, o arm seria forjado -- e'
-     * exactamente a armadilha que o plano exige que se prove. */
-    CHECK(movie_eos_should_arm(1, 0, 0) == 0, "M3: EOS sem done NAO arma (forge-trap)");
+     * done -> NAO pode armar, mesmo com a FSM ja pos-open. Se isto devolvesse
+     * 1, o arm seria forjado -- e' exactamente a armadilha que o plano exige
+     * que se prove. */
+    CHECK(movie_eos_should_arm(1, 0, 0, 5) == 0, "M3: EOS sem done NAO arma (forge-trap)");
 
-    /* NATURAL: EOS ligado, ainda nao armado, e o produtor de done disparou. */
-    CHECK(movie_eos_should_arm(1, 0, 1) == 1, "NATURAL: EOS + done -> arma");
+    /* GATE DE ESTADO (Task 2, o core desta task): done real, EOS ligado, ainda
+     * nao armado -- mas SO arma se a FSM ja passou o estado de abertura do
+     * vdec (st620>=5). st=3 e st=4 sao exactamente os estados onde o bug
+     * antigo armava cedo demais: o vm_read8(obj+0x744) passava a devolver 1
+     * ainda em estado 3, o handler do estado 3 saltava 3->4->5 sem NUNCA
+     * despachar o corpo do estado 4 (cellVdecOpenEx+StartSeq), o vdec nunca
+     * abria e nenhum WAD carregava. */
+    CHECK(movie_eos_should_arm(1, 0, 1, 3) == 0, "GATE: done@st620=3 (WAIT_EOS antigo) NAO arma -- estado 4 nao correu");
+    CHECK(movie_eos_should_arm(1, 0, 1, 4) == 0, "GATE: done@st620=4 (Open/StartSeq ainda a correr) NAO arma");
+    CHECK(movie_eos_should_arm(1, 0, 1, 5) == 1, "NATURAL: EOS + done + st620=5 (pos Open/StartSeq) -> arma");
+    CHECK(movie_eos_should_arm(1, 0, 1, 11) == 1, "GATE: st620=11 (bem depois) tambem arma -- so precisa >=5");
+    CHECK(movie_eos_should_arm(1, 0, 1, 0xFFFFFFFFu) == 0, "GATE: st620=0xFFFFFFFF (sentinela 'ainda nao lido') NAO arma");
 
-    /* ONE-SHOT: ja armado (eos_ea != 0) nao re-arma, mesmo com done a 1 -- a
-     * guarda !g_movie_eos_ea do sampler garante um unico arm. */
-    CHECK(movie_eos_should_arm(1, 0x1234, 1) == 0, "ONE-SHOT: ja armado nao re-arma");
-    CHECK(movie_eos_should_arm(1, 0x00869F1Cu, 1) == 0, "ONE-SHOT: ja armado (EA real) nao re-arma");
+    /* ONE-SHOT: ja armado (eos_ea != 0) nao re-arma, mesmo com done a 1 e a
+     * FSM ja pos-open -- a guarda !g_movie_eos_ea do sampler garante um unico
+     * arm. */
+    CHECK(movie_eos_should_arm(1, 0x1234, 1, 5) == 0, "ONE-SHOT: ja armado nao re-arma");
+    CHECK(movie_eos_should_arm(1, 0x00869F1Cu, 1, 5) == 0, "ONE-SHOT: ja armado (EA real) nao re-arma");
 
     /* A funcao e' PURA: decidir nao escreve no g_movie_eos_ea (o sampler e' que
      * escreve, e so quando isto devolve 1). */

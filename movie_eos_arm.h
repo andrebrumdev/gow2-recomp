@@ -47,10 +47,13 @@ int movie_eos_peek32(uint32_t ea, uint32_t* out);
 int movie_eos_peek8(uint32_t ea, uint8_t* out);
 
 /*
- * Politica PURA de arm do read-hook de EOS (Task 3). Mesma condicao do host
- * Windows (boot_main.cpp:367):
+ * Politica PURA de arm do read-hook de EOS. Alem das tres condicoes
+ * originais do produtor de "done", exige tambem que a FSM do intro-movie ja
+ * tenha passado o estado de abertura do vdec (Task 2, 2026-07-21, plano
+ * intro-vdec-open-force-wad.md):
  *
- *     return eos_env && eos_ea == 0 && overlay_done != 0;
+ *     return eos_env && eos_ea == 0 && overlay_done != 0
+ *            && st620 != 0xFFFFFFFFu && st620 >= 5;   // 5 = MOVIE_STATE_POST_OPEN
  *
  *   eos_env      -- PS3_MOVIE_EOS ligado.
  *   eos_ea       -- valor actual de g_movie_eos_ea (0 = ainda nao armado). A
@@ -58,13 +61,25 @@ int movie_eos_peek8(uint32_t ea, uint8_t* out);
  *   overlay_done -- sinal REAL de "filme acabou" (produtor). No Windows vem do
  *                   overlay ffmpeg (movie_hle_overlay_done); no POSIX vem do
  *                   produtor time-based gated por PS3_MOVIE_DONE_MS (ver o .c).
+ *   st620        -- estado actual da FSM do intro-movie (obj+0x620), lido pelo
+ *                   amostrador. 0xFFFFFFFF e' o sentinela "ainda nao lido" e e'
+ *                   sempre rejeitado. O valor 5 e' o que func_002C069C escreve
+ *                   DEPOIS de o estado 4 (Open+StartSeq) correr: armar antes
+ *                   disso (st620 3 ou 4) fazia o handler do estado 3 saltar
+ *                   3->4->5 sem NUNCA despachar o corpo do estado 4, e o
+ *                   vdec/WADs nunca abriam -- o bug que este gate fecha.
  *
  * NAO escreve nada: so decide. O sampler e' que arma, e SO quando isto da 1.
- * O caso movie_eos_should_arm(1,0,0)==0 (EOS ligado, SEM produtor) e' a
- * armadilha de forja M3 -- inegociavel. Exposta para o teste offline bater na
- * funcao REAL, nao numa copia: uma mutacao aqui parte o test_movie_eos_policy.
+ * O caso movie_eos_should_arm(1,0,0,5)==0 (EOS ligado, SEM produtor) e' a
+ * armadilha de forja M3 -- inegociavel, com qualquer st620. Exposta para o
+ * teste offline bater na funcao REAL, nao numa copia: uma mutacao aqui parte
+ * o test_movie_eos_policy.
+ *
+ * Ja NAO e' a condicao de 3 argumentos byte-a-byte identica ao host Windows
+ * (boot_main.cpp:367) -- o gate st620>=5 e' politica adicional desta build
+ * macOS/arm64 (ver o comentario junto a PARIDADE COM O WINDOWS no .c).
  */
-int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done);
+int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32_t st620);
 
 #ifdef __cplusplus
 }
