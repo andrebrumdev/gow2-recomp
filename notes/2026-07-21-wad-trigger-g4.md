@@ -1055,3 +1055,42 @@ Likely: F2B FO still incomplete vs natural dearch FO (path hash, media registrat
 | `recomp_mid_v2/patch_2b3d1c_movie_io.py` | marker / re-apply note for AREAD-HLE |
 | `recomp_mid_v2/patch_fios_42a1d4_empty.py` | empty-count (R_Perm **open**) |
 
+## 21. F2B FO ctor natural (hash +0x34) — layout GREEN; freelist wall holds (2026-07-21)
+
+### Change
+F2B no longer hand-stamps FO fields. After `movie_io_open` it runs the same
+guest chain as natural `file_new`:
+
+1. `func_0031F1A4(FO, path)` — FIOS/`fh  ` init  
+2. FO+0x8=media, FO+0x50=1  
+3. `func_00307774(FO+0x30, path)` — string object → **FO+0x30 path ptr, FO+0x34 hash**  
+4. media FO list link (`media+0x234` / counts)  
+5. host map fo→mfd/size (guest FO stays clean at +38/+3C)  
+6. DONEFORCE  
+
+### In-boot FO dump (ctor)
+
+```
+R_LglScA FO +34=BBCA40F5  (was 0 hand-stamped)
+R_PermA  FO +34=8C9CF26A
++00=FIOS +04=fh   +08=media +30=pathbuf +50=1
+```
+
+### Discriminators
+
+| Experiment | uncomm_hi 0x84 | preads R_Perm |
+|------------|---------------:|--------------:|
+| FO hand-craft + STREAM-SEED | high | 0 |
+| FO ctor + STREAM-SEED | high | 0 |
+| FO ctor, STREAM-SEED **off** | high | 0 |
+| COMMIT_HIGH=1 | commits pages, preads still 0 | 0 |
+
+**Verdict:** FO layout/hash is no longer the open→stream wall. Freelist
+`0x840000xx` still fires after R_Perm DONE **before** any WAD `002B3D1C`.
+Likely next: getsize/stream-setup path that consults dearch (no member for
+`/wad/r_*.wad_ps3`) or freelist state independent of FO stamp quality.
+
+### STREAM-SEED
+`PS3_FIOS_STREAM_SEED=1` opt-in only (default OFF). Stamping
+`container+0x10=full_size` did not alone cause freelist (reproduced without it).
+
