@@ -46,5 +46,15 @@ export PS3_MOVIE_CACHE
 # FIFO do RSX consumido pelo backend.
 : "${PS3_RSX_FIFO:=1}";         export PS3_RSX_FIFO
 
+# Backend RSX (M10): no Darwin, default Metal com janela. Headless usa
+# PS3_NO_RSX=1 e nao precisa de backend. Respeita valor ja definido.
+if [ -z "${PS3_NO_RSX:-}" ]; then
+    case "$(uname -s 2>/dev/null)" in
+        Darwin) : "${PS3_RSX_BACKEND:=metal}" ;;
+        *)      : "${PS3_RSX_BACKEND:=sdl}" ;;
+    esac
+    export PS3_RSX_BACKEND
+fi
+
 # Reordenacao do cellSysutil exigida pela ordem de init do titulo.
 : "${PS3_CELLSYS_REORDER:=1}";  export PS3_CELLSYS_REORDER

@@ -3,9 +3,9 @@
 # Equivalente POSIX do recomp_mid_v2/rodar_gow2.cmd.
 #
 # Uso:
-#   ./rodar_gow2.sh                 # backend sdl (padrao), com janela
+#   ./rodar_gow2.sh                 # backend metal (padrao Darwin), com janela
+#   PS3_RSX_BACKEND=sdl ./rodar_gow2.sh
 #   PS3_RSX_BACKEND=vulkan ./rodar_gow2.sh
-#   PS3_RSX_BACKEND=metal  ./rodar_gow2.sh
 #   PS3_NO_RSX=1 ./rodar_gow2.sh    # headless (caminho CPU/SPURS)
 #
 # Sair com timeout (exit 124) e normal: o guest fica em loop.
@@ -25,18 +25,18 @@ if [ ! -f EBOOT.ELF ]; then
     exit 1
 fi
 
-. "$HERE/env_gow2.sh"          # env canonico partilhado com smoke_boot_mac.sh
-export PS3_RSX_BACKEND="${PS3_RSX_BACKEND:-sdl}"
+. "$HERE/env_gow2.sh"          # env canonico: PS3_RSX_BACKEND=metal no Darwin
 
 TIMEOUT="${TIMEOUT:-120}"
 
 if [ -n "${PS3_NO_RSX:-}" ]; then
     BACKEND_DESC="none (PS3_NO_RSX)"
 else
-    BACKEND_DESC="$PS3_RSX_BACKEND"
+    BACKEND_DESC="${PS3_RSX_BACKEND:-metal}"
 fi
 echo "[rodar] backend=$BACKEND_DESC timeout=${TIMEOUT}s"
 echo "[rodar] vfs=$PS3_VFS_ROOT"
+echo "[boot] RSX backend=$BACKEND_DESC"
 
 ./boot_gow2 EBOOT.ELF &
 BPID=$!

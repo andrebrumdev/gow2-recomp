@@ -20,9 +20,9 @@ Regras que valem dobrado AQUI (é o repo mais perto dos dados do jogo):
 
 Atalhos:
 - Rodar (usuário, com janela): `recomp_mid_v2/rodar_gow2_intro_skip.cmd` (Win) /
-  `./rodar_gow2.sh` ou `PS3_NO_RSX=1 ./boot_gow2 EBOOT.ELF` (macOS)
+  `./rodar_gow2.sh` (macOS: **Metal default** M10) ou `PS3_NO_RSX=1 ./boot_gow2 EBOOT.ELF`
 - Smokes Mac: `./smoke_intro_macos.sh`, `./smoke_boot_mac.sh`, `./smoke_perf_macos.sh`,
-  `./smoke_post_st3_wad.sh` (quando existir)
+  `./smoke_metal_matrix_mac.sh` (M10 matriz metal), `./smoke_metal_draw_mac.sh`
 - Build Mac: `./build_macos.sh` (LIFT_OPT/HOST_OPT/OUT para A/B; default `-O0`)
 - Smokes Win: `recomp_mid_v2/bt_intro_wads.sh`, `bt_visual_combo.sh`, etc.
 - Recipe de env e **como puxar o upstream sp00nznet sem partir o Mac/GoW2**:

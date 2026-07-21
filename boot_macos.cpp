@@ -12,9 +12,8 @@
  * stray guest pointer took the process down instead of being logged), and
  * installed neither of the two hooks the runtime needs to re-enter guest code.
  *
- * Graphics backend is chosen with PS3_RSX_BACKEND (sdl | metal | vulkan),
- * mirroring the d3d12 selection on Windows. PS3_NO_RSX=1 skips the window
- * entirely, which is how the CPU/SPURS path is exercised headless.
+ * Graphics backend is chosen with PS3_RSX_BACKEND (metal | sdl | vulkan).
+ * Default is metal (M10). PS3_NO_RSX=1 skips the window for headless CPU/SPURS.
  *
  * Build: ./build_macos.sh
  */
@@ -210,19 +209,29 @@ void derive_vfs_root(const char* eboot)
 Backend pick_backend()
 {
     if (getenv("PS3_NO_RSX")) {
+        fprintf(stderr, "[boot] RSX backend=none (PS3_NO_RSX)\n");
         return Backend::None;
     }
 
     const char* want = getenv("PS3_RSX_BACKEND");
     if (!want || !*want) {
-        want = "sdl";
+        /* M10: native Metal is the windowed default on macOS. */
+        want = "metal";
     }
-    if (strcmp(want, "metal")  == 0) return Backend::Metal;
-    if (strcmp(want, "vulkan") == 0) return Backend::Vulkan;
-    if (strcmp(want, "sdl")    == 0) return Backend::Sdl;
-
-    fprintf(stderr, "[boot] unknown PS3_RSX_BACKEND '%s', falling back to sdl\n", want);
-    return Backend::Sdl;
+    Backend b = Backend::Sdl;
+    if (strcmp(want, "metal")  == 0) b = Backend::Metal;
+    else if (strcmp(want, "vulkan") == 0) b = Backend::Vulkan;
+    else if (strcmp(want, "sdl")    == 0) b = Backend::Sdl;
+    else {
+        fprintf(stderr, "[boot] unknown PS3_RSX_BACKEND '%s', falling back to metal\n", want);
+        b = Backend::Metal;
+    }
+    const char* name = "sdl";
+    if (b == Backend::Metal)  name = "metal";
+    if (b == Backend::Vulkan) name = "vulkan";
+    fprintf(stderr, "[boot] RSX backend=%s\n", name);
+    fflush(stderr);
+    return b;
 }
 
 int backend_init(Backend b)
