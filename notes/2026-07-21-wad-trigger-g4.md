@@ -960,3 +960,57 @@ PS3_NO_RSX=1 PS3_PERF_FSM=1 PS3_TRACE_FIOSOPEN=1 \
 PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto \
 PS3_VDEC_ASYNC=1 PS3_VDEC_FORCE_SEQDONE_MS=2000
 ```
+
+## 19. R_PermA OPEN GREEN — FO layout + 42A1D4 empty-count (2026-07-21)
+
+### Wall after R_Lgl DONE (pre-fix)
+
+| Symptom | Evidence |
+|---------|----------|
+| R_LglScA DONE GREEN (F2a+F2b) | HOST-POP + F2B-MOVIEIO 3072 + DONE #2 |
+| R_PermA never requested in 60–120s | `r_perm=0` |
+| `UNCOMMITTED read32 0x676C7367` | ASCII "glsg"; host RA in `func_0042A118` |
+
+### Root causes (measured)
+
+1. **F2B fake FO incomplete (first attempt):** only `mfd`/`sz`. Real FO (FO-DUMP):
+   - `+00="FIOS"` `+04="fh  "` `+08=media` `+0C=parent` `+30=pathbuf` `+34=path hash` `+50=1`
+   - Fixed in lift: clone FIOS layout + path buffer + optional TOC preload (Lgl 3072).
+2. **Lifter wrong target on empty-count (`func_0042A1D4`):** after Lgl open,
+   `func_0042A0C8` sees `obj+0x80` count signed-negative (−1). Branch to
+   `0042A1D4` zeros `r28` and trampolines into **mid** `0042A118` list walk
+   (`r28+0x38`). With `r28=0` → absolute EA `0x38` → garbage pointer chain →
+   UNCOMMITTED `0x676C7367`. Guest never reaches the next named open.
+   - Same class as fallthrough-to-wrong-target (2550C8).
+   - Fix: empty path takes **epilogue** of 0042A118 (ret `r3=r28+4=4`), not the walk.
+
+### In-boot GREEN (`/tmp/vdec_emptyfix.log`, ~55s, FORCE 2000ms)
+
+```
+nome='R_LglScA' → F2B-MOVIEIO 3072 → DONE
+42A1D4-EMPTY skip list walk count_was=-1
+nome='R_PermA'  → F2B-MOVIEIO 20169344 → DONE #3
+```
+
+| Metric | Value |
+|--------|------:|
+| R_LglScA open+DONE | 1 |
+| R_PermA open+DONE | **1** |
+| UNCOMMITTED 0x676C7367 | **0** (gone) |
+| AREAD bulk R_PermA | 0 (next: stream 20MB / aread HLE) |
+
+### Patches
+
+| Script / site | Role |
+|---------------|------|
+| lift `recomp_macos_v2` F2B-MOVIEIO FO clone | FIOS magic FO + path + medialink |
+| `recomp_mid_v2/patch_fios_42a1d4_empty.py` | idempotent 0042A1D4 empty → epilogue |
+
+### Still open
+
+- **Bulk stream R_PermA** (`bytes_read` → 20 169 344): need natural/HLE aread
+  on FO; only m2v AREAD observed so far. Windows fallthrough 2550C8 + freelist
+  already known for the 5.6MB freeze once aread runs.
+- FO `+0x34` path hash still soft (size placeholder); may matter for later lookups.
+- Guest freelist CAS still broken (HOST-POP workaround).
+
