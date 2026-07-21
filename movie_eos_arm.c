@@ -82,6 +82,9 @@ extern unsigned char* vm_base;
 extern int            ppu_guest_range_committed(uint32_t addr, uint32_t n);
 extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao (vm_read8 devolve 1) */
 extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage) */
+#if defined(__APPLE__)
+extern void           movie_hle_autostart_cache_if_needed(void);
+#endif
 
 /* Gates do amostrador, latched em movie_eos_sampler_start (thread unica). */
 static int s_sampler_mo  = 0;   /* PS3_TRACE_MOVIEOBJ: dump verboso [MOVIEOBJ]   */
@@ -480,10 +483,16 @@ static void movie_sampler_loop(void)
         movie_eos_peek8(obj + MOVIE_OFF_EOS,  &f744);
         movie_eos_peek8(obj + MOVIE_OFF_EOS2, &f746);
 
+#if defined(__APPLE__)
+        /* Mac: intro .m2v often never hits movie_io_open; kick VT overlay from
+         * movie_cache when the player becomes active (PS3_MOVIE_HLE). */
+        if (st >= 1u && st != 0xFFFFFFFFu)
+            movie_hle_autostart_cache_if_needed();
+#endif
+
         /* Sinal REAL de "filme acabou" (produtor). No Windows vem do overlay
-         * ffmpeg; no POSIX o overlay nao existe (movie_hle_overlay_done()==0) e
-         * o produtor e' o time-based gated por PS3_MOVIE_DONE_MS. Chamado TODOS
-         * os ticks (poe a ancora e verifica o temporizador), nao so no log. */
+         * ffmpeg; no macOS do AVAssetReader (movie_vt) quando HLE ligado, senao
+         * o produtor time-based (PS3_MOVIE_DONE_MS). */
         long done_overlay = movie_hle_overlay_done() ? 1 : 0;
         long done         = done_overlay ? 1 : movie_done_timebased_poll(st);
 

@@ -200,6 +200,8 @@ clang++ -std=c++20 $HOST_OPT \
     "$RUNTIME_LIB" \
     -framework Metal -framework QuartzCore -framework Foundation \
     -framework Cocoa \
+    -framework AVFoundation -framework CoreMedia -framework CoreVideo \
+    -framework AudioToolbox -framework CoreAudio \
     $SDL_FLAGS $VK_FLAGS -lm \
     -Wl,-stack_size,0x2000000 \
     -o "$OUT"
