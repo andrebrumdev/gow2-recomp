@@ -914,3 +914,49 @@ Próximo (fora do mínimo 4b se timebox):
 - `recomp_mid_v2/patch_fios_done_cancel_yield.py`
 
 Logs: `/tmp/vdec_4b.log`, `/tmp/vdec_4b3.log`, `/tmp/vdec_4b4.log`.
+
+---
+
+## 18. F2a freelist + F2b movie_io — R_LglScA OPEN GREEN (2026-07-21)
+
+### Root causes (measured)
+
+| Code | Symptom | Cause |
+|------|---------|--------|
+| **F2a** | `op_alloc r3=0` | After MovieStop: `media+0x16C=0`, freelist_head=0, `+218=0`. Ops were “released” (count↓) but **not pushed** to freelist (cancel free path / CAS). Guest freelist pop fails even after re-seed. |
+| **F2b** | `file_new r3=0 MEMBRO RECUSADO` | Dearchiver cannot open `/wad/r_lglsca.wad_ps3` from psarc; bytes live in `movie_cache/R_LglScA.wad_ps3` (3072 B). |
+
+### Fixes (gated, lift-local; re-apply after re-lift)
+
+1. **FREELIST-REBUILD** (MovieStop epilogue): if `16C==0` or head==0 → set `16C=1`, re-seed free chain at media+0x250.. (stride). `PS3_FIOS_FREELIST_REBUILD` default ON.
+2. **HOST-POP**: if guest `op_alloc==0` but head≠0 → host pop one op, clear sticky. `PS3_FIOS_HOST_POP` default ON.
+3. **F2B-MOVIEIO**: if `file_new` fails and path looks like wad → `movie_io_open` + fake FO + **DONEFORCE** (`op+0x90=1` + sticky). `PS3_FIOS_F2B_MOVIEIO` default ON.
+4. **42B4-CANCEL-YIELD** on DONE early cancel path.
+
+### In-boot GREEN (`/tmp/vdec_f2a7.log`, 60s)
+
+```
+nome='R_LglScA' → HOST-POP → movieio open cache 3072 → F2B-DONEFORCE
+→ DONE #2 container=… done=1 apos 1 polls
+```
+
+| metric | value |
+|--------|-------|
+| R_LglScA open request | 1 |
+| movie_io cache open | 1 (3072 B) |
+| FIOS DONE after open | **1** (1 poll) |
+| R_PermA | **0** (not yet in 60s; next) |
+
+### Still open
+
+- **R_PermA** (20 MB) not requested in 60s window — may need legal-screen progress / longer boot / aread HLE once guest submits bulk reads.
+- Guest freelist CAS still broken (HOST-POP is the workaround).
+- Fake FO may need richer layout for aread path (`fios_aread_hle`).
+
+Env recipe:
+
+```bash
+PS3_NO_RSX=1 PS3_PERF_FSM=1 PS3_TRACE_FIOSOPEN=1 \
+PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto \
+PS3_VDEC_ASYNC=1 PS3_VDEC_FORCE_SEQDONE_MS=2000
+```
