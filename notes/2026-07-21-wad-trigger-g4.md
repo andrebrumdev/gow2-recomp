@@ -1014,3 +1014,44 @@ nome='R_PermA'  → F2B-MOVIEIO 20169344 → DONE #3
 - FO `+0x34` path hash still soft (size placeholder); may matter for later lookups.
 - Guest freelist CAS still broken (HOST-POP workaround).
 
+## 20. Stream R_PermA — AREAD-HLE ready; freelist wall before first WAD aread (2026-07-21)
+
+### Goal
+`movie_io` `bytes_read` → **20 169 344** for `R_PermA` (full file), via natural or HLE aread.
+
+### Measured (Mac, post open GREEN)
+
+| Item | Result |
+|------|--------|
+| Open R_LglScA / R_PermA | GREEN (F2B) |
+| `func_002B3D1C` for m2v | 1× (natural FO) |
+| `func_002B3D1C` for WAD | **0** |
+| R_PermA `preads` / `bytes_read` | **0 / 0** |
+| After R_Perm DONE | burst `UNCOMMITTED-HI 0x840000xx` (freelist tag arena) |
+| `PS3_COMMIT_HIGH=1` | commits 0x84 pages; **still** preads=0 (pointer corrupt, not just uncommitted) |
+
+### Infrastructure landed (lift-local)
+
+1. **AREAD-HLE** in `func_002B3D1C`: resolve mfd from host FO map → `ps3_fios_aread_hle` (linked from runtime).
+2. **F2B FO clean fields**: guest FO matches real layout extras as **0** (`+38/+3C`); mfd+size in **host map** (stashing mfd at FO+0x38 risked pointer misread).
+3. **F2B-STREAM-SEED** on 4274 DONE: if FO is F2B, stamp `container+0x10=size` (m2v shape).
+4. FO `+0x34` is path **hash** on real FO — never put size there.
+
+### Root wall (next)
+
+Guest **never submits** WAD aread. Immediately after R_Perm open/DONE the freelist path writes tagged garbage as pointers (`0x84000017` etc.) — same signature as Windows mid-stream freelist freeze, but **before any byte of R_PermA is requested**.
+
+Likely: F2B FO still incomplete vs natural dearch FO (path hash, media registration, constructor side-effects) → stream setup allocates through freelist with bad state. Fallthrough 2550C8 is already present on Mac lift; not sufficient alone for this pre-aread failure.
+
+### Aceite stream (not yet)
+
+- `[movieio] … r_perma … bytes_read=20169344` or `[GATE-FORCE] R_PermA full`
+- Optionally many `[AREAD-HLE]` / `[AREAD]` for op backed by R_Perm FO
+
+### Scripts
+
+| Path | Role |
+|------|------|
+| `recomp_mid_v2/patch_2b3d1c_movie_io.py` | marker / re-apply note for AREAD-HLE |
+| `recomp_mid_v2/patch_fios_42a1d4_empty.py` | empty-count (R_Perm **open**) |
+
