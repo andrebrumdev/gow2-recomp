@@ -425,3 +425,55 @@ a tabela geracional (`TOC-0x394`, stride `0x1E4`) nem o resto do subsistema
 | Trampolins do import `libvdec` | OpenEx=`0x004B9398`, StartSeq=`0x004B9458`, QueryAttrEx=`0x004B9478` (via `PS3_DUMP_IMPORTS=1`) |
 | Sondas novas (read-only) | `ps3recomp` commit `2883a19` — `libs/codec/cellVdec.c`, `runtime/ppu/ppu_imports.cpp` |
 | Regressão de ambiente (não-minha) | `ps3recomp/CLAUDE.md` §"Alternativa mais segura que merge total"; commits `25b0110`/`28367b2`/`2883a19` |
+
+---
+
+## 11. Reconfirmação RED em binário recuperado — 2026-07-21 (Task 1, plano de bring-up macOS/arm64)
+
+Medição pura (sem alteração de código), Task 1 do plano de bring-up
+macOS/arm64 (`gow2-recomp/.superpowers/sdd/task-1-brief.md`). Entre a
+secção 8 (contaminação de ambiente pelo merge v0.7 concorrente) e agora,
+outra sessão **recuperou** o motor (`ps3recomp` commit `11a1c3c`); esta
+task reconfirma formalmente que a parede da secção 5.2 continua verdadeira
+no binário recuperado, antes de qualquer fix (Task 1 é RED baseline; o fix
+fica para task posterior). `boot_gow2` usado: rebuild de 21/jul 10:20
+contra o motor recuperado, árvore limpa, sem tocar `movie_eos_arm.c`.
+Ambas as corridas mortas por PID (`TERM`→`-9`→`wait`); `pgrep -f
+boot_gow2 | wc -l` = 0 confirmado após cada uma (nenhum órfão; a caixa
+usa o `pgrep` BSD do macOS, que não tem `-c`).
+
+**Passo 1 — M0 (sem arm), `/tmp/vdec_m0.log`, 30s:**
+
+| métrica | valor |
+|---|---|
+| st620 max | 3 (0→1→3→3 sticky) |
+| cellVdec Open | 0 |
+| StartSeq | 0 |
+| wad (R_LglScA/R_PermA) | 0 |
+| órfãos pós-kill | 0 |
+
+GREEN confirmado (`st620≥3` — motor efectivamente recuperado; `Open=0` é
+esperado em M0, não é regressão).
+
+**Passo 2 — RED, arm cedo (`PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=4000
+PS3_VDEC_FORCE_SEQDONE_MS=8000`), `/tmp/vdec_red.log`, 45s:**
+
+| métrica | valor | esperado |
+|---|---|---|
+| arm | 1 | ≥1 |
+| hit | 3 | ≥1 |
+| open | 0 | ==0 |
+| start | 0 | ==0 |
+| force | 0 | ==0 |
+| st4 (`site=002C069C`) | 0 | ==0 |
+| wad | 0 | ==0 |
+
+RED confirmado, 7/7 métricas batem com o esperado. Narrativa igual à
+secção 5.2: hook arma em `st620=3` (`0x00869F1C`), 2 hits desviam os
+estados 3 e 10 (`site=002C05F8`, `site=002C0788`) para a cascata
+`st620 3→0`, e `site=002C069C` (estado 4, onde vivem
+`cellVdecOpenEx`/`StartSeq`) nunca dispara — 0 WADs. Confirma que a
+parede não era artefacto do binário regredido da secção 8: persiste,
+idêntica, no motor recuperado. Fix continua o da secção 7 (gate
+`st620>=5` adicional no arm), não aplicado aqui (fora de escopo desta
+task).
