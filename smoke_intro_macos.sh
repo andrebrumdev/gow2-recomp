@@ -40,9 +40,16 @@ run_case() {
     local name="$1"; shift
     local log
     log=$(mktemp "/tmp/smoke_intro_${name}.XXXXXX")
+    # `exec` faz o boot herdar o PID da subshell, portanto $! E o PID do boot.
+    # Mata-se ESSE PID com -9 (sob swap o SIGTERM nao chega a tempo e o boot
+    # sobrevive ao pkill -- foi assim que 10 orfaos a 90% CPU se acumularam em
+    # horas, load 75). O pkill -9 fica so como rede, nunca como mecanismo.
     ( exec env "$@" ./boot_gow2 EBOOT.ELF > "$log" 2>&1 ) &
+    local bpid=$!
     sleep "$SECS"
-    pkill -f 'boot_gow2 EBOOT.ELF' 2>/dev/null
+    kill -9 "$bpid" 2>/dev/null
+    pkill -9 -f 'boot_gow2 EBOOT.ELF' 2>/dev/null
+    wait "$bpid" 2>/dev/null
     sleep 1
     local maxst arm hit lgl perm
     maxst=$(grep -oE 'st620 [0-9]+ -> [0-9]+' "$log" | grep -oE '> [0-9]+' | tr -d '> ' \
