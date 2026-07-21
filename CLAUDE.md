@@ -19,8 +19,19 @@ Regras que valem dobrado AQUI (é o repo mais perto dos dados do jogo):
    boot_v2_new.exe` antes/depois de cada run.
 
 Atalhos:
-- Rodar (usuário, com janela): `recomp_mid_v2/rodar_gow2_intro_skip.cmd`
-- Smokes: `recomp_mid_v2/bt_intro_wads.sh` (FORCE→WADs), `bt_visual_combo.sh` (EOS visual),
-  `smoke_asset_pipeline.sh` (métricas de raiz), `run_basecase.sh` (heap/free-list)
-- Build/relink: ver `recomp_mid_v2/build_crc.sh` (padrão de compile+link)
-- Recipe de env canônico e armadilhas (VDEC_ASYNC obrigatório etc.): CLAUDE.md do ps3recomp
+- Rodar (usuário, com janela): `recomp_mid_v2/rodar_gow2_intro_skip.cmd` (Win) /
+  `./rodar_gow2.sh` ou `PS3_NO_RSX=1 ./boot_gow2 EBOOT.ELF` (macOS)
+- Smokes Mac: `./smoke_intro_macos.sh`, `./smoke_boot_mac.sh`, `./smoke_perf_macos.sh`,
+  `./smoke_post_st3_wad.sh` (quando existir)
+- Build Mac: `./build_macos.sh` (LIFT_OPT/HOST_OPT/OUT para A/B; default `-O0`)
+- Smokes Win: `recomp_mid_v2/bt_intro_wads.sh`, `bt_visual_combo.sh`, etc.
+- Recipe de env e **como puxar o upstream sp00nznet sem partir o Mac/GoW2**:
+  ver secção **«Integrar melhorias do projeto original»** em `../ps3recomp/CLAUDE.md`
+
+### Não-regressão Mac após merge do motor
+Depois de qualquer integrate de `sp00nznet/ps3recomp` no `../ps3recomp`:
+1. `cmake --build ../ps3recomp/build-macos -j…` + `./build_macos.sh`
+2. Smoke 25s probes OFF: max `st620 ≥ 3` e sticky vivo
+3. Matar boot pelo **PID** (TERM, depois -9) — nunca deixar órfãos a 90% CPU
+4. Se st620=0 ou OOB `0xFFFF*`: **regressão do merge** — não commitar como “OK”;
+   ver CLAUDE do motor (cherry-pick vs revert)
