@@ -477,3 +477,181 @@ parede não era artefacto do binário regredido da secção 8: persiste,
 idêntica, no motor recuperado. Fix continua o da secção 7 (gate
 `st620>=5` adicional no arm), não aplicado aqui (fora de escopo desta
 task).
+
+---
+
+## 12. Task 3 (prova pós-fix) + Task 3b (classificação) — 2026-07-21
+
+Plano `gow2-recomp/.superpowers/sdd/task-3-brief.md`. Task 2 (commit
+`e5e1495`, `movie_eos_arm.c`) implementou exactamente o fix apontado na
+secção 7: o arm do read-hook de EOS passou a exigir `st620>=5`
+(`MOVIE_STATE_POST_OPEN`), além das três condições originais (env,
+one-shot, produtor de done). Esta task mede se isso, sozinho, chega para
+o estado 4 (`cellVdecOpenEx`/`StartSeq`) despachar.
+
+### 12.1 — Task 3 Step 2: RED, mesmo com o gate novo já aplicado
+
+Rebuild obrigatório primeiro (Task 2 só tinha mudado `movie_eos_arm.c`,
+`boot_gow2` continuava a apontar para o binário de antes):
+`./build_macos.sh` — 0 erros, `boot_gow2` relincado 21/jul 11:14.
+
+Recipe canónico do brief (`env_gow2.sh` + `PS3_MOVIE_EOS=1
+PS3_MOVIE_DONE_MS=auto PS3_VDEC_ASYNC=1`, SEM `FORCE_SEQDONE_MS`), 60 s,
+`/tmp/vdec_open.log`, morto por PID:
+
+| métrica | valor | esperado GREEN |
+|---|---|---|
+| `open` (`[cellVdec] Open`) | 0 | ≥1 |
+| `start` (`StartSeq`) | 0 | ≥1 |
+| `st4` (`site=002C069C`) | 0 | — |
+| `st3_adv` (`site=002C05F8.*val=1`) | 0 | — |
+
+**RED.** `st620` fica preso em `3` a corrida inteira (0→1→3→3…3, nunca
+sai). Evidência de que o gate da Task 2 está a funcionar **como
+desenhado** (não é regressão dele):
+
+```
+[MOVIEDONE] PS3_MOVIE_DONE_MS=auto -> duracao REAL do .wav = 14738 ms
+[MOVIEDONE] produtor time-based LIGADO: intervalo=14738 ms. ...
+[MOVIEDONE] done time-based (NAO e' EOF real): 14894 ms desde st620 activo >= 14738 ms, player parado em st620=3 -> sinal "filme acabou"
+```
+
+O produtor time-based dispara (`done=1`, visível como `overlay_done=1`
+nas linhas `[MOVIEFSM]` a partir daí), mas **`[MOVIEEOS]` nunca aparece
+(0 ocorrências) e `eos_ea` fica `0x00000000` a corrida inteira** — o
+gate `st620>=5` bloqueia o arm correctamente, porque `st620` nunca saiu
+de 3. Ou seja: o fix da Task 2 não tem bug — só não é, sozinho,
+suficiente. Nada mais no boot faz o FSM avançar 3→4 dentro da janela
+observada.
+
+`[EOSGATE]` (`PS3_TRACE_SMPD=1`) só mostra 2 linhas, ambas do estado 1
+(`site=002C07D8`/`site=002C05C8`, `val=0 branch=wait`). **Nuance
+importante:** os sites do estado 3/10 (`002C05F8`/`002C0788`) do
+`patch_smpd_probe.py` só logam **pós-arme** (gated em
+`g_movie_eos_ea!=0`, "fix review finding 1" documentado nesse próprio
+ficheiro) — como o arm nunca aconteceu aqui, o silêncio deles é
+**esperado por desenho**, não é prova de que `func_002C05F8` não
+correu. Já o Site E (`002C069C`, estado 4) **não** tem esse gate — corre
+incondicionalmente sob `PS3_TRACE_SMPD`, cap 400 — e o seu **zero é
+evidência real**: o estado 4 genuinamente nunca despachou nos 60 s.
+`pgrep -f boot_gow2` = 0 após o kill (sem órfãos).
+
+**Conclusão:** RED conforme a definição do próprio brief ("`open==0`
+após 60 s, st preso em 3, `+0x744` efectivamente 0") → segue para a
+Task 3b, Steps 1–2 apenas (instrumentar + classificar, sem aplicar
+fix), por instrução explícita da sessão.
+
+### 12.2 — Task 3b Step 1: sonda `[AUDGATE]`
+
+Novo `recomp_mid_v2/patch_st3_audio_gate.py` (idempotente, marker
+`AUDGATE-PROBE`, gated `PS3_TRACE_AUDGATE`, só `fprintf`+`fflush`,
+nenhum `vm_write`), a instrumentar `func_002C0FA0` logo depois da
+chamada a `func_0045B2A8`, fprintf **verbatim** conforme o brief:
+`[AUDGATE] h720=0x%08X rc=%d f746=%u st=%u` com
+`h720=vm_read32(obj+0x720)`, `rc=(int32_t)ctx->gpr[3]` (valor de
+retorno de `func_0045B2A8` nesse ponto),
+`f746=vm_read8(obj+0x746)`, `st=vm_read32(obj+0x620)`.
+
+**Achado ao escrever a sonda (armadilha evitada):** a sequência
+`func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);` aparece **literalmente 15
+vezes** no lift inteiro (`ppu_recomp_001/002/005/013/021.cpp`) — o
+lifter arrasta blocos adjacentes da imagem original como código morto
+para dentro de outras funções lifted. **14 dessas 15 ocorrências estão
+imediatamente a seguir a um `{ g_trampoline_fn = ...func_002C0620;
+return; }`**, logo são inalcançáveis; só a instância dentro da própria
+`func_002C0FA0` (`ppu_recomp_002.cpp:224860`) é viva. A âncora do patch
+inclui a assinatura `void func_002C0FA0(ppu_context* ctx) {` como
+prefixo precisamente para não cair numa das 14 cópias mortas (um
+`str.replace` ingénuo, por ordem alfabética de ficheiro, teria
+apanhado a cópia morta de `ppu_recomp_001.cpp` primeiro — sonda
+válida sintacticamente, run silenciosamente, zero disparos, falso
+negativo). Confirmado após aplicar: `AUDGATE-PROBE` só existe em
+`ppu_recomp_002.cpp` (as outras 4 ficaram com contagem 0); idempotência
+confirmada (2ª corrida do patch = `ALREADY`, exit 0).
+
+Rebuild: 8 s, 0 erros (só o chunk `002` recompilou), `boot_gow2`
+relincado 21/jul 11:22.
+
+### 12.3 — Task 3b Step 2: medição 45 s, sem arm EOS
+
+```
+PS3_MOVIE_EOS=0 PS3_TRACE_AUDGATE=1 PS3_PERF_FSM=1 PS3_NO_RSX=1
+PS3_MOVIE_DONE_MS unset (produtor completamente desligado)
+```
+
+45 s, `/tmp/vdec_audgate.log`, morto por PID (`pgrep -f boot_gow2` = 0
+depois). Resultado:
+
+- `audgate_count` = **4000** (o cap do `_n++<4000` foi atingido — o
+  gate é avaliado com muita frequência, plausivelmente todas as
+  iterações do loop principal do jogo enquanto parado no estado 3, não
+  uma amostra escassa).
+- **As 4000 linhas são idênticas, sem UMA excepção:**
+  `[AUDGATE] h720=0x84000002 rc=0 f746=0 st=3` — do primeiro ao último
+  print.
+- Corroboração independente (canal não-capado): o amostrador
+  `[MOVIEFSM]` (host-side, os 45 s inteiros) também mostra `st620`
+  preso em 3 a corrida inteira — confirma que a invariância do
+  `[AUDGATE]` não é artefacto do cap ter sido atingido cedo; o estado
+  continuava parado até ao kill.
+- `open=0 start=0` (mesmo sintoma, run isolado do EOS).
+- `[MOVIEEOS]`/`[MOVIEDONE]` = 0 linhas (esperado — produtor
+  completamente desligado, teste de progresso natural puro).
+
+### 12.4 — Classificação: **A3b**
+
+`h720=0x84000002` (não-zero, forma de handle válido) e `rc=0`
+**literal** (não `-1`) em 4000/4000 amostras. Pela RE estática da
+secção 3 desta nota, `func_0045B2A8` só devolve `0` literal quando o
+resolve geracional (`func_004479E8`) **teve sucesso** e o campo lido em
+`resolvido+0x1B8` é `0`; um resolve falhado devolveria `-1` (que
+avançaria a FSM, não pararia). Ou seja: **o handle resolve com sucesso,
+mas o campo de "sessão de áudio pronta/terminada" nunca sai de 0 em 45
+s.** `f746` também nunca sai de 0 (o bypass alternativo directo também
+não acontece, mas é secundário — o caminho realmente exercitado a cada
+tick é o de `+0x720`/`rc`).
+
+Não é A3 (não há sinal de que `+0x746` seja o mecanismo relevante aqui
+— nunca chega a ser lido como não-zero para desviar nada) nem A3c
+(nunca chega ao estado 4, logo não há "Open a falhar" para diagnosticar
+ainda — essa pergunta só faz sentido depois de A3b estar resolvido).
+
+Checagem adicional (grep global, só para não fechar a classificação sem
+tentar localizar o writer): `+0x1B8` é um offset **genérico**, reusado
+**351 vezes** como `vm_write32` em todo o lift (stack frames/structs
+não relacionados) — não dá para achar o writer específico do campo da
+sessão de áudio só por grep de offset; precisaria de tracing de
+proveniência do ponteiro (seguir a tabela geracional de
+`func_004479E8`, mencionada mas não seguida na secção 9 desta nota) até
+ao alocador do tipo "sessão de áudio" real. Não fiz essa RE — fora do
+escopo dos Steps 1–2 (instrumentar+classificar); fica para quem
+despachar o fix.
+
+### 12.5 — Fix mínimo proposto (NÃO implementado nesta task)
+
+Por instrução explícita da sessão: só classificar, não aplicar o Step 3
+do brief. Registo aqui a direcção já apontada pela própria tabela do
+brief para a classe A3b, para quem despachar o fix a seguir:
+preferir progresso do próprio guest; se o host tiver mesmo de ajudar,
+fazer HLE **apenas** do campo da sessão de áudio que `func_0045B2A8` lê
+(`resolvido+0x1B8`), e só depois de confirmar um wav open real
+(`WAV_SURVIVABLE`, já provado noutra sessão) — documentar
+explicitamente como HLE de "stream completo/pronto", não como forge de
+FSM. Nunca escrever `st620`/`+0x744`/`+0x720` directamente. Próximo
+passo de investigação sugerido (não executado): localizar o alocador da
+estrutura resolvida por `func_004479E8` para decidir se `+0x1B8`
+devia ser escrito por um evento real do `cellAudio`/`snd_stream` que a
+HLE actual ainda não dispara.
+
+### 12.6 — Regras honradas
+
+- Nenhum `vm_write` de host a `st620`/`+0x744`/`+0x746`/`+0x720`/
+  `+0x1B8` nesta task — a sonda nova é 100% leitura + `fprintf`.
+- O arm cedo (early-arm) **não** foi reactivado; o gate `st620>=5` da
+  Task 2 ficou intacto.
+- Ambos os boots (Task 3 e Task 3b) mortos por PID (`TERM` depois
+  `-9`, `wait`); `pgrep -f boot_gow2 | wc -l` = 0 confirmado depois de
+  cada um (sem órfãos).
+- Fix da secção 12.5 **não** implementado — só instrumentação +
+  classificação, conforme routing da task (RED → Task 3b Steps 1–2
+  apenas, STOP antes do Step 3).
