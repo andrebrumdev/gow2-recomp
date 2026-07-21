@@ -22,7 +22,7 @@ SECS="${SMOKE_SECS:-40}"
 [ -f EBOOT.ELF ]   || { echo "FAIL: EBOOT.ELF ausente" >&2; exit 1; }
 
 . "$HERE/env_gow2.sh"
-export PS3_NO_RSX=1 PS3_SPU_ALL=1 PS3_TRACE_MOVIEOBJ=1
+export PS3_NO_RSX=1 PS3_SPU_ALL=1 PS3_TRACE_MOVIEOBJ=1 PS3_TRACE_FIOSOPEN=1
 
 # --- aviso de ambiente: o boot faulta para swap e o throughput colapsa --------
 # O st620 so sobe alem de 1 se o boot tiver folga de RAM para progredir na janela.
@@ -51,7 +51,11 @@ run_case() {
     hit=$(grep -c 'read-hook HIT' "$log")
     lgl=$(grep -c 'R_LglScA' "$log")
     perm=$(grep -c 'R_PermA' "$log")
-    echo "${maxst:-0} ${arm} ${hit} ${lgl} ${perm}"
+    # 002B4274 DONE: prova de que o poll do estado 1 OBSERVOU a palavra de
+    # conclusao [op+0x90] (so alcancavel com done != 0). E o sinal que o sticky
+    # + prioridade destravaram; conta-lo aqui e o aceite da Task 8.
+    done4274=$(grep -c '002B4274 DONE' "$log")
+    echo "${maxst:-0} ${arm} ${hit} ${lgl} ${perm} ${done4274}"
     rm -f "$log"
 }
 
@@ -61,20 +65,22 @@ run_case() {
 echo; echo "=== M3 (forja-segura): PS3_MOVIE_EOS=1 sem produtor, ${M} corridas ==="
 m3_armed=0
 for i in $(seq 1 "$M"); do
-    read -r st arm hit lgl perm < <(run_case m3 PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=)
+    read -r st arm hit lgl perm done4274 < <(run_case m3 PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=)
     [ "${arm:-0}" -gt 0 ] && m3_armed=$((m3_armed+1))
 done
 echo "  armes indevidos: ${m3_armed}/${M}  (tem de ser 0 -- se >0, ha forja)"
 
 # --- braco NATURAL: produtor por tempo real do stream -----------------------
 echo; echo "=== NATURAL: PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto, ${M} corridas ==="
-nat_st3=0; nat_arm=0; nat_wad=0
+nat_st3=0; nat_arm=0; nat_wad=0; nat_done=0
 for i in $(seq 1 "$M"); do
-    read -r st arm hit lgl perm < <(run_case natural PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto)
+    read -r st arm hit lgl perm done4274 < <(run_case natural PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto)
     [ "${st:-0}" -ge 3 ] && nat_st3=$((nat_st3+1))
     [ "${arm:-0}" -gt 0 ] && nat_arm=$((nat_arm+1))
+    [ "${done4274:-0}" -gt 0 ] && nat_done=$((nat_done+1))
     { [ "${lgl:-0}" -gt 0 ] || [ "${perm:-0}" -gt 0 ]; } && nat_wad=$((nat_wad+1))
 done
+echo "  002B4274 DONE:   ${nat_done}/${M}  (poll viu [op+0x90] != 0 -- aceite da Task 8)"
 echo "  st620>=3:        ${nat_st3}/${M}"
 echo "  EOS armado:      ${nat_arm}/${M}"
 echo "  WAD aberto:      ${nat_wad}/${M}  (stretch -- so conta se realmente visto)"
