@@ -214,6 +214,28 @@ try:
 except Exception as e:
     report("bctr como salto (ps3_indirect_tail)", False, "erro: %r" % (e,))
 
+# 5) Sticky do done-word FIOS (patch_fios_sticky.py). O open completa e o produtor
+#    (func_00306534) grava [op+0x90]=1, mas sob o giant lock unico o escalonador
+#    corre todo o complete (e um clear) antes de o poll do estado 1 (func_002B4224)
+#    ver done!=0 -> a FSM da intro fica presa em st620==1. O sticky publica/re-
+#    materializa/consome a palavra para fechar essa janela. As 4 insercoes vivem
+#    no lift; a metade de runtime (ps3_fios_sticky_*) ja' esta' em ppu_loader.cpp.
+try:
+    s = src("ppu_recomp_001.cpp")
+    need = [
+        ('decl publish',   'extern "C" void ps3_fios_sticky_publish(uint32_t op);'),
+        ('STICKY-RESTORE (poll do estado 1, func_002B4224)', 'STICKY-RESTORE'),
+        ('STICKY-CONSUME (ramo done, func_002B4274)',        'STICKY-CONSUME'),
+        ('publish caminho A (produtor, func_00306534)',
+         'if (((uint32_t)ctx->gpr[11]) != 0u)\n'
+         '            ps3_fios_sticky_publish((uint32_t)ctx->gpr[31]);'),
+    ]
+    missing = [n for n, sub in need if sub not in s]
+    report("FIOS sticky done-word (4 insercoes)", not missing,
+           "faltam no lift: " + ", ".join(missing))
+except Exception as e:
+    report("FIOS sticky done-word (4 insercoes)", False, "erro: %r" % (e,))
+
 print()
 if fails:
     print("CHECKS: %d FALHA(S) -> %s" % (len(fails), ", ".join(fails)))
