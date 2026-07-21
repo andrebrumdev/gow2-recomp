@@ -839,3 +839,78 @@ AUDDONE → Open → StartSeq → st 3→11
   FIOS ainda quebrado no Mac)
 
 Smoke: `gow2-recomp/smoke_intro_vdec_wad.sh`.
+
+---
+
+## 17. Task 4b — mapa pós-SEQDONE → R_LglScA + parede F2a (2026-07-21)
+
+### Callback SEQDONE (cbOpd=0x00530178)
+
+| | |
+|--|--|
+| OPD | `0x00530178` → code **`0x002BF960`** toc `0x00541178` |
+| Dispatch | `func_002BF960`: msgType gpr4 — 0 AUDONE / 1 PICOUT / **2 SEQDONE** / 3 ERROR |
+| SEQDONE | `func_002BF9A8` (`ppu_recomp_003.cpp`): **`vm_write8(obj+0x610, 1)`** |
+| PICOUT | `func_002BF990`: `obj+0x60C++` (nunca corre no Mac sem DecodeAu) |
+
+Log: `SEQDONE -> guest cbOpd=0x00530178 ... caller=yes` — callback **honesto**.
+
+### Grafo medido in-boot (`PS3_TRACE_FIOSOPEN=1`, `/tmp/vdec_4b*.log`)
+
+```
+A3b → Open/StartSeq → st 3→11
+  → FORCE SEQDONE → guest +0x610=1
+  → arm EOS (Task 4 gate)
+  → MovieStop (st=11) → Close vdec → st 11→0
+  → [FIOSOPEN] 002B4340 nome='R_LglScA' flags=0x10000210 ramo=/wad/%s%s
+  → path='/wad/r_lglsca.wad_ps3'
+  → 0030D5CC op_alloc #4 r3=0  ← SEM OP LIVRE (F2a)
+  → poll io=0 forever
+```
+
+**O guest PEDE o WAD.** Não é “nunca chega ao open”. O open **falha no pool FIOS**.
+
+### Por que greps antigos diziam wad=0
+
+- Aceite Windows: `open 'R_LglScA'` via **movie_io/cellFs** string.
+- Mac: path FIOS **`/wad/r_lglsca.wad_ps3`** — não passa por `movie_io_open` (só cellFs).
+- Grep `R_LglScA|R_PermA` no log baseline (sem FIOSOPEN) não apanha o pedido FIOS.
+
+### Ops FIOS (medidas)
+
+| # | op_alloc r3 | file_new path |
+|---|-------------|---------------|
+| 1 | 0x430094C0 | `/gow2.psarc` |
+| 2 | 0x430094C0 | `/_movies/smlogo_v2.m2v` |
+| 3 | 0x430095A0 | `''` (vazio) |
+| 4 | **0** | R_LglScA — **F2a** |
+
+DONE #1 em container movie (`io=0x430094C0`) via `func_002B4274`. Esse ramo
+chama cancel (`0030AE58`) **só se** `func_00306610` não desviar cedo; em boot
+medido **não** se viu `DONE-CANCEL-YIELD` → desvio cedo, op pode ficar presa.
+`STOP-YIELD` 50ms pós-MovieStop **corre** mas free list continua vazia.
+
+### Tentativas (não GREEN wad)
+
+| Fix | Resultado |
+|-----|-----------|
+| `FIOS-STOP-YIELD` (epílogo MovieStop st=11) | yield loga; op_alloc #4 ainda 0 |
+| `FIOS-DONE-CANCEL-YIELD` em 002B4274 | não exercitado (ramo cancel não atingido) |
+| FORCE+EOS order (Task 4) | força GREEN; WAD ainda F2a |
+
+### Dep em falta (aceite Task 4b Step 2)
+
+**F2a — freelist FIOS esgotada / ops não devolvidas** entre open do intro e
+open de `R_LglScA`. Não é ausência de trigger WAD nem SEQDONE morto.
+
+Próximo (fora do mínimo 4b se timebox):
+1. Instrumentar freelist head `mediaobj+0x200` em op_alloc/cancel/DONE.
+2. Garantir free no ramo real de 002B4274 (ou close honesto do op m2v + path vazio).
+3. Opcional: HLE movie_io no path FIOS `/wad/*.wad_ps3` (Windows-like) se free for inalcançável.
+
+### Patches (scripts; lift gitignored)
+
+- `recomp_mid_v2/patch_fios_stop_yield.py`
+- `recomp_mid_v2/patch_fios_done_cancel_yield.py`
+
+Logs: `/tmp/vdec_4b.log`, `/tmp/vdec_4b3.log`, `/tmp/vdec_4b4.log`.
