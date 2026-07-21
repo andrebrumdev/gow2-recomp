@@ -82,6 +82,19 @@ int movie_eos_peek8(uint32_t ea, uint8_t* out);
 int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32_t st620);
 
 /*
+ * Politica PURA Task 4 (FORCE vs arm EOS). Quando o recipe arma
+ * PS3_VDEC_FORCE_SEQDONE_MS (>0), o arm de EOS tem de esperar o SEQDONE
+ * (g_vdec_seqdone_fired): se armar +0x744 em st=11 antes do watchdog, o guest
+ * faz MovieStop→Close e mata o handle — FORCE nunca loga e WAD nao abre.
+ *
+ *     return force_ms > 0 && !seqdone_seen;
+ *
+ * force_ms==0 (FORCE desligado) nunca bloqueia — path natural Windows-like
+ * (arm apos overlay/time-based) continua intacto.
+ */
+int movie_eos_force_blocks_arm(int force_ms, int seqdone_seen);
+
+/*
  * Politica PURA do HLE A3b (stream-complete de audio). Decide se o amostrador
  * deve escrever sessao_audio+0x1B8=1 (o campo que func_0045B2A8 le e que o
  * estado 3 usa para avancar a 4):

@@ -82,6 +82,13 @@ extern unsigned char* vm_base;
 extern int            ppu_guest_range_committed(uint32_t addr, uint32_t n);
 extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao (vm_read8 devolve 1) */
 extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage) */
+/* Sticky SEQDONE from cellVdec. Weak default 0 so unit tests link without the
+ * codec; the strong definition in cellVdec.c wins in the real boot binary. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) volatile int g_vdec_seqdone_fired = 0;
+#else
+volatile int g_vdec_seqdone_fired = 0;
+#endif
 #if defined(__APPLE__)
 extern void           movie_hle_autostart_cache_if_needed(void);
 #endif
@@ -145,6 +152,32 @@ int movie_eos_should_arm(int eos_env, uint32_t eos_ea, long overlay_done, uint32
     if (st620 == 0xFFFFFFFFu)                          return 0; /* sentinela: FSM ainda nao lida */
     if (st620 < MOVIE_STATE_POST_OPEN)                 return 0; /* estado 4 ainda nao correu */
     return 1;
+}
+
+int movie_eos_force_blocks_arm(int force_ms, int seqdone_seen)
+{
+    /* Task 4: FORCE watchdog needs the handle alive for force_ms. EOS arm at
+     * st=11 triggers MovieStop→Close in the same tick and kills FORCE. */
+    return (force_ms > 0 && !seqdone_seen) ? 1 : 0;
+}
+
+/* Latched PS3_VDEC_FORCE_SEQDONE_MS (0 = FORCE off / natural arm path). */
+static int movie_force_seqdone_ms(void)
+{
+    static int ms = -1;
+    if (ms >= 0) return ms;
+    {
+        const char* e = getenv("PS3_VDEC_FORCE_SEQDONE_MS");
+        int v = 0;
+        if (e && e[0]) v = atoi(e);
+        ms = v > 0 ? v : 0;
+    }
+    return ms;
+}
+
+static int movie_seqdone_seen(void)
+{
+    return g_vdec_seqdone_fired ? 1 : 0;
 }
 
 int movie_audio_should_mark_done(int enabled, long done, uint32_t st620,
@@ -516,12 +549,18 @@ static void movie_sampler_loop(void)
          * dispara. Sem o gate de estado, armar cedo (st620=3) fazia o handler
          * do estado 3 saltar para 5 sem nunca abrir o vdec no estado 4. Nao
          * escrevemos o byte no guest: so armamos o hook para que a proxima
-         * leitura NORMAL do guest a [obj+0x744] devolva 1. */
-        if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done, st)) {
+         * leitura NORMAL do guest a [obj+0x744] devolva 1.
+         *
+         * Task 4: se PS3_VDEC_FORCE_SEQDONE_MS>0, NAO armar ate SEQDONE (senao
+         * MovieStop→Close mata o handle e o FORCE watchdog sai em silencio). */
+        if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done, st)
+            && !movie_eos_force_blocks_arm(movie_force_seqdone_ms(),
+                                          movie_seqdone_seen())) {
             g_movie_eos_ea = obj + MOVIE_OFF_EOS;
             fprintf(stderr,
-                    "[MOVIEEOS] %s done (st620=%u) -> arming EOS read-hook at 0x%08X ([obj+0x744])\n",
-                    done_overlay ? "overlay" : "time-based", st, g_movie_eos_ea);
+                    "[MOVIEEOS] %s done (st620=%u seqdone=%d force_ms=%d) -> arming EOS read-hook at 0x%08X ([obj+0x744])\n",
+                    done_overlay ? "overlay" : "time-based", st,
+                    movie_seqdone_seen(), movie_force_seqdone_ms(), g_movie_eos_ea);
             fflush(stderr);
         }
 

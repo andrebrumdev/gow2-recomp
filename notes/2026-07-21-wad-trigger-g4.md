@@ -724,3 +724,118 @@ Ledger: `gow2-recomp/.superpowers/sdd/progress.md` (Task 3 REVIEW + DECISÃO).
 Timeline: st 0→1→3 → (done+AUDDONE) → Open/StartSeq → st 11 → arm EOS.
 
 Unit offline: `test_movie_eos_policy` 39/39 (8 CHECKs A3b novos).
+
+---
+
+## 15. Remeasure Task 1 (2026-07-21 ~15:47 UTC-3) — parede mudou
+
+**Contexto:** plano `2026-07-21-intro-vdec-open-force-wad.md` Task 1 (baseline M0 +
+receita "RED early arm") re-corrido em binário já com **Task 2** (`st620>=5`) +
+**A3b** (`b51013e` GATE-FORCE) + Metal M10 (`cfd1634`). **Sem rebuild, sem code
+change** — só medição. Logs: `/tmp/vdec_m0.log` (30s), `/tmp/vdec_red.log` (45s).
+Kill por PID (TERM → -9).
+
+### Step 1 — M0 (sem arm EOS)
+
+```
+PS3_NO_RSX=1 PS3_PERF_FSM=1 PS3_MOVIE_EOS=0
+unset PS3_MOVIE_DONE_MS PS3_VDEC_FORCE_SEQDONE_MS
+```
+
+| métrica | valor | esperado plano |
+|---------|-------|----------------|
+| st620 max | **11** (0→1→3→11) | ≥3 GREEN |
+| Open | **1** | 0 OK no M0 original |
+| StartSeq | **1** | — |
+| Close | 0 | — |
+| FORCE | 0 | — |
+| WAD R_* | 0 | — |
+| arm / hit | 0 / 0 | (EOS off) |
+
+**GREEN M0 honesto.** Open já ocorre sem `PS3_MOVIE_EOS` porque o sampler
+`PS3_PERF_FSM` + A3b default ainda marca stream-complete em st=3 (AUDDONE
+GATE-FORCE) e o estado 4 corre. Isto é **mais forte** que o M0 do plano original
+(só st≥3).
+
+### Step 2 — receita "RED early arm" do plano
+
+```
+PS3_NO_RSX=1 PS3_PERF_FSM=1 PS3_TRACE_SMPD=1
+PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=4000
+PS3_VDEC_ASYNC=1 PS3_VDEC_FORCE_SEQDONE_MS=8000
+```
+
+| métrica | valor | esperado RED clássico (G4 §5.2) |
+|---------|-------|----------------------------------|
+| arm | **1** (em st620=**11**) | ≥1 |
+| hit | **1** | ≥1 |
+| open | **1** | **0** (obsoleto) |
+| start | **1** | **0** (obsoleto) |
+| st4 `site=002C069C` | **1** (`val=0 branch=wait`) | **0** (obsoleto) |
+| force | **0** | 0 |
+| wad | **0** | 0 |
+
+Timeline medida:
+1. st 0→1→3
+2. `MOVIEDONE` time-based @4065 ms (DONE_MS=4000), ainda st=3
+3. `AUDDONE` GATE-FORCE h720=0x84000002
+4. `EOSGATE site=002C069C val=0 branch=wait` → **Open + StartSeq**
+5. st **3→11** (amostrador não viu 4/5 intermédios; Open no site 4)
+6. `MOVIEEOS arm` st620=11 (gate Task 2 OK) → **HIT** imediato
+7. `STOPENTRY func_002BFF88` st=11 → **Close** handle=0
+8. st **11→0** e fica em 0 o resto do boot
+9. `FORCE SEQDONE` **nunca** (Close antes do watchdog 8s; handle morto)
+10. **zero** `R_LglScA` / `R_PermA`
+
+### Veredicto
+
+- A **parede clássica** "arm early → Open=0" **não se reproduz** — Tasks 2+3b
+  já no binário (`e5e1495`, `b51013e`). A receita do plano Task 1 Step 2 é
+  **documentação histórica**, não RED actual.
+- **Parede actual (Task 4+):** Open/StartSeq GREEN, mas pós-EOS em st=11 o
+  player **STOP+Close** imediato → `force=0` `wad=0` st parqueado em 0.
+  Próximo foco: **latência/ordem FORCE SEQDONE vs arm EOS**, e o path
+  guest pós-SEQDONE que abre WADs — sem forjar st620.
+
+
+---
+
+## 16. Task 4 — FORCE SEQDONE GREEN; WAD ainda 0 (2026-07-21)
+
+### Diagnóstico (race medido)
+
+| recipe | open | start | force | close | arm | wad | st final |
+|--------|------|-------|-------|-------|-----|-----|----------|
+| EOS=1 FORCE=4000 **antes** fix | 1 | 1 | **0** | 1 | 1@st11 | 0 | 0 |
+| EOS=0 FORCE=2000 (discrim.) | 1 | 1 | **1** | 0 | 0 | 0 | 11 |
+| EOS=1 FORCE=4000 **depois** fix | 1 | 1 | **1** | 1 | 1 pós-SEQDONE | 0 | 0 |
+
+Causa: `movie_eos_should_arm` (st≥5 + done) armava **no mesmo tick** em que
+st→11; guest MovieStop→`cellVdecClose` zera `seqStarted`/`in_use`; o watchdog
+`vdec_force_seqdone` acordava e saía em silêncio (`force=0`).
+
+### Fix (sem forjar st620)
+
+1. `cellVdec.c`: `g_vdec_seqdone_fired` sticky no callback SEQDONE; reset em StartSeq;
+   log `[cellVdec] SEQDONE -> guest ... caller=yes|no`.
+2. `movie_eos_arm.c`: `movie_eos_force_blocks_arm(force_ms, seqdone_seen)` — se
+   `PS3_VDEC_FORCE_SEQDONE_MS>0` e ainda não houve SEQDONE, **não arma** EOS.
+3. Unit: 7 CHECKs novos em `tests/test_movie_eos_policy.c`.
+
+Timeline GREEN (`/tmp/vdec_force2.log`, 70s):
+```
+AUDDONE → Open → StartSeq → st 3→11
+→ FORCE SEQDONE watchdog after 4000 ms
+→ SEQDONE -> guest cbOpd=0x00530178 caller=yes
+→ MOVIEEOS arm (st620=11 seqdone=1 force_ms=4000)
+→ Close → st 11→0
+```
+
+### Aceite Task 4 primary
+
+- `open≥1` `start≥1` `force≥1` **GREEN**
+- `wad≥1` **RED** → **Task 4b** (SEQDONE chega ao guest mas R_* não abrem;
+  SMPD pós-Stop é no-op G2; WAD no Windows/oráculo era outro sinal ou path
+  FIOS ainda quebrado no Mac)
+
+Smoke: `gow2-recomp/smoke_intro_vdec_wad.sh`.

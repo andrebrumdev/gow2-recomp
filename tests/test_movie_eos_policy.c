@@ -31,6 +31,9 @@
 unsigned char* vm_base = NULL;
 uint32_t       g_movie_eos_ea = 0;
 long           movie_hle_overlay_done(void) { return 0; }
+#if defined(__APPLE__)
+void           movie_hle_autostart_cache_if_needed(void) {}
+#endif
 
 /* Mapa de commits falso: so a primeira pagina conta como commitada. A segunda
  * fica PROT_NONE de propósito (ver o cabecalho).
@@ -180,6 +183,21 @@ int main(void)
     /* A funcao e' PURA: decidir nao escreve no g_movie_eos_ea (o sampler e' que
      * escreve, e so quando isto devolve 1). */
     CHECK(g_movie_eos_ea == 0, "movie_eos_should_arm nao mexe no g_movie_eos_ea (decisao pura)");
+
+    printf("== Task 4: FORCE vs arm EOS (movie_eos_force_blocks_arm) ==\n");
+    /* Com FORCE ligado o arm tem de esperar SEQDONE; senao Close mata o handle. */
+    CHECK(movie_eos_force_blocks_arm(0, 0) == 0, "FORCE off: nunca bloqueia (path natural)");
+    CHECK(movie_eos_force_blocks_arm(0, 1) == 0, "FORCE off + seqdone: nao bloqueia");
+    CHECK(movie_eos_force_blocks_arm(4000, 0) == 1, "FORCE on, sem SEQDONE: BLOQUEIA arm");
+    CHECK(movie_eos_force_blocks_arm(4000, 1) == 0, "FORCE on + SEQDONE: deixa armar");
+    CHECK(movie_eos_force_blocks_arm(2000, 0) == 1, "FORCE 2000ms sem SEQDONE: bloqueia");
+    /* Composicao com should_arm: o sampler exige should_arm==1 E !force_blocks. */
+    CHECK(movie_eos_should_arm(1, 0, 1, 11) == 1
+          && movie_eos_force_blocks_arm(4000, 0) == 1,
+          "comp: done@st11 quer armar mas FORCE sem SEQDONE bloqueia");
+    CHECK(movie_eos_should_arm(1, 0, 1, 11) == 1
+          && movie_eos_force_blocks_arm(4000, 1) == 0,
+          "comp: done@st11 + SEQDONE -> arm permitido");
 
     printf("== A3b: politica movie_audio_should_mark_done (HLE stream-complete) ==\n");
     /* Desbloqueia o park st620=3 sem forjar st620/+0x744: exige done real,
