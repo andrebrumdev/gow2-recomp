@@ -6,7 +6,18 @@
 #   python ../ps3recomp/tools/ppu_lifter.py EBOOT.ELF --functions functions.json \
 #          --output recomp_macos
 #
-# Usage: ./build_macos.sh [lift-dir]        (default: recomp_macos)
+# Usage: ./build_macos.sh [lift-dir]        (default: recomp_macos_v2)
+#
+# Opt levels / output (perf A/B):
+#   LIFT_OPT=-O0|-O1|-O2|-Os  optimization for lifted ppu_recomp_*.cpp (default -O0)
+#   HOST_OPT=-O0|-O1|-O2|-Os  host/runtime objects + link (default -O0; SPU stays -O1)
+#   OUT=/path/to/boot_gow2    binary path (default $HERE/boot_gow2)
+#   FORCE_REBUILD_LIFT=1      ignore stale .o and rebuild all lift chunks
+#
+# Examples:
+#   ./build_macos.sh
+#   LIFT_OPT=-O1 OUT=./boot_gow2_O1 ./build_macos.sh
+#   LIFT_OPT=-O1 HOST_OPT=-O1 FORCE_REBUILD_LIFT=1 OUT=./boot_gow2_O1 ./build_macos.sh
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -16,7 +27,17 @@ PS3="$HERE/../ps3recomp"
 # nomeadamente sem o ps3_indirect_tail (fix do bctr), sem o qual o pump da intro
 # bate na recursao de host. Compilar o lift errado dava um boot sem os fixes.
 LIFT="${1:-$HERE/recomp_macos_v2}"
-OUT="$HERE/boot_gow2"
+OUT="${OUT:-$HERE/boot_gow2}"
+LIFT_OPT="${LIFT_OPT:--O0}"
+HOST_OPT="${HOST_OPT:--O0}"
+FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
+
+case "$LIFT_OPT" in -O0|-O1|-O2|-Os) ;; *)
+    echo "LIFT_OPT must be -O0|-O1|-O2|-Os (got '$LIFT_OPT')" >&2; exit 1 ;;
+esac
+case "$HOST_OPT" in -O0|-O1|-O2|-Os) ;; *)
+    echo "HOST_OPT must be -O0|-O1|-O2|-Os (got '$HOST_OPT')" >&2; exit 1 ;;
+esac
 
 if [ ! -f "$LIFT/ppu_recomp.h" ]; then
     echo "no lift output in $LIFT -- run ppu_lifter.py first" >&2
@@ -45,22 +66,50 @@ INC=(-I "$LIFT"
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 JOBS=$(( JOBS > 6 ? 6 : JOBS ))   # each chunk peaks near 1 GB of compiler RSS
 
-echo "=== 1. lifted chunks -> .o (-P $JOBS) ==="
+# Tag objects by lift opt so -O0 and -O1 can coexist without clobbering each
+# other when A/B benchmarking. Default -O0 keeps historical bare *.cpp.o names
+# (no mass rebuild of existing trees). Non-default: ppu_recomp_NNN.cpp.1.o
+lift_obj() {
+    local f=$1
+    if [ "$LIFT_OPT" = "-O0" ]; then
+        echo "$f.o"
+    else
+        echo "${f}.${LIFT_OPT#-O}.o"
+    fi
+}
+
+echo "=== 1. lifted chunks -> .o  LIFT_OPT=$LIFT_OPT HOST_OPT=$HOST_OPT OUT=$OUT (-P $JOBS) ==="
 cd "$LIFT"
 t0=$(date +%s)
-# Only rebuild chunks whose object is missing or stale: a full rebuild of all
-# 31 is a couple of minutes, and this loop is run repeatedly while iterating.
-ls ppu_recomp_*.cpp ppu_stubs.cpp 2>/dev/null | while read -r f; do
-    if [ ! -f "$f.o" ] || [ "$f" -nt "$f.o" ]; then echo "$f"; fi
-done | xargs -P "$JOBS" -I {} sh -c \
-    'clang++ -std=c++20 -O0 -w -c -I . -I "$2/include" -I "$2/runtime/ppu" "$1" -o "$1.o" 2> "$1.cclog"' \
-    _ {} "$PS3"
-echo "  dur=$(( $(date +%s) - t0 ))s objs=$(ls ./*.cpp.o 2>/dev/null | wc -l | tr -d ' ') errors=$(cat ./*.cclog 2>/dev/null | grep -c 'error:' || true)"
+# Only rebuild chunks whose object is missing or stale. FORCE_REBUILD_LIFT=1
+# rebuilds every chunk (needed when switching LIFT_OPT with shared bare .o
+# names, or after patch re-apply without mtime bump).
+{
+    for f in ppu_recomp_*.cpp ppu_stubs.cpp; do
+        [ -f "$f" ] || continue
+        o=$(lift_obj "$f")
+        if [ "$FORCE_REBUILD_LIFT" = "1" ] || [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then
+            echo "$f"
+        fi
+    done
+} | xargs -P "$JOBS" -I {} sh -c \
+    'src="$1"; ps3="$2"; opt="$3"
+     if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
+     clang++ -std=c++20 "$opt" -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
+         "$src" -o "$o" 2> "$src.cclog"' \
+    _ {} "$PS3" "$LIFT_OPT"
+NOBJ=0
+for f in ppu_recomp_*.cpp ppu_stubs.cpp; do
+    [ -f "$f" ] || continue
+    o=$(lift_obj "$f")
+    [ -f "$o" ] && NOBJ=$((NOBJ + 1))
+done
+echo "  dur=$(( $(date +%s) - t0 ))s objs=$NOBJ errors=$(cat ./*.cclog 2>/dev/null | grep -c 'error:' || true)"
 
-echo "=== 2. runtime PPU sources -> .o ==="
+echo "=== 2. runtime PPU sources -> .o (HOST_OPT=$HOST_OPT) ==="
 cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
-    clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
+    clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
 
 echo "=== 3. HLE NID table -> .o ==="
@@ -77,7 +126,7 @@ LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
 # shellcheck disable=SC2086
 "$PS3/.venv/bin/python" "$PS3/tools/gen_hle_nids.py" \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
-clang++ -std=c++20 -O0 -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
+clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
 
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
@@ -109,12 +158,10 @@ fi
 echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
 echo "=== 4. boot host -> .o ==="
-clang++ -std=c++20 -O0 -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
-# Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ. C puro
-# e portatil de proposito: a Task 3 do plano macos-movie-eos-fsm promove-o para
-# libs/video/movie_eos_arm.c, quando o boot_main.cpp do Windows passar a
-# delegar nele em vez da thread inline que tem hoje.
-clang -std=c11 -O0 -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
+clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
+# Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
+# PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
+clang -std=c11 $HOST_OPT -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
 
 echo "=== 5. link ==="
 SDL_FLAGS=$(pkg-config --libs sdl2)
@@ -122,6 +169,18 @@ VK_FLAGS=""
 if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
     VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
 fi
+
+# Collect lift objects matching this LIFT_OPT (bare .o for -O0, .1.o for -O1, ...)
+LIFT_OBJS=()
+for f in "$LIFT"/ppu_recomp_*.cpp "$LIFT"/ppu_stubs.cpp; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    if [ "$LIFT_OPT" = "-O0" ]; then
+        LIFT_OBJS+=("$LIFT/$base.o")
+    else
+        LIFT_OBJS+=("$LIFT/${base}.${LIFT_OPT#-O}.o")
+    fi
+done
 
 # The guest's CRT recurses deeply under -O0; the default 8 MB main-thread stack
 # is not enough. Windows uses -Wl,--stack,33554432 for the same reason.
@@ -132,8 +191,8 @@ fi
 # The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
 # an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
 # already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
-clang++ -std=c++20 -O0 \
-    "$LIFT"/*.cpp.o \
+clang++ -std=c++20 $HOST_OPT \
+    "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
@@ -147,6 +206,6 @@ clang++ -std=c++20 -O0 \
 
 echo
 ls -lh "$OUT"
-echo "*** $OUT built ***"
+echo "*** $OUT built (LIFT_OPT=$LIFT_OPT HOST_OPT=$HOST_OPT) ***"
 echo
 echo "run it with:  ./rodar_gow2.sh"

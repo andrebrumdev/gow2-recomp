@@ -67,6 +67,7 @@ extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage)
 /* Gates do amostrador, latched em movie_eos_sampler_start (thread unica). */
 static int s_sampler_mo  = 0;   /* PS3_TRACE_MOVIEOBJ: dump verboso [MOVIEOBJ]   */
 static int s_sampler_eos = 0;   /* PS3_MOVIE_EOS:      autoriza o arm do read-hook */
+static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes) */
 
 #define MOVIE_OBJ_SLOT_EA  0x540054u
 #define MOVIE_OBJ_MAX_EA   0x4F000000u   /* acima disto o slot e' lixo, nao objecto */
@@ -408,18 +409,20 @@ static int movie_env_on(const char* name)
 
 void movie_eos_sampler_start(void)
 {
-    /* Duas portas, como o boot_main.cpp do Windows: PS3_TRACE_MOVIEOBJ liga o
-     * dump verboso [MOVIEOBJ]; PS3_MOVIE_EOS autoriza o arm do read-hook. A
-     * thread arranca se QUALQUER uma estiver ligada; sem nenhuma e' no-op total
-     * (nem thread se cria), portanto o baseline fica byte a byte igual. */
-    s_sampler_mo  = movie_env_on("PS3_TRACE_MOVIEOBJ");
-    s_sampler_eos = movie_env_on("PS3_MOVIE_EOS");
-    if (!s_sampler_mo && !s_sampler_eos) {
+    /* Tres portas: PS3_TRACE_MOVIEOBJ liga dump verboso [MOVIEOBJ];
+     * PS3_MOVIE_EOS autoriza o arm do read-hook; PS3_PERF_FSM liga um
+     * amostrador MAGRO so com [MOVIEFSM] (sem TRACE_*, para smokes de perf).
+     * A thread arranca se QUALQUER uma estiver ligada; sem nenhuma e' no-op
+     * total (nem thread se cria), portanto o baseline fica byte a byte igual. */
+    s_sampler_mo   = movie_env_on("PS3_TRACE_MOVIEOBJ");
+    s_sampler_eos  = movie_env_on("PS3_MOVIE_EOS");
+    s_sampler_perf = movie_env_on("PS3_PERF_FSM");
+    if (!s_sampler_mo && !s_sampler_eos && !s_sampler_perf) {
         return;   /* OFF por default */
     }
 
-    fprintf(stderr, "[MOVIEFSM] sampler on (mo=%d eos=%d)%s\n",
-            s_sampler_mo, s_sampler_eos,
+    fprintf(stderr, "[MOVIEFSM] sampler on (mo=%d eos=%d perf_fsm=%d)%s\n",
+            s_sampler_mo, s_sampler_eos, s_sampler_perf,
             s_sampler_eos ? " -- pode armar EOS quando o produtor de done disparar"
                           : " -- obs-only, nao arma");
     fflush(stderr);
