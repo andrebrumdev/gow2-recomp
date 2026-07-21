@@ -74,3 +74,24 @@ reencode, sem necessidade de remux/parse manual de start codes.
 
 Relatorio completo do spike (codigo exacto, todos os comandos, resultados):
 `.superpowers/sdd/m0-task-0-report.md` (nao commitado — ledger interno).
+
+---
+
+## M0 Task 2/3 — implementado (2026-07-21)
+
+Commits: ps3recomp `e12fbed` (movie_vt_metal + movie_hle Apple), gow2 `0eb7049` (sampler autostart).
+
+In-boot (`PS3_RSX_BACKEND=metal PS3_MOVIE_HLE=1`, ~16s, `/tmp/gow2_m0_t2b.log`):
+
+| métrica | valor |
+|---------|-------|
+| autostart SmLogo_v2.m2v | 1 |
+| decode start BGRA | 1 |
+| frames | **330** (1,60,120,180,240,300 + EOS) |
+| reader.status | 2 completed |
+| EOS `movie_vt_overlay_done=1` | 1 |
+| audio .wav | 1 |
+| metal playback begin | 1 |
+| cellVdec Open | 1 (paralelo FSM) |
+
+Nota: no Mac o guest **nao** abre o `.m2v` via `movie_io` (so psarc); o sampler chama `movie_hle_autostart_cache_if_needed` quando `st620>=1`.
