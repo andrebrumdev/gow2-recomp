@@ -48,3 +48,19 @@ o gargalo real subiu para a progressão do 2º movie.
 - Ver se o 2º movie recebe `cellVdecOpen`/`StartSeq` (log: StartSeq=1,
   SEQDONE=2 no run — 1 só StartSeq ⇒ 2º movie pode não abrir vdec).
 - Aplicar a lógica de arme-de-EOS-atrasado (do `4.EOS+`) ao 2º movie.
+
+## CONFIRMADO: o 2º movie nunca abre vdec
+
+No log inteiro (50s): **1 só `[cellVdec] StartSeq`** (handle=0, linha 2612) e
+**1 só FORCE** (`FORCE SEQDONE watchdog after 8000 ms (skip intro)`, linha
+2615) — ambos para o INTRO. Não há 2ª StartSeq. ⇒ o movie seguinte ao intro
+**não chega ao estado 4 (cellVdecOpen)**, logo o vdec nunca abre, o movie não
+toca, e a FSM (st620) fica presa em 0. Idêntico ao CRUX do `4.EOS+`
+(o arme de EOS salta o estado 4), mas para o 2º movie — e o FORCE watchdog
+só dispara 1× (intro), não re-arma.
+
+**Próximo passo concreto (destrava walk + UI draws):** estender a lógica de
+vdec-open (plano `4.EOS+`) aos movies APÓS o intro — re-armar o gate de
+estado-4 / FORCE por-movie, não só uma vez. Com o 2º movie a progredir, o
+jogo alcança a cena/menu → ICGLdrShader compila as 18 SHADERSRC já carregadas
+→ walk/registry naturais → draws reais de UI no Metal.
