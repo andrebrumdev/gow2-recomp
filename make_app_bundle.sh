@@ -11,16 +11,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
 [ -x ./boot_gow2 ] || { echo "boot_gow2 nao existe -- rode ./build_macos.sh primeiro" >&2; exit 1; }
-SFO="extracted/PARAM.SFO"; ICON="extracted/ICON0.PNG"
+SFO="extracted/PARAM.SFO"; ICON="extracted/ICON0.PNG"; PIC1="extracted/PIC1.PNG"
 [ -f "$SFO" ]  || { echo "$SFO nao encontrado" >&2; exit 1; }
 [ -f "$ICON" ] || { echo "$ICON nao encontrado" >&2; exit 1; }
+[ -f "$PIC1" ] || PIC1=""   # sem hero art -> fallback (logo em tile escuro)
 
 # --- 1. Metadados do jogo (TITLE + APP_VER) + icone master 1024, do jogo ------
+# Icone segue a grelha do macOS: corpo 824 em canvas 1024 (margem 100),
+# squircle (raio 185) + sombra suave, arte do Kratos (PIC1) a preencher e o
+# logo GOD OF WAR II (ICON0) sobre um scrim -- look "padrao de jogo".
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-python3 - "$SFO" "$ICON" "$WORK/master.png" "$WORK/meta.txt" <<'PY'
-import struct, sys
-from PIL import Image, ImageDraw
-sfo, icon, master_out, meta_out = sys.argv[1:5]
+python3 - "$SFO" "$ICON" "$PIC1" "$WORK/master.png" "$WORK/meta.txt" <<'PY'
+import struct, sys, os
+from PIL import Image, ImageDraw, ImageFilter
+sfo, icon0, pic1, master_out, meta_out = sys.argv[1:6]
 
 # PARAM.SFO -> TITLE, APP_VER
 d = open(sfo, 'rb').read()
@@ -34,19 +38,52 @@ for i in range(n):
     elif k == 'APP_VER': ver = v
 open(meta_out, 'w').write(title + '\n' + ver + '\n')
 
-# ICON0.PNG -> tile 1024 (fundo escuro arredondado + arte centrada, aspect ok)
-S = 1024
-tile = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-mask = Image.new('L', (S, S), 0)
-ImageDraw.Draw(mask).rounded_rectangle([0, 0, S-1, S-1], radius=185, fill=255)
-bg = Image.new('RGBA', (S, S), (18, 18, 26, 255))
-tile.paste(bg, (0, 0), mask)
-art = Image.open(icon).convert('RGBA')
-target_w = int(S * 0.86)
-scale = target_w / art.width
-art = art.resize((target_w, max(1, int(art.height * scale))), Image.LANCZOS)
-tile.paste(art, ((S - art.width)//2, (S - art.height)//2), art)
-tile.save(master_out)
+S, BODY, RAD = 1024, 824, 185
+MARG = (S - BODY) // 2
+def squircle(sz, r):
+    m = Image.new('L', (sz, sz), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, sz-1, sz-1], radius=r, fill=255)
+    return m
+def csquare(im):
+    w, h = im.size; s = min(w, h)
+    return im.crop(((w-s)//2, (h-s)//2, (w-s)//2+s, (h-s)//2+s))
+mask = squircle(BODY, RAD)
+
+if pic1 and os.path.isfile(pic1):
+    art = csquare(Image.open(pic1).convert('RGB')).resize((BODY, BODY), Image.LANCZOS).convert('RGBA')
+else:
+    art = Image.new('RGBA', (BODY, BODY), (18, 18, 26, 255))
+
+body = Image.new('RGBA', (BODY, BODY), (0, 0, 0, 0))
+body.paste(art, (0, 0)); body.putalpha(mask)
+# scrim inferior para o logo assentar
+scr = Image.new('L', (BODY, BODY), 0); sd = ImageDraw.Draw(scr)
+for y in range(BODY):
+    a = 0 if y < BODY*0.5 else int(210*((y-BODY*0.5)/(BODY*0.5))**1.4)
+    sd.line([(0, y), (BODY, y)], fill=min(230, a))
+scrl = Image.composite(Image.new('RGBA', (BODY, BODY), (8, 6, 10, 255)),
+                       Image.new('RGBA', (BODY, BODY), (0, 0, 0, 0)), scr)
+scrl.putalpha(Image.composite(scr, Image.new('L', (BODY, BODY), 0), mask))
+body = Image.alpha_composite(body, scrl)
+# logo do jogo (ICON0) em baixo
+logo = Image.open(icon0).convert('RGBA')
+lw = int(BODY*0.72); lh = max(1, int(logo.height*lw/logo.width))
+body.paste(logo.resize((lw, lh), Image.LANCZOS), ((BODY-lw)//2, int(BODY*0.70)),
+           logo.resize((lw, lh), Image.LANCZOS))
+
+canvas = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+sil = Image.new('RGBA', (S, S), (0, 0, 0, 0)); sil.paste((0, 0, 0, 150), (MARG, MARG+14), mask)
+canvas = Image.alpha_composite(canvas, sil.filter(ImageFilter.GaussianBlur(22)))
+bl = Image.new('RGBA', (S, S), (0, 0, 0, 0)); bl.paste(body, (MARG, MARG), body)
+canvas = Image.alpha_composite(canvas, bl)
+# highlight superior subtil
+grad = Image.new('L', (1, BODY))
+for y in range(BODY): grad.putpixel((0, y), max(0, 40 - int(40*y/220)))
+white = Image.new('RGBA', (BODY, BODY), (255, 255, 255, 255)); white.putalpha(grad.resize((BODY, BODY)))
+wm = Image.composite(white, Image.new('RGBA', (BODY, BODY), (0, 0, 0, 0)), mask)
+hl = Image.new('RGBA', (S, S), (0, 0, 0, 0)); hl.paste(wm, (MARG, MARG), wm)
+canvas = Image.alpha_composite(canvas, hl)
+canvas.save(master_out)
 PY
 
 TITLE="$(sed -n '1p' "$WORK/meta.txt")"
