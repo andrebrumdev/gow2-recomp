@@ -148,3 +148,28 @@ Hipóteses vivas: tracks tipo-A (a=0,d=1) = stream comprimido c/ sub-header
 ainda sem semântica (0x80/0xa2/0x70/0xc9 nao sao ids de bone directos).
 Próximo: decodificar t4 como 7×s16 (escala 1/32767?) e correlacionar com o
 bind dos bones de arma (sec3 aponta rWeapOH/lWeapOH/lChainW).
+
+### 7.2 Calibração dos quats + veredito do codec (fim da sessão 2026-07-22)
+
+**CRACKEADO**: rotações quantizadas como quat s16le de norma constante
+**20861 ≈ 32768×(2/π)** (verificado em grupos independentes:
+(-7804,9966,4561,15942) e (-4145,-16653,-6200,10112) → norma 20859-20862;
+identidade = `0000 0000 0000 7d51`). Decode: q = s16/20861.
+
+**walkBlend** (clip 42): header de clip com hdrsize 0x220 (varia por clip!);
+5 sub-anims: navWalkFast(20f)/Slow(40f)/FastL/FastR/Land; dt=1/15 nas
+secções (não 1/30 — dt do descritor manda) e uma secção dt=1/60.
+
+**Veredito**: varredura global (189 clipes) mostra que NENHUM sub-anim usa
+arrays puros de quats (máx 2.9% de cobertura) — o grosso é um formato
+COMPRIMIDO (streams com prefixos tipo `1e7c 4000 007f 7770`, rajadas de
+deltas s8, quats-âncora esparsos). Data-only RE do comprimido esgotou o
+custo/benefício.
+
+**Próximo passo decisivo** (caminho garantido, e o metodológico do projeto:
+usar o próprio código do jogo): rastrear o DECODER real no lift PPU —
+âncora: string `tAnimSystem` (@0x69a4d no WAD; achar o uso no ELF),
+correlacionar com acessos ao pacote ANM (offsets 0x340/0x500 do header) e
+levantar a rotina de descompressão de track. Com ela, o player nativo do
+viewer (GPU skinning já pronto, só trocar a fonte do poseL) toca
+navWalkFast em loop.
