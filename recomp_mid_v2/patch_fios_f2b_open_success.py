@@ -20,7 +20,7 @@ Also: STREAM-PUMP lived inside PS3_TRACE_FIOSOPEN probe (n<8) — silent
 no-op without TRACE; moved out.
 
 Markers (lift gitignored — re-apply after re-lift):
-  F2B-KEEP-DONE, F2B-RESTATUS, F2B-STREAM-PUMP outside TRACE
+  F2B-KEEP-DONE, F2B-RESTATUS, F2B-FO-SIZE, F2B-STREAM-PUMP outside TRACE
 
 Usage: python3 recomp_mid_v2/patch_fios_f2b_open_success.py [recomp_macos_v2]
 """
@@ -39,7 +39,7 @@ def main() -> int:
         return 1
     text = path.read_text(errors="replace")
     ok = 0
-    for marker in ("F2B-KEEP-DONE", "F2B-RESTATUS", "F2B-STREAM-PUMP"):
+    for marker in ("F2B-KEEP-DONE", "F2B-RESTATUS", "F2B-STREAM-PUMP", "F2B-FO-SIZE"):
         if marker in text:
             print(f"001: {marker} present")
             ok += 1

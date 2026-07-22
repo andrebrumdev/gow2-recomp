@@ -1211,3 +1211,57 @@ ret=0x8001070A = 0
 |-----|---------|------|
 | `PS3_FIOS_STREAM_PUMP` | ON | host pread loop after F2B DONE |
 | `PS3_FIOS_STREAM_SEED` | OFF | only stamp limit, no pump |
+
+## 24. FO+0x48 size — WADLD rem GREEN; header still empty (2026-07-21)
+
+### Root (after §23 open ret=0)
+
+Success path `func_002B42EC`:
+
+```cpp
+fo = container+4;
+container+0x10 = (u32)vm_read64(fo+0x48);  // file size
+```
+
+F2B FO left `+0x48/+0x4C=0` → success **overwrote** the pump size stamp with
+0 → `WADLD-SM rem=0` and no useful state-2 work. Error path (old 0x8001070A)
+skipped 42EC and accidentally kept pump size (`rem=0xC00`).
+
+### Fix
+
+In F2B FO ctor after `f2b_fo_mfd_put`:
+
+```
+FO+0x48 = 0
+FO+0x4C = size   // BE u64 low word via vm_write32
+```
+
+Marker: `F2B-FO-SIZE`.
+
+### In-boot GREEN (`/tmp/vdec_fosize.log`)
+
+```
+F2B-FO-SIZE fo=… size=3072 / 20169344
+F2B-FO-DUMP … +48=00000000 +4C=00000C00 / +4C=0133C280
+WADLD-SM #1 state=1 rem=0xC00
+WADLD-SM #2 state=2 rem=0xC00          # Lgl
+WADLD-SM #3 state=1 rem=0
+WADLD-SM #4 state=2 rem=0x133C280      # R_Perm full size
+ret=0 on m2v+Lgl+Perm; GATE-FORCE full
+```
+
+### Still open
+
+| Sinal | Valor | Nota |
+|-------|------:|------|
+| WADLD-BODY | 0 | state 3 never |
+| WADLD-CALL type | 0×64 | hdr@0x008695EC zeros — stream not in WADLD buffer |
+| AREAD-HLE | 0 | guest still not submitting 002B3D1C |
+| TYMAP-171 / LDRSH | 0 | |
+| FREELIST-TAG | 1 | after Perm cancel |
+| ICALL-BAD | 2 | post-Perm |
+
+Pump fills ring `0x40080000` / F2B-PRELOAD `fo+0x180` (Lgl only); WADLD
+reads a **different** header buffer (`type_sys+0x7C`). Natural aread into that
+buffer (or host fill of hdr) is the next wall for BODY/members.
+
