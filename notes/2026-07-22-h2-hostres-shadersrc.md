@@ -71,9 +71,8 @@ SHGX WAD **não** alimenta SHADERSRC N; microcódigo de engine está no EBOOT gz
 
 ## Próximo
 
-1. **O que faz SHADERSRC com N>0?** Instrumentar o loop de records em
-   `func_003CC208` (após o N=) — regista onde? Chama combination? Falha CRC?
-2. **Registry efectivo:** contagem de shaders no mapa guest pós-HOSTRES
-   (sem assumir LDRSH).
-3. **A1/walk** continua aberto se o path natural de ICGLdr for outro; não
-   celebrar [D] só com N>0 (N é defs HOSTRES, não nested typemap F85F).
+1. ~~**O que faz SHADERSRC com N>0?**~~ → **respondido** em
+   `notes/2026-07-22-shadersrc-loop.md`: grow+loop completo, **i=N=889**,
+   materializa slots 0x34 via `003C3598` (não via insert `003C8578`).
+2. **Consumer:** lookup CGOWShader / combination usa as 889 entradas?
+3. **A1/walk** continua aberto (ICGLdr nested ≠ este path).
