@@ -43,6 +43,12 @@ export PS3_MOVIE_CACHE
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
 
+# SPU1 = dearch / EDGE-zlib (fp 0x2A5C4E67A14505B8). Hit limpo in-boot
+# (2026-07-22: HIT>=1, MISS=0, SPUJOB clean). Necessario para consumo
+# real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
+# texturas WAD/UI nao avanca. spu2/3 continuam opt-in (PS3_SPU2/3).
+: "${PS3_SPU1:=1}";             export PS3_SPU1
+
 # FIFO do RSX consumido pelo backend.
 : "${PS3_RSX_FIFO:=1}";         export PS3_RSX_FIFO
 

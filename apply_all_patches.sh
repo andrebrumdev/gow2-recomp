@@ -106,14 +106,11 @@ else
 fi
 
 # ---- patches nao aplicaveis a este host --------------------------------------
-# host_wad_tex ainda chama paths de bind/capture que no Mac precisam de
-# PS3_WAD_TEX_HOLD + rsx_host_content (M8). Mantem SKIP ate o link Mac
-# compilar host_wad_tex.c de forma limpa. host_res_inflate usa
-# rsx_host_content_hold (portavel) + stbi_zlib da runtime.a — OK no Darwin
-# desde que build_macos.sh compile e linke host_res_inflate.c.
-SKIP_DARWIN="patch_wad_tex_capture.py"
+# host_wad_tex + patch_wad_tex_capture: reactivados no Darwin (2026-07-22).
+# build_macos.sh compila host_wad_tex.c e linka; force-bind via rsx_host_content.
+# WAD ~tex packages apos WADLD-T1R → [WADTEX] + unit 1+ bind (nao e aceite de
+# menu natural, mas desbloqueia pixels WAD no path de bind).
 SKIP_LIST=""
-if [ "$(uname -s)" = "Darwin" ]; then SKIP_LIST="$SKIP_DARWIN"; fi
 
 is_skipped() {
   case " $SKIP_LIST " in *" $1 "*) return 0 ;; *) return 1 ;; esac

@@ -119,6 +119,11 @@ if [ -f "$PS3/runtime/ppu/host_res_inflate.c" ]; then
     clang -std=c11 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_res_inflate.c" -o "$LIFT/host_res_inflate.o"
 fi
+# WAD ~texture packages after WADLD-T1R (patch_wad_tex_capture → force-bind).
+if [ -f "$PS3/runtime/ppu/host_wad_tex.c" ]; then
+    clang -std=c11 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs/video" \
+        "$PS3/runtime/ppu/host_wad_tex.c" -o "$LIFT/host_wad_tex.o"
+fi
 
 echo "=== 3. HLE NID table -> .o ==="
 # ppu_hle_register_all() is a weak no-op in the runtime; without a strong
@@ -204,6 +209,7 @@ clang++ -std=c++20 $HOST_OPT \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
+    $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
