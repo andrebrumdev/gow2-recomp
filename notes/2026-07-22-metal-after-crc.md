@@ -67,6 +67,6 @@ HOSTRES+CRC (content hold + Metal present), **não** `PS3_SHADER_DEMO`.
 
 ## Próximo
 
-1. Fix MSL VP `float3`/`float4` (desbloqueia VS real).
+1. ~~Fix MSL VP float3/float4~~ → `notes/2026-07-22-metal-vp-msl-fix.md` (VS/FS fail=0, VP real).
 2. Correlacionar FP `0x003FFxxx` com defs CFX (hashes).
 3. Nested walk / ICGLdr (A1) em paralelo se o alvo for shaders de cena WAD.
