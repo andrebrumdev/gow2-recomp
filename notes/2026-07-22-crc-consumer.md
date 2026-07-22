@@ -67,6 +67,8 @@ gated `PS3_TRACE_CRCLK`.
 
 ## Próximo
 
+- ~~Interpretar `0x01010000` + Metal~~ → `notes/2026-07-22-metal-after-crc.md`
+  (Invalid=0, legal WARNING nos frames, VP passthrough).
 - Interpretar `0x01010000` (flags? índice?) e o que o set_shader consome a
   jusante.
 - Boot com RSX/Metal: Default.ps3fx deixa de ser ERROR? draw real?

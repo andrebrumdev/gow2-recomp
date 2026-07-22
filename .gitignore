@@ -65,3 +65,7 @@ nm_*.txt
 
 # Oracle session outputs (RPCS3 diff)
 oracle_out/
+
+# RSX frame dumps (local debug, not source)
+frame_*.bmp
+frame_*.png
