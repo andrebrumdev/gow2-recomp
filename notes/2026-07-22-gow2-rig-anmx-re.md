@@ -219,3 +219,38 @@ Estrutura do stream (t0): header bit-packed (palavras `7f 77 70`/`f0 f7 f9 77`
 recorrentes = controlo de canais/deltas), quats-âncora esparsos (233 no track),
 runs de deltas s8. NÃO há directório de bones em texto claro — o mapeamento
 bone→canal está codificado no header bit-packed (parte do decode do lift).
+
+### 7.5 Decoder TRANSCRITO até à parede da tabela-G (fim honesto do RE estático)
+
+Análise completa do lift (subagente, HIGH confidence no algoritmo):
+- **Entry real = func_0022A540** (não AD7C); AD7C≡BF14 = clones de fase da
+  mesma função, partilham o frame. Args: r3=descritor, f1/f2=tempo início/fim
+  em SEGUNDOS, dt=float @ *(r3+0x3C)+0x6C.
+- **NÃO é normalizador de quat**: é um DESCOMPRESSOR base+residual.
+  1. âncoras s16 absolutas -> LERP linear das 2 âncoras que cercam o frame
+     (nlerp, **ZERO slerp**: sem sqrt/sin/cos em toda a família).
+  2. integra streams de delta s8: `acc[p] += (w >> exp) * delta_s8` por bit
+     de uma máscara de classe; componente em out+p*4, linhas de classe 0x40.
+  - Norma 20861 (=32768×2/π) é aplicada pelo CONSUMIDOR, não aqui (0x517D
+    não aparece no código, grep-verificado em 1.2MB).
+- **Constantes do TOC (0x541178) LIDAS**: K=1.0, EPS=1/4096 (0x39800000),
+  WSCALE=16384=2¹⁴ (0x46800000). Batem com a mecânica de peso fixed-point.
+
+**PAREDE (honesta, não contornável estaticamente):** o mapeamento
+bit-stream→componente vive na tabela **G = *(r2-0x29EC) = 0x70082c**, que é
+**endereço de RUNTIME** (fora dos LOAD do ELF, max VA ~0x576ea4). G é
+populada na init do anim system. Sem G não dá para parsear deterministicamente
+o stream comprimido — teste empírico confirmou: os "group descriptors" 8B
+inferidos dão g0=13353 (absurdo p/ 20 frames) e as âncoras não são quats 8B
+consecutivos. O kernel está certo; o ENDEREÇAMENTO dos bytes no stream depende
+de G.
+
+**Caminho faithful (metodologia do projeto: usar o código do jogo):** probe
+gated no boot recompilado que, com o anim system já inicializado (G populada),
+força a avaliação de navWalkFast e despeja as matrizes/quats por bone por
+frame para ficheiro; o viewer nativo (skinning GPU já pronto) reproduz esses
+poses. 100% fiel (saída do próprio decoder do jogo), sem forjar. Alternativa
+mais pesada: RE da init de G (achar a fonte estática que a popula em 0x70082c).
+
+Scaffold pronto para receber o resultado: ps3recomp/libs/video/tests/
+wad_anim.c (navegação validada) + anim_decode_quat (stub, assinatura pronta).
