@@ -117,3 +117,34 @@ Constantes: dt=1/30 em TODOS os descritores; NKEYS = frames+1;
 ANIM_ID sequencial (H1=0x15, H2=0x16, H3=0x17). Falta: semântica exata
 dos campos A/B dos registos de sec1 (canal/bone), formato do stream de
 keys (delta s8 com base? escala?), e mapear bone→track.
+
+### 7.1 Tracks (attAirSlashH1, dumps de referência)
+
+Secção = N registos de **12B** `{u16 a,b,c,d,e,off}`; os registos acabam
+exactamente em `off` do 1º (sec1: 5 tracks, sec2: 2). Tamanho do track k =
+off[k+1]-off[k].
+
+sec1 t0 {0,0xc2,0,1,0x16} sz=1696, dados:
+`01021400 01000100 4e000200 15000000 62051e41 8200007f 777f0000 00..00
+ 00609a0f 00000000 0000f7f9 ...` (sub-header `01 02 14 00`; 0x15=21=ANIM_ID;
+ depois maioria zeros + rajadas de deltas s8)
+sec2 t0 {0,0x62,0,1,0x16} sz=512:
+`01021400 01000100 2a000200 15000000 92011e09 4a000007 ...` (mesmo shape)
+sec1 t1 {0x80,0xa2,0,0,0x17} sz=108:
+`8409e432 45e2f4c0 9bf5e928 01021400 02000100 ee060300 00000000 16071502
+ 32000400 ...`
+sec1 t2 {0,2,2,0,0} sz=508: `07fb0300 03f505e6 06e503f0 d6259efd a5259ffd
+ f423c0fd 1e724000 007f777f 07...` (deltas s8 densos)
+sec1 t3 {0x70,2,0x17,0,0} sz=360: `2e0d00fc 84e1ee26 d111463e 00000000
+ 00007d51 cfeff3be c8e78027 00000000 00007d51 16073000 ...` (`7d51`
+ recorrente ≈ w de quat quantizado 0.637?)
+sec1 t4 {0xc9,0,0xd,0,0} sz=84: **6 keys de 14B (7×s16le)**:
+`95e8 e5bd 2707 7b0b b209 1d11 78b4` → `95e8 b6be 2707 cd09 b209 1d11 78b4`
+→ `95e8 b5bf 2707 0908 ...` — 5 componentes constantes, 2 variam
+(quat(4)+trans(3) quantizados s16?). Termina `3cc1 3cc1 0000`.
+
+Hipóteses vivas: tracks tipo-A (a=0,d=1) = stream comprimido c/ sub-header
+`01 02 14 00` + ANIM_ID; tipo-B = arrays de keys 14B (7×s16); campos a/b/c
+ainda sem semântica (0x80/0xa2/0x70/0xc9 nao sao ids de bone directos).
+Próximo: decodificar t4 como 7×s16 (escala 1/32767?) e correlacionar com o
+bind dos bones de arma (sec3 aponta rWeapOH/lWeapOH/lChainW).
