@@ -1322,3 +1322,47 @@ FREELIST-TAG=0  ret=0×3  GATE-FORCE full
 - R_Perm only first 256 KiB window preloaded at open; further body reads rely
   on 002E1480 refill (observed state=3 once before ICALL noise).
 
+
+## 26. SHGX expand GREEN via T1SZ; ICGLdr still cold (2026-07-21)
+
+### Stream refill
+
+`f2b_stream_fill` now **compacts** unread ring bytes before appending the next
+file window (avoids dropping the tail when `avail < need` across body spans).
+
+### Type-1 path (func_002B0FB4) — measured `/tmp/vdec_t1sz.log`
+
+TOC members after stream fill (Lgl + Perm) take size≠0 → T1SZ:
+
+```
+SHGX_R_LglScA  u2=32 idx=0x80 obj=0x40301D80
+  [WADLD-VT28] vt=0x00516BA0 opd=0x0051B2F8 code=0x0039E6B4
+  [WADLD-VT28R] r3=0x42F84D98
+  [WADLD-GEND] #17 self=0x40301D80 member=0x42F84D98 → [WADLD-FIN] r3=0x403022D0
+SHGX_R_Perm    same factory path (VT28R + expand)
+```
+
+Also: GFXX/TXRX/MATX/… factories return non-zero; GroupStart/End via CALL
+types 2/3; WADLD-BODY still ≥1 (`SBP_`).
+
+| Sinal | §25 | §26 |
+|-------|----:|----:|
+| STREAM-FILL | Lgl full + Perm window | + compact refill |
+| SHGX T1SZ/VT28R | not instrumented | **GREEN** (objects + GEND/FIN) |
+| WADLD-GEND/FIN | present | **≥17** on Lgl pass |
+| TYMAP-171 / LDRSH | 0 | **0** |
+| SHADERSRC N | 18×0 early | 18×0 early |
+
+### Honesty / next wall
+
+- SHGX **factory expand** is proven in-boot; this is **not** yet ICGLdr /
+  nested typemap / SHADERSRC N>0 (registry still empty — class A/C open).
+- `w2=0x00020000` (128 KiB) on SHGX TOC vs Lgl file size 3072 → Lgl SHGX is
+  likely a **stub/TOC**; real shader bytes live in R_Perm (windowed fill).
+- ICALL-BAD still appears on some later members (data-as-OPD); freelist noise
+  0x91… without TAG-GUARD hit.
+- Probes: `[WADLD-T1SZ]` `[WADLD-VT28]` `[WADLD-VT28R]` (PS3_TRACE_TYMAP).
+
+**Next:** follow FIN/post-SHGX into ICGLdr (`func_0032109C`) / typemap walk;
+discriminate empty package (C) vs walk never scheduled (A).
+

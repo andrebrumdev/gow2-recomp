@@ -14,7 +14,7 @@ container). Dearch rejects /wad/* again and stamps op+44=0x8001070A.
 6610 returns that error → 4274 error path.
 
 Fix: F2B-KEEP-DONE + F2B-RESTATUS + F2B-FO-SIZE + F2B-STREAM-FILL
-(WADLD ring type_sys+0x1A8 from movie_io)
+(WADLD ring type_sys+0x1A8 from movie_io; compact refill)
 (clear +44, keep +90). Do NOT skip 0030B058 (poll never sees DONE).
 
 Also: STREAM-PUMP lived inside PS3_TRACE_FIOSOPEN probe (n<8) — silent
