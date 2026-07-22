@@ -111,6 +111,14 @@ cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
     clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
+# host_res_inflate: runtime/ppu is excluded from libps3recomp_runtime.a (same as
+# ppu_loader). Required for EBOOT gzip HOSTRES (gowshader.cfx, *.ctxr) after
+# patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
+# from the runtime .a — portable Mac/Win.
+if [ -f "$PS3/runtime/ppu/host_res_inflate.c" ]; then
+    clang -std=c11 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs/video" \
+        "$PS3/runtime/ppu/host_res_inflate.c" -o "$LIFT/host_res_inflate.o"
+fi
 
 echo "=== 3. HLE NID table -> .o ==="
 # ppu_hle_register_all() is a weak no-op in the runtime; without a strong
@@ -195,6 +203,7 @@ clang++ -std=c++20 $HOST_OPT \
     "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
+    $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \

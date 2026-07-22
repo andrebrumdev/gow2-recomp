@@ -94,3 +94,9 @@ sem OPD call, sem stream sintético):
 falta o *caller* natural do walk. H1 (fase de cena mais tarde) e H2 (outro path
 que não 00468C3C — ex. WADLD-FIN / HOSTRES / SHADERSRC material) ficam em aberto;
 a cadeia 00468C3C continua refutada como via activa neste boot.
+
+## H2 (follow-up, mesma data)
+
+`notes/2026-07-22-h2-hostres-shadersrc.md`: HOSTRES gzip no Mac **activado**
+(23/23, incl. `gowshader.cfx`). SHADERSRC passa de 18×N=0 → **ΣN=889**.
+Walk/LDRSH/A1 **continuam 0** — SHADERSRC ≠ typemap walk.

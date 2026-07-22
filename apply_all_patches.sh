@@ -106,13 +106,12 @@ else
 fi
 
 # ---- patches nao aplicaveis a este host --------------------------------------
-# Estes aplicam-se ao FONTE sem erro, mas o binario nao LINKA no macOS: os host
-# helpers que eles chamam (host_res_inflate.c, host_wad_tex.c) chamam por sua vez
-# rsx_d3d12_content_hold()/rsx_d3d12_force_bind_rgba(), definidos apenas em
-# libs/video/rsx_d3d12_backend.c — backend D3D12, Windows. Nao ha equivalente no
-# backend SDL do macOS (isso e territorio do Plano 05, nao desta task).
-# Nao sao "obsoletos": no Windows continuam validos.
-SKIP_DARWIN="patch_host_res_inflate.py patch_wad_tex_capture.py"
+# host_wad_tex ainda chama paths de bind/capture que no Mac precisam de
+# PS3_WAD_TEX_HOLD + rsx_host_content (M8). Mantem SKIP ate o link Mac
+# compilar host_wad_tex.c de forma limpa. host_res_inflate usa
+# rsx_host_content_hold (portavel) + stbi_zlib da runtime.a — OK no Darwin
+# desde que build_macos.sh compile e linke host_res_inflate.c.
+SKIP_DARWIN="patch_wad_tex_capture.py"
 SKIP_LIST=""
 if [ "$(uname -s)" = "Darwin" ]; then SKIP_LIST="$SKIP_DARWIN"; fi
 
