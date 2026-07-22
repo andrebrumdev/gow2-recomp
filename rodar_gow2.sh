@@ -3,16 +3,21 @@
 # Equivalente POSIX do recomp_mid_v2/rodar_gow2.cmd.
 #
 # Uso:
-#   ./rodar_gow2.sh                 # backend metal (padrao Darwin), com janela
+#   ./rodar_gow2.sh                 # backend metal, FULLSCREEN (padrao de jogo)
+#   PS3_FULLSCREEN=0 ./rodar_gow2.sh# janela (dev / frame dump)
 #   PS3_RSX_BACKEND=sdl ./rodar_gow2.sh
 #   PS3_RSX_BACKEND=vulkan ./rodar_gow2.sh
 #   PS3_NO_RSX=1 ./rodar_gow2.sh    # headless (caminho CPU/SPURS)
 #
-# Sair com timeout (exit 124) e normal: o guest fica em loop.
+# Sair: ESC (fecha a janela) ou timeout. O guest fica em loop de render.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
+
+# Experiencia de jogo: fullscreen por default (override com PS3_FULLSCREEN=0).
+# So' faz sentido com backend grafico; no headless (PS3_NO_RSX) e' ignorado.
+export PS3_FULLSCREEN="${PS3_FULLSCREEN:-1}"
 
 if [ ! -x ./boot_gow2 ]; then
     echo "boot_gow2 nao encontrado -- rode ./build_macos.sh primeiro" >&2
