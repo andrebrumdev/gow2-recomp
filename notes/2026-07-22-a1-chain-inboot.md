@@ -70,3 +70,27 @@ No boot actual **nem o set corre**. Duas hipóteses a ordenar:
 Prioridade recomendada: **H3 barato** (1 probe + 1 dump read-only pós-full) para
 separar "typemap object never built" de "built but never walked". H2 se H3 mostrar
 objeto vivo sem walk.
+
+## H3 medido (mesma data, `/tmp/vdec_tymap_dump.log`)
+
+`ps3_dump_post_wad_typemap` em `ppu_loader.cpp` (gated `PS3_TRACE_TYMAP_DUMP`,
+sem OPD call, sem stream sintético):
+
+```
+[TYMAP-DUMP] base=0x00700DF8 slot=0x00835778
+  comp=0x4306ADF0 tm=0x4306B160 vt=0x005130B8 vt+8=0x00522E70
+  fb_comp=0x4306ADF0 fb_tm=0x4306B160 fb_vt=0x005130B8
+```
+
+| Campo | Valor | Leitura |
+|-------|-------|---------|
+| `comp` no slot canónico | `0x4306ADF0` | ICG component **instalado naturalmente** |
+| `tm` | `0x4306B160` | typemap vivo |
+| `vt` | `0x5130B8` | vtable certa |
+| `vt+8` | `0x522E70` | OPD do walk (`func_00171244`) correcta |
+| A1 chain | 0 | walk **não invocado** |
+
+**H3 fechado: built but never walked.** O objecto e o slot OPD estão prontos;
+falta o *caller* natural do walk. H1 (fase de cena mais tarde) e H2 (outro path
+que não 00468C3C — ex. WADLD-FIN / HOSTRES / SHADERSRC material) ficam em aberto;
+a cadeia 00468C3C continua refutada como via activa neste boot.
