@@ -69,3 +69,6 @@ oracle_out/
 # RSX frame dumps (local debug, not source)
 frame_*.bmp
 frame_*.png
+
+# App bundles gerados (icone derivado do jogo + hard-link do boot)
+*.app/
