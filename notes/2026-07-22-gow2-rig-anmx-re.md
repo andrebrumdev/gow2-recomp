@@ -254,3 +254,29 @@ mais pesada: RE da init de G (achar a fonte estática que a popula em 0x70082c).
 
 Scaffold pronto para receber o resultado: ps3recomp/libs/video/tests/
 wad_anim.c (navegação validada) + anim_decode_quat (stub, assinatura pronta).
+
+### 7.6 Refino da extração de keyframes — estrutura cede, mapeamento não (conclusivo)
+
+Tentativa a pedido de refinar sem o boot. Resultado:
+
+**Estrutura de keyframe CEDEU (RE real):** o track t0 é keyframe-major —
+header=40B, stride=248B, **12 keyframes (=record.c)**, 15 slots de quat reais
+por keyframe (após dedup de janela deslizante). Track t1 é 100% estático
+(0/60 bytes mudam entre os 3 keyframes). Isto não precisou da tabela G.
+
+**Mapeamento slot→bone NÃO cede estaticamente (parede confirmada):** busca
+exaustiva de convenção — 24 permutações de componentes × 16 sinais × conjugado
+× {absoluto-local, delta} = 1536 combinações — contra os quaternions bind
+(extraídos das matrizes bind por mat→quat). Melhor convenção: apenas **6/15**
+slots casam <15° com o bind, e degenerado (slot0 e slot8 ambos→main [0°, bind
+identidade casa qualquer quat pequeno]; rFemur casa 4×). Não é mapeamento
+válido. Os quaternions extraídos são reais (norma 20861) mas o seu bone e
+referencial não são recuperáveis por proximidade ao bind — dependem do
+header bit-packed que a tabela G de runtime interpreta.
+
+**Veredito final do RE estático:** o formato ANMX está decodificado ao nível
+de ALGORITMO (descompressor base+residual, sem slerp, constantes do TOC
+lidas) e de ESTRUTURA de keyframe (header/stride/count), mas o
+endereçamento canal→bone vive na tabela G runtime (0x70082c, fora do ELF).
+Caminho fiel restante: oráculo no boot (dump das poses quando r_hero01
+carrega e G é populada). NÃO forjar o mapeamento.
