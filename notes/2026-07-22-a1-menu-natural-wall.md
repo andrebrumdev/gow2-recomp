@@ -32,14 +32,16 @@ Logs: `/tmp/vdec_spu1_a1.log`, `/tmp/vdec_texpx.log`, `/tmp/vdec_wadtex.log`.
   replace); micro-ctors de cena **não correm**.
 - `PS3_GATE_FORCE` (stream sintético) **não** é aceite.
 
-### 2) Bind/draw natural — **VRAM guest vazia**
+### 2) Bind/draw natural — **VRAM legal preenchida; menu sem assets novos**
 
 - Binds HD `fmt=0x86` (DXT1) em `0xC0FB0980` / `0xC1021180` / `0xC0F40180`.
-- Amostra de bytes DXT1: **max=0, nonzero=0** → o jogo **não preenche**
-  a memória RSX local da textura.
-- Legal/SCEA/Bluepoint que se vê na tela vêm do **content-hold HOSTRES**, não
-  do path guest bind+draw.
-- Corrigir só o PSO Metal **não basta** enquanto o buffer guest for zero.
+- **Correcção 2026-07-22 (VRAM-SCAN):** estes slots **não** estão vazios no boot
+  actual — `nz≈234k/460800 max=255`, Metal `texture uploaded` BC1 OK. Medição
+  TEX-PX antiga com max=0 ficou obsoleta; ver `notes/2026-07-22-vram-fill-discriminator.md`.
+- Legal/SCEA/Bluepoint **visíveis** na fila vêm sobretudo do **content-hold HOSTRES**;
+  o guest *também* tem DXT1 em local para o quad de suporte.
+- Pós-R_Perm: **zero** binds de UI/menu novos (só os 3 EAs HD). A parede do menu
+  **não** é “VRAM genérica vazia” — é falta de fase/assets de menu.
 
 ### 3) WAD “texturas” no TOC — **stubs**
 
@@ -65,13 +67,13 @@ Logs: `/tmp/vdec_spu1_a1.log`, `/tmp/vdec_texpx.log`, `/tmp/vdec_wadtex.log`.
 
 ## Próximo (ordenado)
 
-1. **Quem deveria preencher RSX local** (`C0FBxxxx`) a partir de HOSTRES/WAD
-   decode — DMA GCM / copy guest / SPU PUT. Probe: writes em `0xC0000000+`
-   pós-R_Perm vs pós-pad.
-2. **Agendar micro-ctor** (`00329490` family) — FSM de cena/menu após logos;
-   correlacionar com input / `GFX_SCREEN_00` / load de level.
-3. Só depois: esperar `[CMP-ENTER]` / `[TYMAP-171]` natural; **não** promover
-   GATE-FORCE.
+1. ~~Quem preenche RSX local (`C0FBxxxx`)~~ → **feito** (fill legal confirmado;
+   menu sem EAs novos). Ver `vram-fill-discriminator.md`.
+2. **Present guest pós-hold** — dump frame após `boot logo queue DONE`: legal
+   via guest DXT1 ou clear preto?
+3. **Agendar micro-ctor / UI** (`00329490` family ou outro entry) — FSM/pad/level;
+   OPD `534CB8` morto neste boot (`opd-534cb8-dead.md`).
+4. Só depois: `[CMP-ENTER]` / `[TYMAP-171]` natural; **não** GATE-FORCE.
 
 ## Aceite menu
 
