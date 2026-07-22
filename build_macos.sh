@@ -213,7 +213,7 @@ clang++ -std=c++20 $HOST_OPT \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
-    -framework Metal -framework QuartzCore -framework Foundation \
+    -framework Metal -framework MetalFX -framework QuartzCore -framework Foundation \
     -framework Cocoa \
     -framework AVFoundation -framework CoreMedia -framework CoreVideo \
     -framework AudioToolbox -framework CoreAudio \
