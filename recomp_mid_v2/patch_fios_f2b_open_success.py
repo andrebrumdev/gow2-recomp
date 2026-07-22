@@ -13,14 +13,15 @@ to func_0030B058 (push open op to media queue — required to link op to
 container). Dearch rejects /wad/* again and stamps op+44=0x8001070A.
 6610 returns that error → 4274 error path.
 
-Fix: F2B-KEEP-DONE after FO install + F2B-RESTATUS in 4274 before 6610
+Fix: F2B-KEEP-DONE + F2B-RESTATUS + F2B-FO-SIZE + F2B-STREAM-FILL
+(WADLD ring type_sys+0x1A8 from movie_io)
 (clear +44, keep +90). Do NOT skip 0030B058 (poll never sees DONE).
 
 Also: STREAM-PUMP lived inside PS3_TRACE_FIOSOPEN probe (n<8) — silent
 no-op without TRACE; moved out.
 
 Markers (lift gitignored — re-apply after re-lift):
-  F2B-KEEP-DONE, F2B-RESTATUS, F2B-FO-SIZE, F2B-STREAM-PUMP outside TRACE
+  F2B-KEEP-DONE, F2B-RESTATUS, F2B-FO-SIZE, F2B-STREAM-FILL, F2B-STREAM-PUMP outside TRACE
 
 Usage: python3 recomp_mid_v2/patch_fios_f2b_open_success.py [recomp_macos_v2]
 """
@@ -39,7 +40,7 @@ def main() -> int:
         return 1
     text = path.read_text(errors="replace")
     ok = 0
-    for marker in ("F2B-KEEP-DONE", "F2B-RESTATUS", "F2B-STREAM-PUMP", "F2B-FO-SIZE"):
+    for marker in ("F2B-KEEP-DONE", "F2B-RESTATUS", "F2B-STREAM-PUMP", "F2B-FO-SIZE", "F2B-STREAM-FILL"):
         if marker in text:
             print(f"001: {marker} present")
             ok += 1

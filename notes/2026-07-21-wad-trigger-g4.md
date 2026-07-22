@@ -1265,3 +1265,60 @@ Pump fills ring `0x40080000` / F2B-PRELOAD `fo+0x180` (Lgl only); WADLD
 reads a **different** header buffer (`type_sys+0x7C`). Natural aread into that
 buffer (or host fill of hdr) is the next wall for BODY/members.
 
+
+## 25. F2B-STREAM-FILL — WADLD BODY GREEN (2026-07-21)
+
+### Root (after §24 rem=size)
+
+WADLD stream object at `type_sys+0x1A8` (alloc in `func_002BA4B4` /
+`func_002E1424`):
+
+| off | role |
+|-----|------|
+| +0 | ring base |
+| +8 | cursor |
+| +C | capacity (0x40000) |
+| +10 | **available** — init **0** |
+
+State 2 (`func_002BA9BC`) only copies 0x20 hdr bytes via `func_002E1480` when
+`stream+0x10 > 0x1F`. Natural path areads FO into the ring; F2B never did →
+header zeros → CALL type=0.
+
+### Fix
+
+1. After F2B STREAM-PUMP: arm fill state (fo/mfd/sz) and
+   `f2b_stream_fill(type_sys+0x1A8 stream, need=0x20)` — first window from
+   `movie_io_pread` into ring base; set cursor=0, avail=n.
+2. At `func_002E1480` entry: if `avail < need`, refill next window
+   (`F2B-STREAM-REFILL` via same helper).
+3. Stamp `type_sys+0x74` with size when 0 (state1 rem source).
+
+Markers: `F2B-STREAM-FILL`, fill at 002E1480.
+
+### In-boot GREEN (`/tmp/vdec_fill.log`)
+
+```
+F2B-STREAM-FILL stream=0x4007FCD0 base=0x40083D40 n=3072 file_pos=3072/3072   # Lgl full
+WADLD-CALL type=21,2,1,3,... (not all 0)  # Lgl members
+F2B-STREAM-FILL … n=262144 file_pos=262144/20169344                           # R_Perm window
+WADLD-SM state=3 rem=0x133C280
+[WADLD-BODY] #1 hdr=0x008695EC buf=0x434B9D00 type16=1 name4=0x5342505F ("SBP_")
+FREELIST-TAG=0  ret=0×3  GATE-FORCE full
+```
+
+| Sinal | §24 | §25 |
+|-------|----:|----:|
+| WADLD rem | size OK | size OK |
+| WADLD-CALL types | all 0 | **1,2,3,19,21,22** |
+| WADLD-BODY | 0 | **≥1** (type1 SBP_) |
+| state=3 | 0 | **1** (R_Perm) |
+| TYMAP-171 / LDRSH | 0 | 0 (next) |
+
+### Honesty / next
+
+- Fill is host-driven into the **real** guest stream ring that 002E1480 already
+  uses — not synthetic SHADERSRC / GATE-FORCE.
+- TYMAP nested walk still 0; ICALL-BAD still appears on R_Perm body path.
+- R_Perm only first 256 KiB window preloaded at open; further body reads rely
+  on 002E1480 refill (observed state=3 once before ICALL noise).
+
