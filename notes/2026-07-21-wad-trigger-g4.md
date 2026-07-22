@@ -1366,3 +1366,69 @@ types 2/3; WADLD-BODY still ≥1 (`SBP_`).
 **Next:** follow FIN/post-SHGX into ICGLdr (`func_0032109C`) / typemap walk;
 discriminate empty package (C) vs walk never scheduled (A).
 
+
+## 27. Pós-SHGX → ICGLdr: veredito A1 (walk natural nunca agendado) (2026-07-22)
+
+### Pergunta
+
+Com WAD stream + SHGX expand GREEN (§25–§26), o ICGLdr/typemap deixa de ser
+parede **porque** o package SHGX está vazio (C), ou porque o **walk nunca é
+agendado** (A)?
+
+### Medição natural (sem GATE-FORCE) — `/tmp/vdec_t1sz.log`
+
+| Sinal | Valor |
+|-------|------:|
+| SHGX T1SZ/VT28R/GEND/FIN | ≥1 cada |
+| WADLD-BODY | ≥1 |
+| **CMP-ENTER** (func_0032E200) | **0** |
+| **TYMAP-171** | **0** |
+| **LDRSH** | **0** |
+| SHADERSRC N>0 | 0 (18× N=0 early boot only) |
+
+SHGX TOC entries are **48-byte catalog stubs** (size=48, `w0` flag `0x80000020`).
+Nested FIN codes are real guest OPDs that return without loading EFCT microcode.
+Runtime already documented this (`ppu_loader.cpp` ~2075): *“SHGX as 48-byte
+catalog stubs… ICGLdr registered but 171244 never invoked”*. Real shader
+microcode is **HOSTRES/EBOOT gzip**, not these stubs.
+
+### Discriminador FORÇADO (diag only) — `/tmp/vdec_gate.log`
+
+`PS3_GATE_FORCE=1` after `g_ps3_rperma_full` (not acceptance):
+
+```
+[GATE-FORCE] base=0x00700DF8 component=0x4306ADF0 typemap=0x4306B160 vt=0x005130B8
+[GATE-FORCE] calling OPD 0x522E70 (171244) this=0x4306B160 stream=…
+[TYMAP-171] #1 r3=0x4306B160 r4=0x0FEFE960
+[LDRSH] #1 entry r3=0x0FEFF918 r4=0x00000000
+[GATE-FORCE] returned from 171244 path
+```
+
+| Conclusão | Evidência |
+|-----------|-----------|
+| Typemap **existe** no heap natural | `vt=0x5130B8` em `component+0xDC` |
+| Walk **mecânico** funciona | TYMAP-171 + LDRSH com force |
+| Caller natural **nunca entra** | CMP-ENTER=0 em boots naturais longos |
+| SHGX expand ≠ unlock do walk | expand GREEN e ainda TYMAP-171=0 natural |
+
+### VEREDITO: classe **A1** (reforçado pós-WAD)
+
+O elo partido continua: **nada no grafo exercitado chama `func_0032E200`**
+(vcall OPD `0x522E70` → `func_00171244`). Não é C (fonte vazia após walk) —
+o walk **não corre**. Não é A3 (typemap ausente) — GATE-FORCE acha typemap
+vivo. SHGX catalog + WAD BODY são progresso de **asset open/stream**, não
+fecham a parede [D] do registry.
+
+### O que **não** fazer
+
+- Celebrar GATE-FORCE / synthetic F85F como aceite
+- Forjar N>0 em SHADERSRC / CRC bypass
+- Tratar expand SHGX stub como “shaders carregados”
+
+### Próximo fix fiel (candidato)
+
+RE/instrumentar **quem deveria agendar** o component stream com tipo
+`0xF85F9B1E` após R_Perm (cadeia acima de `func_0032E200` — nota
+`2026-07-21-registry-caller-chain-A1.md`): micro-construtores /
+scene load pós-legal-screen, não mais FIOS/WAD open.
+
