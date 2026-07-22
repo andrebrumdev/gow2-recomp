@@ -56,8 +56,7 @@ fica em `ppu_recomp_005.cpp` (`func_003CC2B8`). Probes só no entry dão falso
 
 ## Próximo
 
-- O consumer de obj+0x4 (CGOWShader combination / lookup por key) — as 889
-  entradas são consultadas? Instrumentar o lookup que emite
-  `"Invalid shader combination"`.
-- Correlacionar keys REC2 com hashes do `gowshader.cfx` offline (opcional).
+- ~~Consumer / Invalid~~ → **respondido** em `notes/2026-07-22-crc-consumer.md`:
+  CRC lookup `miss=0`, **Invalid=0** com HOSTRES; root ICG partilha árvore.
+- Interpretar `res=0x01010000` e path set_shader / Metal.
 - Walk/A1 permanece wall à parte para ICGLdr WAD path.
