@@ -173,3 +173,29 @@ correlacionar com acessos ao pacote ANM (offsets 0x340/0x500 do header) e
 levantar a rotina de descompressão de track. Com ela, o player nativo do
 viewer (GPU skinning já pronto, só trocar a fonte do poseL) toca
 navWalkFast em loop.
+
+### 7.3 DECODER LOCALIZADO no lift PPU (ataque ao código do jogo)
+
+Rota: string "tAnimSystem" (VA 0x4c3148) → entrada de typemap @0x53b370 →
+estrutura de tipo @0x538c98 = **vtable com 16 métodos** (0x390ef0..0x391d50,
+rtoc 0x541178). Vizinhos no typemap: zeroJoint/synchJoint/linkJoint.
+
+Varredura global de assinatura (casts s16/s8 + densidade float + loops) nas
+56k funções lifted apontou a família:
+
+- **`func_0022AD7C`** (ppu_recomp_003.cpp:372725) e gêmea **`func_0022BF14`**
+  (~700 linhas cada; variantes com/sem interpolação?) + continuações
+  `func_0022B870/0022BB10/0022BB30/0022B08C` e `func_00229828` (setup).
+- CONFIRMAÇÃO estrutural: lê os u16 em +0/+2/+4 do registo de track (12B),
+  soma-os como CONTAGENS DE KEYS (a+b+(c<<2 via rlwinm(...,2,...)?)),
+  converte p/ float e multiplica por fpr[8]=dt → duração; depois clamp de
+  índice de key por frame (gpr[6/7] = frame − campo(+2), comparações com
+  campo(+0)) e leitura de bytes de config numa tabela global TOC
+  (r2−0x29EC). ⇒ campos do registo {a,b,c} = nº de keys por CLASSE
+  (absoluta/delta?), e=?; stride de leitura +2 no stream.
+- Falso-positivo eliminado: os 2 usos de 2/π no ELF (0x2edc7c/0x2ee8bc via
+  TOC r2−0x96C) são LIBM (redução de argumento de sin/cos), não o decoder.
+- Família secundária `func_0026EFxx` (fp≈399): blending/slerp de pose.
+
+Próximo: transcrever func_0022AD7C+continuações (clean-room, ler o lifted
+C++) para wad_anim.c nativo; validar contra navWalkFast e tocar no viewer.
