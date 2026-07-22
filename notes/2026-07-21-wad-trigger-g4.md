@@ -1137,3 +1137,77 @@ FREELIST-TAG-GUARD 263178 next=0xA0090002 (tag) node+4@0x00020004 → abort
 | `PS3_FIOS_STREAM_PUMP` | ON | host aread loop after F2B DONE |
 | `PS3_FIOS_STREAM_SEED` | OFF | only stamp limit, no pump |
 
+
+## 23. Open WAD ret=0 — pump wiped container+8; next wall getsize/ICALL (2026-07-21)
+
+### Symptom (post §22)
+
+After R_Perm FULL via STREAM-PUMP:
+
+```
+4274-after-6610 ret=0x8001070A  # Lgl + Perm (m2v ret=0)
+→ 4274 takes func_002B4330 error path
+→ ICALL-BAD ctr=0x2F776164 ("/wad" as OPD)
+→ FREELIST-TAG-GUARD / freelist desync
+→ WADLD-BODY=0
+```
+
+### Root cause (measured)
+
+`ps3_fios_aread_hle(op,…)` completes the op with:
+
+```c
+vm_write32(op + 0x08, STATUS_DONE);  // STATUS_DONE == 0
+```
+
+STREAM-PUMP passed the **open container** as `op`. On that object,
+`container+0x08` is the **live FIOS open-io pointer**, not an aread status
+word. Every pump chunk zeroed `container+8` → `func_00306610` saw null io →
+returned **0x8001070A** (`func_003067B8`).
+
+Discriminator: RESTATUS logged `was+44=0` (status already clean) but 6610
+still failed with 70A → failure was **null io**, not +44.
+
+### Fix (in-boot GREEN `/tmp/vdec_f2b_ok3.log`)
+
+1. **STREAM-PUMP** uses `movie_io_pread` only; never writes `container+0x08`.
+   Still updates `+0x10`/`+0x14` limit/cursor. Pump outside TRACE gate.
+2. **F2B-RESTATUS** before 6610: re-assert `op+90=1`, `+44=0`, `+CC=0` for
+   F2B FOs (belt after 0030B058 may touch status).
+3. **F2B-KEEP-DONE** after FO install (before 0030B058 trampoline).
+   Do **not** skip 0030B058 — without it the op never links and poll hangs
+   (measured with F2B-NO-REQUEUE experiment).
+
+```
+4274-after-6610 ret=0x00000000  # m2v, R_LglScA, R_PermA
+F2B-STREAM-PUMP Lgl 3072 + Perm 20169344
+GATE-FORCE R_PermA full
+FREELIST-TAG-GUARD = 0
+ret=0x8001070A = 0
+```
+
+### Honesty / next wall
+
+- Open completion is **GREEN** for both WADs.
+- Pump remains host-driven (not natural `002B3D1C`).
+- After success cancel: **ICALL-BAD ctr="/wad"** again
+  (`func_001FAC94` host_ra region; r5=FO R_Perm). Path string used as OPD —
+  likely getsize / media method on incomplete F2B FO vs natural dearch FO.
+- **WADLD-SM** once with `state=1 rem=0` (no state=2 / rem=size as in the
+  error-path runs). WADLD-BODY=0, TYMAP-171=0, LDRSH=0.
+- UNCOMMITTED `0x840000xx` freelist writes return after success path
+  (tag-guard may not hit every site).
+
+### Scripts
+
+| Path | Role |
+|------|------|
+| `recomp_mid_v2/patch_fios_f2b_open_success.py` | markers F2B-KEEP-DONE, F2B-RESTATUS, pump outside TRACE |
+| `recomp_mid_v2/patch_fios_stream_pump.py` | note: movie_io_pread not aread_hle on container |
+
+### Env (unchanged)
+
+| Var | Default | Role |
+|-----|---------|------|
+| `PS3_FIOS_STREAM_PUMP` | ON | host pread loop after F2B DONE |
+| `PS3_FIOS_STREAM_SEED` | OFF | only stamp limit, no pump |

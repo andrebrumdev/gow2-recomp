@@ -7,11 +7,15 @@ Measured 2026-07-21 Mac arm64:
     (stops UNCOMMITTED-HI flood 0x840000xx).
   - ALLOC-NULL-GUARD in 2550C8/2550E8: sub-alloc r3=0 → no stamp@EA0.
   - F2B-STREAM-PUMP after 4274 DONE: rebind container limit/cursor per FO,
-    loop ps3_fios_aread_hle into 0x40080000 until size.
-  - In-boot: R_PermA bytes_read=20169344 preads=154 GATE-FORCE full.
+    loop movie_io_pread into 0x40080000 until size.
+  - Do NOT call ps3_fios_aread_hle(container): it writes STATUS_DONE=0 at
+    op+0x08, which on the OPEN container is the live io pointer → 6610
+    returns 0x8001070A (G4 §23).
+  - In-boot: R_PermA bytes_read=20169344 preads=154 GATE-FORCE full;
+    after-6610 ret=0 for Lgl+Perm (with F2B-RESTATUS).
 
 Markers: FREELIST-TAG-GUARD, ALLOC-NULL-GUARD, F2B-STREAM-PUMP
-Lift gitignored — re-apply after re-lift from session / G4 §22.
+Lift gitignored — re-apply after re-lift from session / G4 §22–§23.
 
 Usage: python3 recomp_mid_v2/patch_fios_stream_pump.py [recomp_macos_v2]
 """
