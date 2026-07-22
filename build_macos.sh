@@ -217,6 +217,7 @@ clang++ -std=c++20 $HOST_OPT \
     -framework Cocoa \
     -framework AVFoundation -framework CoreMedia -framework CoreVideo \
     -framework AudioToolbox -framework CoreAudio \
+    -framework GameController -framework CoreHaptics \
     $SDL_FLAGS $VK_FLAGS -lm \
     -Wl,-stack_size,0x2000000 \
     -o "$OUT"
