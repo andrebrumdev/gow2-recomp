@@ -92,3 +92,28 @@ localização por scan de records funciona).
 Com §2+§3 deste doc, o próximo incremento é skinning com o esqueleto REAL
 (FK pela hierarquia + bind local) e, com o codec do §4, reprodução das
 animações do jogo — 100% dados do psarc.
+
+## 7. Codec do clip (RE em curso, sessão 2026-07-22 tarde)
+
+Sub-anim (ex.: attAirSlashH1 @clip+0x80): header 0x60 {u32le 0x3042, 0, 4,
+f32 1.0, 0, f32 DURACAO_s (x30 = frames), u16 0xffff, u16 ANIM_ID,
+u32 hash, nome[24], ..., u32 size}; descritores 16B em +0x60:
+{u16 0, u16 b, u16 c, u16 d, u32 OFF, f32 1/30} ate dt!=1/30 — 3 secções:
+
+- sec1 (b=5,c=2,d=2, maior): tracks de rotação dos bones. Header
+  {u16 0, u16 N?, u16 ?, u16 1, u16 NFRAMES, u16 ?} + registos de track
+  possivelmente VARIÁVEIS terminando em {u16 NKEYS=frames+1, u16 OFFSET}
+  com offsets ascendentes (ex.: 0x6dc, 0x748, 0x944, 0xaac). Tamanho
+  total ≈ frames*128 bytes (H1: 22f→0xb00; H2: 26f→0xcc0 ≈ 121-122/f).
+  Dados nos offsets: streams de deltas s8 (fc/fa/fb/fd/fe...).
+- sec2 (b=2..3,c=1..2,d=4): mesma estrutura de header {0, 0x62, 0, 1,
+  NFRAMES, ...} — provável translação/root motion (elementos de 4B).
+- sec3 (b=0,c=0,d=2, 0x40): DECODIFICADA: 3 registos
+  {u32le bone, u32le 2, u16 a, u16 b} para bones 0x74/0x76/0x77
+  (rWeapOH/lWeapOH/lChainW) + pad 01010101 — refs de arma/anexo por
+  anim (a=0x2b em H1, 0x33 em H2; b=0x24/0x1c/0x14 fixos por bone).
+
+Constantes: dt=1/30 em TODOS os descritores; NKEYS = frames+1;
+ANIM_ID sequencial (H1=0x15, H2=0x16, H3=0x17). Falta: semântica exata
+dos campos A/B dos registos de sec1 (canal/bone), formato do stream de
+keys (delta s8 com base? escala?), e mapear bone→track.
