@@ -280,3 +280,22 @@ lidas) e de ESTRUTURA de keyframe (header/stride/count), mas o
 endereçamento canal→bone vive na tabela G runtime (0x70082c, fora do ELF).
 Caminho fiel restante: oráculo no boot (dump das poses quando r_hero01
 carrega e G é populada). NÃO forjar o mapeamento.
+
+### 7.7 Tabela G da animação: evidência de população por SPU (liga ao Plano 3)
+
+Investigação do populador de G (=*(r2-0x29EC)=0x70082c, região BSS runtime):
+- **Zero writes** ao slot TOC do ponteiro de G no PPU (só 20 reads).
+- **TODOS os leitores do ponteiro** são a própria família do decoder de
+  animação: func_0022A540 (entry), func_0022AD7C/BF14 (blocos de decode),
+  func_0022A030/A62C/A670/A730/A7B4… (drivers). Todos CONSOMEM G (leem as
+  máscaras de classe); os vm_write que têm são para o frame de stack
+  (r1-rel) e o buffer de saída, não populam G.
+- Conclusão: nada no PPU popula o CONTEÚDO de G → forte evidência de que G é
+  preenchida por **DMA de um job SPU** (escreve direto em memória principal,
+  invisível como vm_write do PPU). Consistente com o GoW2 fazer o setup de
+  canais de animação no SPU.
+
+Implicação para a Camada 2 (Plano 3 SPU deep): a animação de personagens
+depende de G estar populada, e G provavelmente vem de um job SPU. Logo o
+caminho "personagens animam" passa por jobs SPU reais (DMA) funcionando — não
+só pelo decoder PPU. Reforça a ordem: SPU sólido → animação → gameplay.
