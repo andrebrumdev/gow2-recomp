@@ -199,3 +199,23 @@ Varredura global de assinatura (casts s16/s8 + densidade float + loops) nas
 
 Próximo: transcrever func_0022AD7C+continuações (clean-room, ler o lifted
 C++) para wad_anim.c nativo; validar contra navWalkFast e tocar no viewer.
+
+### 7.4 Verificação cruzada dos dados + navegação nativa (paralelo à análise do lift)
+
+Navegação portada para C (ps3recomp/libs/video/tests/wad_anim.c) e validada:
+navWalkFast dur=0.667s, sec0/sec1 = 2 tracks de rotação cada (t0≈3KB, t1≈276B),
+sec2/sec3 = refs de arma (bones 116/118/119/122). Records de 12B confirmados.
+
+Dequant (verificação cruzada no ELF, independente do subagente que lê o lift):
+- 1/32768 (0x38000000) = escala de dequant s16 mais comum no jogo (7012×).
+- Norma dos quats crus = 20861 ≈ 65536/π = **32768 × (2/π)**. Logo: após ÷32768
+  os componentes têm norma 2/π (0.6366, constante 0x3f22f983 presente no ELF);
+  dividir os s16 crus por 20861 dá quats UNITÁRIOS directos (verificado:
+  1º quat da walk = (-0.198, 0.004, 0.026, 0.980), |q|=1.000). ⇒ decode:
+  q_unit = s16_cru / 20861 (ou /32768 e normalizar).
+- Os 2 usos de 2/π no código (0x54080c/0x5409bc) são LIBM (redução p/ sin/cos).
+
+Estrutura do stream (t0): header bit-packed (palavras `7f 77 70`/`f0 f7 f9 77`
+recorrentes = controlo de canais/deltas), quats-âncora esparsos (233 no track),
+runs de deltas s8. NÃO há directório de bones em texto claro — o mapeamento
+bone→canal está codificado no header bit-packed (parte do decode do lift).
