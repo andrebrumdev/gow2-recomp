@@ -4,8 +4,9 @@
 **Probe:** `recomp_mid_v2/patch_type15_cc9d0_disc.py` → lift local `recomp_macos_v2/ppu_recomp_000.cpp`.  
 **Gate env (default OFF):** `PS3_TYPE15_DISC=1` (preferido).  
 Também aceita `PS3_TRACE_CC9D0=1` para as linhas DISC, mas **não** use isso se quiser evitar o spam `[CC9D0] iter=…` do logger antigo.  
+**Gate contract (Python `env_on` ≡ C inject):** ON iff first char is `'1'`; unset/empty/`0`/`false`/… = OFF.  
 **Cap:** ≤20 linhas totais `[CC9D0-DISC]` + `[CB56C-DISC]` (`g_ps3_type15_disc_n`).  
-**Offline:** `python3 recomp_mid_v2/test_trace_cc9d0_env.py` → PASS (`"0"`/unset = off).
+**Offline:** `python3 recomp_mid_v2/test_trace_cc9d0_env.py` → PASS (`"0"`/unset/`false` = off; `"1"` = on).
 
 ## Recipe
 
