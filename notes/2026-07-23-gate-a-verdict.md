@@ -1,4 +1,4 @@
-# Veredito Gate A — Track M (M0–M5) + M3+ residual (R1–R3) — 2026-07-23
+# Veredito Gate A — Track M (M0–M5) + M3+ residual (R1–R11) — 2026-07-23
 
 **Fecho honesto:** Gate **B GREEN**, Gate **A RED**. Menu UI **NO**. Playable **NO**.
 
@@ -178,33 +178,33 @@ Plano: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`.
 
 ---
 
-## Wall seguinte (pós M3+ R1–R10)
+## Wall seguinte (pós M3+ R1–R11)
 
-**Wall activo = present re-arm pós-load** — quem **deveria** *agendar* o parent
-de present **depois de thr** (não o leaf 156680). R5–R8 fecharam issuer + hot
-intro; **R9** fecha que **nenhum** path menu/frame/movie-present reentra pós thr
-(`MENUPRESENT` todos `post=0`; `194FFC`/`2B21*`/`B61F4` tot=0; `2C0508` 6147 **pre-only**).
-**R10** sobe o arm: `B6150`/`B94EC`/`B94D4`/`B7888` **tot=0**; thr oneshot
-`25C838=1` e **`36A598=0`** (main não sai do boot body); CE03C wait **não** sole block.
+**Wall activo = present re-arm pós-load** — main pós thr preso em
+**`2B2DD0→B951C` + `CC9D0` (f4=0)**; menu arm **sem** OPD/schedule vivo.
+R5–R8 issuer+hot intro; R9–R10 schedule/arm tot=0; **R11** fecha OPD:
+`B94EC`/`B61F4` **sem OPD**; `B6150` OPD `0x51D7A0` **0 refs estáticas**;
+post-thr sample 100% em {CC9D0,2B2DD0,B951C}; `SCHEDARM-ICALL` 0.
 
 **Não** é: empty-list, pad HLE, HEAP40 default, content-hold, ICALL-BAD sole cause,
 nem circuit-breaker nosso em 2EFD60/14FE18/CDBA4/menu path (R7–R9), nem CE03C
-wait-idle cosmético (R10 H3 DEAD as sole).
+wait-idle cosmético (R10 H3 DEAD as sole), nem “falta OPD estático de B94EC”
+(R11: B94EC não é entry).
 
 Prioridade de RE/fix:
 
-1. **Re-arm (R11):** OPD/vtable que carrega `B94EC`/`B6150`/`B61F4`; residual
-   B71 pós thr; writers de `*(TOC-0x62B0)+0x1CC`; porquê `36A598` nunca corre.
-   Critério Gate A: SetFlip_after_R_Perm≥1.
+1. **Re-arm (R12):** sair do spin TYPE15/`2B2DD0→B951C` (f4 writers / product
+   attach / vtable icall em B951C que agende present). Critério Gate A:
+   SetFlip_after_R_Perm≥1.
 2. **f4 writers** TYPE15: quem escreve f4 ∈ {1,5,6,7,8,9} no fluxo natural (não UNSTICK).
 3. ICALL freelist writer em `0x400C3D88` — **co-sinal** (stream/typemap); não gate único.
 4. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
 
 **Não** promover a default: `PS3_CC9D0_LIVE_SKIP`, YIELD, `PS3_ICALL_HEAP40`,
 `PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH`, `PS3_TRACE_PRESENTLOOP`,
-`PS3_TRACE_MENUPRESENT`, `PS3_TRACE_SCHEDARM` — probes opt-in only.
+`PS3_TRACE_MENUPRESENT`, `PS3_TRACE_SCHEDARM`, `PS3_TRACE_POSTTHR_PC` — probes opt-in only.
 
-### R5–R10 (issuer + present-loop + menu schedule + arm)
+### R5–R11 (issuer + present-loop + menu schedule + arm + OPD)
 
 | Task | Outcome |
 |------|---------|
@@ -214,10 +214,11 @@ Prioridade de RE/fix:
 | **R8** | PRESENTLOOP: hot=`CDBA4/CDC08/CDD00/CDD88` tot≈41k **post=0**; CE0A0=1; 2C07F8=2 pre-only; exit=u8+4 / movie_idx==4 |
 | **R9** | MENUPRESENT: H1 **confirmada** — schedule parents todos post=0; menu path tot=0; 2C0508=6147 pre-only; H4 DEAD; **sem fix** |
 | **R10** | SCHEDARM: arm `B6150/B94*` tot=0; `25C838=1` `36A598=0`; BB414→BB37C 1×; CDFDC 11k pre-only; CE03C wait H3 DEAD sole; **sem fix** |
+| **R11** | OPD: B94EC/B61F4 **no OPD**; B6150 OPD orphan; POSTTHR 100% {CC9D0,2B2DD0,B951C}; ICALL menu 0; **sem fix** |
 
 Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 `r7-flip-path-rearm.md`, `r8-present-loop-parents.md`,
-`r9-menu-present-schedule.md`, `r10-sched-arm.md`.
+`r9-menu-present-schedule.md`, `r10-sched-arm.md`, `r11-opd-sched.md`.
 
 ---
 
@@ -236,11 +237,12 @@ Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 - Metal stack M0/M1 overlay+draw path já GREEN no eixo GPU.
 - M2+ MSL/tex/state não contam como menu; pixels de jogo exigem draws guest (S/M).
 
-### Track M residual / M3+ — R1–R10 **diag closed** no issuer/loop/schedule/arm; fix de re-arm **aberto**
+### Track M residual / M3+ — R1–R11 **diag closed** no issuer/loop/schedule/arm/OPD; fix de re-arm **aberto**
 
 | Item | Status | Acção |
 |------|--------|--------|
-| Present re-arm pós thr | ⬜ wall | R11: OPD `B94EC`/`B6150` + residual B71 + counter +0x1CC; SetFlip_after≥1 |
+| Present re-arm pós thr | ⬜ wall | R12: leave `2B2DD0→B951C`+CC9D0 f4=0; SetFlip_after≥1 |
+| Menu OPD schedule | ✅ R11 | B94EC/B61F4 no OPD; B6150 OPD 0 refs; POSTTHR only CC9D0/2B2DD0/B951C |
 | Menu schedule arm | ✅ R10 | B6150/B94* tot=0; 25C838 oneshot 36A598=0; CE03C wait not sole |
 | Menu schedule parents | ✅ R9 | H1: 194FFC/2B21*/B61* tot=0; 2C0508/2C07F8 pre-only; H4 DEAD |
 | Hot intro loop | ✅ R8 | `CDBA4→…→CDD88→156680` ~41k post=0; CE0A0 exit guards |
