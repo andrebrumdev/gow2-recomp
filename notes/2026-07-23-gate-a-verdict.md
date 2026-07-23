@@ -178,29 +178,30 @@ Plano: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`.
 
 ---
 
-## Wall seguinte (pós M3+ R1–R8)
+## Wall seguinte (pós M3+ R1–R9)
 
-**Wall activo = present re-arm pós-load** — quem **deveria** re-chamar
-present **depois de thr** (fora do nest intro CE0A0, que já saiu). R5 matou
-17ACC; R6–R7 fixam issuer + post=0 no path flip; **R8** fixa o hot loop
-`CDBA4→CDC08→CDD00→CDD88→156680` (~41k, **post=0**) e guards de saída CE0A0
-(`u8[obj+4]` / movie_idx==4). Nenhum parent de 156680 reentra pós thr.
+**Wall activo = present re-arm pós-load** — quem **deveria** *agendar* o parent
+de present **depois de thr** (não o leaf 156680). R5–R8 fecharam issuer + hot
+intro; **R9** fecha que **nenhum** path menu/frame/movie-present reentra pós thr
+(`MENUPRESENT` todos `post=0`; `194FFC`/`2B21*`/`B61F4` tot=0; `2C0508` 6147 **pre-only**).
 
 **Não** é: empty-list, pad HLE, HEAP40 default, content-hold, ICALL-BAD sole cause,
-nem circuit-breaker nosso em 2EFD60/14FE18/CDBA4 (R7–R8).
+nem circuit-breaker nosso em 2EFD60/14FE18/CDBA4/menu path (R7–R9).
 
 Prioridade de RE/fix:
 
-1. **Re-arm (R9):** quem agenda `2C07F8` / `2B21C4` / path menu **após** thr /
-   product TYPE15 (f4 progress). Critério: SetFlip_after_R_Perm≥1.
+1. **Re-arm (R10):** quem agenda `B61F4`/`BB424` (menu→194FFC) ou entry real de
+   `2B21C4` (OPD) **ou** re-chama `25C838`/`2B2E74` pós thr. Critério:
+   SetFlip_after_R_Perm≥1.
 2. **f4 writers** TYPE15: quem escreve f4 ∈ {1,5,6,7,8,9} no fluxo natural (não UNSTICK).
 3. ICALL freelist writer em `0x400C3D88` — **co-sinal** (stream/typemap); não gate único.
 4. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
 
 **Não** promover a default: `PS3_CC9D0_LIVE_SKIP`, YIELD, `PS3_ICALL_HEAP40`,
-`PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH`, `PS3_TRACE_PRESENTLOOP` — probes opt-in only.
+`PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH`, `PS3_TRACE_PRESENTLOOP`,
+`PS3_TRACE_MENUPRESENT` — probes opt-in only.
 
-### R5–R8 (issuer + present-loop parents)
+### R5–R9 (issuer + present-loop + menu schedule)
 
 | Task | Outcome |
 |------|---------|
@@ -208,9 +209,11 @@ Prioridade de RE/fix:
 | **R6** | Host BT: issuer `func_002EFD60`/`2EFDA4`, NID `0x21397818` |
 | **R7** | FLIPPATH: 2EFD60/14FE18/156680 tot≈29k **post=0**; 2B2E74 tot=1; Gate A RED |
 | **R8** | PRESENTLOOP: hot=`CDBA4/CDC08/CDD00/CDD88` tot≈41k **post=0**; CE0A0=1; 2C07F8=2 pre-only; exit=u8+4 / movie_idx==4 |
+| **R9** | MENUPRESENT: H1 **confirmada** — schedule parents todos post=0; menu path tot=0; 2C0508=6147 pre-only; H4 DEAD; **sem fix** |
 
 Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
-`r7-flip-path-rearm.md`, `r8-present-loop-parents.md`.
+`r7-flip-path-rearm.md`, `r8-present-loop-parents.md`,
+`r9-menu-present-schedule.md`.
 
 ---
 
@@ -229,11 +232,12 @@ Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 - Metal stack M0/M1 overlay+draw path já GREEN no eixo GPU.
 - M2+ MSL/tex/state não contam como menu; pixels de jogo exigem draws guest (S/M).
 
-### Track M residual / M3+ — R1–R8 **diag closed** no issuer/loop; fix de re-arm **aberto**
+### Track M residual / M3+ — R1–R9 **diag closed** no issuer/loop/schedule; fix de re-arm **aberto**
 
 | Item | Status | Acção |
 |------|--------|--------|
-| Present re-arm pós thr | ⬜ wall | R9: schedule frame/menu (`2C07F8`/`2B21*`) pós thr; SetFlip_after≥1 |
+| Present re-arm pós thr | ⬜ wall | R10: quem **agenda** B61F4/BB424 ou 2B21C4 OPD ou re-chama 25C838 pós thr; SetFlip_after≥1 |
+| Menu schedule parents | ✅ R9 | H1: 194FFC/2B21*/B61* tot=0; 2C0508/2C07F8 pre-only; H4 DEAD |
 | Hot intro loop | ✅ R8 | `CDBA4→…→CDD88→156680` ~41k post=0; CE0A0 exit guards |
 | Issuer flip intro | ✅ R6–R7 | `2EFD60`/`14FE18`; 17ACC DEAD (R5) |
 | ICALL-BAD 0x40637488 | ✅ classificado | freelist-as-code; H3 DEAD como sole flip cause; writer exacto opcional |
