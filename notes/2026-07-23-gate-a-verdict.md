@@ -1,4 +1,4 @@
-# Veredito Gate A — Track M (M0–M5) — 2026-07-23
+# Veredito Gate A — Track M (M0–M5) + M3+ residual (R1–R3) — 2026-07-23
 
 **Fecho honesto:** Gate **B GREEN**, Gate **A RED**. Menu UI **NO**. Playable **NO**.
 
@@ -6,10 +6,16 @@ Track M (TYPE15 / CC9D0 / frame loop pós-B71) **fecha o diagnóstico** com
 medição e um fix estrutural (M2 CLOSE-PRESERVE). **Não** fecha o wall de menu:
 o guest ainda não reentra em present/pad após open de WAD.
 
+**M3+ residual (R1–R3)** afiou a root class: ICALL-BAD freelist-as-code **não**
+é a causa do corte de flip; HEAP40 skip H3 **DEAD**; único emissor de flip medido
+é a banda intro `func_00017ACC` — **sem re-arm** pós open WAD (TIMEOUT=120
+ainda `SetFlip_after_R_Perm=0`). Wall activo = **present re-arm** pós-load.
+
 Índices:
 - `ps3recomp/docs/superpowers/plans/2026-07-23-00-gow2-playable-master-INDEX.md`
 - `ps3recomp/docs/superpowers/plans/2026-07-20-00-wall-chain-INDEX.md`
-- Plano tasks: `ps3recomp/docs/superpowers/plans/2026-07-23-menu-type15-frame-loop.md`
+- Plano Track M: `ps3recomp/docs/superpowers/plans/2026-07-23-menu-type15-frame-loop.md`
+- Plano residual: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`
 
 Recipe canónico: `./rodar_gow2_menu_fast.sh` (ou env equivalente) +
 `python3 count_menu_gate.py <log>`; kill por PID; `PS3_NO_RSX=1` suficiente
@@ -17,12 +23,12 @@ para métricas de SetFlip/pad (printf guest).
 
 ---
 
-## Tabela final de gates (medida nesta track)
+## Tabela final de gates (medida M0–M5 + M3+ R1–R3)
 
 | Gate | Status | Evidence |
 |------|--------|----------|
-| **B** | **GREEN** | thr_end≥1, R_Perm full **20169344**, StartSeq real (≥2 async path / FORCE+REPLAY-NOPIC), **PARK=0**, **FATAL=0**; smokes M0–M4 |
-| **A** | **RED** | **SetFlip_after_R_Perm=0**, **Pad_after_R_Perm=0** após linha R_Perm full / B71 |
+| **B** | **GREEN** | thr_end≥1, R_Perm full **20169344**, StartSeq real (≥2 async path / FORCE+REPLAY-NOPIC), **PARK=0**, **FATAL=0**; smokes M0–M4 + R1–R3 |
+| **A** | **RED** | **SetFlip_after_R_Perm=0** (incl. TIMEOUT=120), **Pad_after_R_Perm=0** após linha R_Perm full / B71 |
 | **Menu UI** | **NO** | sem FSM de menu / NewGame / Press Start pós thr; st620 só `0→0` com `overlay_done=1` |
 | **Playable** | **NO** | explícito — não claim |
 
@@ -56,7 +62,7 @@ Timeline crítica: último `SetFlipCommand` **antes** de `movieio open` de
 | **M2** | `1f5d61c` | `fix(gow2): TYPE15 product/list preserve pós-sanitize (M2 — H1)` — CLOSE-PRESERVE nodes=12; f4 still 0 |
 | **M3** | `90829b6` | `diag(gow2): M3 post-B71 flip still blocked — guest abandona present pós-WAD` — metrics + root class |
 | **M4** | `e7cf689` | `diag(gow2): M4 pad/menu still blocked pós-WAD` — pad never polled post-WAD |
-| **M5** | *(este commit)* | `docs(gow2): veredito Gate A RED Track M (M0–M4)` — fecho honesto |
+| **M5** | `124d697` | `docs(gow2): veredito Gate A RED Track M (M0–M4)` — fecho honesto |
 
 Notas por task (mesmo repo):
 
@@ -68,6 +74,10 @@ Notas por task (mesmo repo):
 | M3 | `notes/2026-07-23-m3-postb71-flip.md` |
 | M4 | `notes/2026-07-23-m4-pad-menu.md` |
 | M5 | `notes/2026-07-23-gate-a-verdict.md` (este ficheiro) |
+| R1 | `notes/2026-07-23-r1-icall-bad-present.md` |
+| R2 | `notes/2026-07-23-r2-icall-flip-disc.md` |
+| R3 | `notes/2026-07-23-r3-present-reentry.md` |
+| R4 | `notes/2026-07-23-gate-a-verdict.md` (secção M3+ abaixo) |
 
 ### Resumo de outcomes
 
@@ -79,42 +89,108 @@ Notas por task (mesmo repo):
 | M3 | Infra `count_menu_gate.py`; YIELD/LIVE_SKIP **não** desbloqueiam flip → root class: guest abandona present no open WAD |
 | M4 | Pad Init cedo; **zero** GetData/GetInfo2; autostart HLE pronto mas não exercitado; sem menu strings reais |
 | M5 | Docs/INDEX; **Gate A permanece RED** |
+| R1 | ICALL-BAD `0x40637488` = freelist-as-code; flip morre no open Lgl **antes** do 1º ICALL |
+| R2 | HEAP40 skip H3 **DEAD** — silenciar 0x40 **não** restaura flip; H1 MEM dump reforça freelist |
+| R3 | único flip issuer = `func_00017ACC` band; content-hold/handler/late-flip **DEAD**; **no re-arm** pós thr |
+| R4 | Docs; **Gate A ainda RED** — wall = present re-arm |
 
 ---
 
-## Root class (após M0–M4)
+## Root class (após M0–M4; afiada em M3+ R1–R3)
 
-**Primária:** o guest **abandona** o path de present/frame flip ao sair de
-movie/logo para load de WADs e **não reentra** em `cellGcmSetFlip*` até timeout.
+**Primária (M3, confirmada R3):** transição de modo **intro-present → asset-load**
+no open `R_LglScA` / FIOS HOST-POP **encerra** o único path de flip medido
+(`func_00017ACC` band `g={0x17ADE,0x17ADF}`). Após R_Perm full + thr o guest
+**nunca re-agenda** present/pad (TIMEOUT=120 → SetFlip_after_R_Perm=**0**).
 
-**Não é (sozinho):** backend silencioso; giant-lock sem yield no tick TYPE15;
-lista TYPE15 vazia (M2 resolveu nodes=12 — necessário, **não suficiente**).
+O open WAD é o **início do load** (corte de present esperado); a falha de Gate A
+é **falta de re-arm do frame/present pós-load**, não “flip que devia continuar
+durante o open”.
 
-**Co-sinais abertos:**
+**Não é (sozinho / DEAD em R2–R3):**
+
+| Hipótese | Veredito | Prova |
+|----------|----------|-------|
+| Backend RSX silencioso / GCM handler limpo no WAD | **DEAD** | 25k–31k flips OK pré-WAD; handler/mode 1× cedo, 0 re-sets; guest deixa de chamar SetFlip |
+| Content-hold / BOOT_LOGO_MS prende present | **DEAD** | boot logo DONE ×2; ≥1.2k flips **após** último DONE, **antes** do open WAD |
+| GetFlipStatus wait hang | **DEAD** | GetFlipStatus count=0 no boot |
+| Flip “atrasado” >90s | **DEAD** | TIMEOUT=120 ainda after=0 |
+| ICALL-BAD freelist causa única do zero flip | **DEAD (H3)** | corte no open Lgl **antes** do 1º ICALL; HEAP40 skip after=0 |
+| Lista TYPE15 vazia | **DEAD** (M2) | CLOSE-PRESERVE nodes=12 — necessário, **não suficiente** |
+| Giant-lock / YIELD / LIVE_SKIP | **DEAD** (M3) | medidos inúteis para flip |
+
+**Co-sinais abertos (não resolvidos R1–R3):**
 
 | Sinal | Nota |
 |-------|------|
-| CC9D0 f4=f54=0 nos 2 objs TYPE15 | writer de avanço (enum 1/5/6/…) não corre |
+| CC9D0 f4=f54=0 nos 2 objs TYPE15 | writer de avanço (enum 1/5/6/…) não corre; product incompleto |
 | parent scene list não cresce | só 2 `this` pós-B71 |
-| ICALL-BAD `0x40637488` ×12 | vtable/heap cookie `r12=0x40004024` — candidato UI/render partido |
+| ICALL-BAD `0x40637488` ×12 | freelist-as-code em `r3=0x400C3D88`, `r12=arena+4=0x40004024` — **co-sinal** stream/UI, **não** causa do corte de flip |
 | st620 0→0 pós thr | title / 2nd-movie FSM idle |
 | pad poll zero | vive no frame path que não reentra |
 
 ---
 
-## Wall seguinte (não “Track S first” às cegas)
+## M3+ residual R1–R3 (fecho diagnóstico 2026-07-23)
 
-**Wall activo = post-WAD present / frame arm** — não empty-list alone, não pad HLE.
+Plano: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`.
 
-Prioridade de RE/diag:
+### Commits (gow2-recomp)
 
-1. Quem **deveria** chamar `cellGcmSetFlip*` no frame loop **após** open WAD
-   (caller do último flip pré-WAD; path pós `R_LglScA` / thr / B71).
-2. Origem de **ICALL-BAD `0x40637488`** (ctr / freelist / TOC).
-3. Quem escreve **f4 ∈ {1,5,6,7,8,9}** no fluxo natural (não forjar UNSTICK).
-4. Só depois: esperar pad poll / menu FSM (M4 provou autostart inútil sem GetData).
+| Task | SHA | Mensagem / outcome |
+|------|-----|--------------------|
+| **R1** | `1a540c8` | `diag(gow2): R1 RE ICALL-BAD e present pós-WAD` — freelist-as-code; flip cut pré-ICALL |
+| **R2** | `55e702a` | `diag(gow2): R2 H3 DEAD — HEAP40 não restaura SetFlip_after` — H3 DEAD; MEM dump H1 |
+| **R3** | `541c37b` | `diag(gow2): R3 present pós-WAD — mode cut + no re-arm` — único issuer `func_00017ACC`; TIMEOUT=120 after=0 |
+| **R4** | `20aeb74` | `docs(gow2): M3+ R1–R3 Gate A RED — present re-arm wall` |
 
-**Não** promover `PS3_CC9D0_LIVE_SKIP` / YIELD a default — medidos inúteis para flip.
+### Commits de suporte (ps3recomp, probes default OFF)
+
+| Task | SHA | Mensagem |
+|------|-----|----------|
+| **R2** | `e7dce33` | `feat(ppu): PS3_ICALL_HEAP40 + TRACE_ICALL_BAD_MEM (R2 disc)` |
+| **R3** | `8eb5e00` | `diag(gow2): R3 PS3_TRACE_MAINLOOP guest flip watermark` |
+
+### Outcomes por task
+
+| Task | Resultado | Aceite Gate A |
+|------|-----------|---------------|
+| **R1** | `0x40637488` = bloco freelist arena `0x40004020` lido como CTR; não vtable TYPE15; timeline: último SetFlip **antes** `movieio open R_LglScA` | **RED** (diag only) |
+| **R2** | `PS3_ICALL_HEAP40=1` → ICALL-BAD 0x40 skip; after=**0**/0 vs base; H3 **DEAD**; MEM: r3 tag freelist `0x9102FFFF` | **RED** |
+| **R3** | MAINLOOP: único fingerprint guest `g={17ADE,17ADF}` ∈ `func_00017ACC`; last_flip no open Lgl = total final; D1–D4 DEAD; re-arm **ausente** pós thr | **RED** (SetFlip_after=0 @120s) |
+| **R4** | Docs + INDEX; playable=**NO** | **RED** documentado |
+
+### Contagens R3 (representativas)
+
+| Métrica | Valor |
+|---------|-------|
+| SetFlip_total (intro pré-WAD) | ~25k–31k |
+| **SetFlip_after_R_Perm** | **0** (TIMEOUT 90 e **120**) |
+| thr_end / R_Perm full | 1 / 1 |
+| Gate B | GREEN |
+| Flip guest path pré-WAD | só `func_00017ACC` band |
+| Flip guest path pós thr | **nenhum** |
+
+---
+
+## Wall seguinte (pós M3+ R1–R3)
+
+**Wall activo = present re-arm pós-load** — quem **deveria** re-chamar o path
+`func_00017ACC` (callers estáticos candidatos: `func_0001E1A8` / `1E34C` /
+`1EAD8` / `25064` / `25614` / `1E3DC` …) **depois de thr**, e que estado
+(TYPE15 f4 writer / menu FSM / scene arm) o desbloqueia.
+
+**Não** é: empty-list, pad HLE, HEAP40 default, content-hold, ICALL-BAD sole cause.
+
+Prioridade de RE/fix:
+
+1. **Re-arm:** callers de `func_00017ACC` / schedule de present pós thr (sem forjar flip HLE).
+2. **f4 writers** TYPE15: quem escreve f4 ∈ {1,5,6,7,8,9} no fluxo natural (não UNSTICK).
+3. ICALL freelist writer em `0x400C3D88` — **co-sinal** (stream/typemap); não gate único.
+4. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
+
+**Não** promover a default: `PS3_CC9D0_LIVE_SKIP`, YIELD, `PS3_ICALL_HEAP40`,
+`PS3_TRACE_MAINLOOP` — probes opt-in only.
 
 ---
 
@@ -133,19 +209,20 @@ Prioridade de RE/diag:
 - Metal stack M0/M1 overlay+draw path já GREEN no eixo GPU.
 - M2+ MSL/tex/state não contam como menu; pixels de jogo exigem draws guest (S/M).
 
-### Track M residual / M3+
+### Track M residual / M3+ — R1–R3 **diag closed**; fix de re-arm **aberto**
 
-| Item | Acção |
-|------|--------|
-| Present arm pós-WAD | RE + probes gated; critério SetFlip_after_R_Perm≥1 |
-| ICALL-BAD 0x40637488 | classificar corrupt vs path morto |
-| f4 writers | RE estática + store probe se necessário |
-| Pad/menu | re-smoke só **depois** de flip≥1 pós-R_Perm |
+| Item | Status | Acção |
+|------|--------|--------|
+| Present re-arm pós thr | ⬜ wall | RE callers `func_00017ACC`; critério SetFlip_after_R_Perm≥1 |
+| ICALL-BAD 0x40637488 | ✅ classificado | freelist-as-code; H3 DEAD como sole flip cause; writer exacto opcional |
+| f4 writers | ⬜ aberto | RE estática + store probe se necessário |
+| Pad/menu | ⬜ blocked | re-smoke só **depois** de flip≥1 pós-R_Perm |
 
 ### Theater blacklist (ainda em vigor)
 
 - Sem PARK como StartSeq; sem soft-park CE03C; sem claim menu por FlashUI sparse;
-  sem CC9D0-SKIP como menu; sem “playable” com Gate A red.
+  sem CC9D0-SKIP como menu; sem “playable” com Gate A red; sem HEAP40 default
+  como “fix”; sem flip HLE forjado.
 
 ---
 
