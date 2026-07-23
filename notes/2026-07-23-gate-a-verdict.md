@@ -98,13 +98,15 @@ Notas por task (mesmo repo):
 
 ## Root class (após M0–M4; afiada em M3+ R1–R3)
 
-**Primária (M3, confirmada R3; issuer reclassificado R5–R7):** transição de modo
+**Primária (M3, confirmada R3; issuer reclassificado R5–R8):** transição de modo
 **intro-present → asset-load** no open `R_LglScA` / FIOS HOST-POP **encerra** o
 path de flip. R5: `func_00017ACC` **0 enters** (fingerprint MAINLOOP = residual
 SP). R6: issuer real = `_cellGcmSetFlipCommand` NID `0x21397818` via
 `func_002EFD60`/`2EFDA4` ← `14FE18` ← … ← `2B2E74`. R7: 2EFD60/14FE18
-tot≈29k **post=0** após R_Perm; 2B2E74/B71B8 só 1 enter (boot). Após thr o guest
-**nunca re-agenda** present/pad (TIMEOUT=120 → SetFlip_after_R_Perm=**0**).
+tot≈29k **post=0** após R_Perm; 2B2E74/B71B8 só 1 enter (boot). R8: hot loop
+`CDBA4→CDC08→CDD00→CDD88` ~41k **post=0**; CE0A0=1 (exit `u8[obj+4]` /
+movie_idx==4). Após thr o guest **nunca re-agenda** present/pad
+(TIMEOUT=120 → SetFlip_after_R_Perm=**0**).
 
 O open WAD é o **início do load** (corte de present esperado); a falha de Gate A
 é **falta de re-arm do frame/present pós-load**, não “flip que devia continuar
@@ -176,37 +178,39 @@ Plano: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`.
 
 ---
 
-## Wall seguinte (pós M3+ R1–R7)
+## Wall seguinte (pós M3+ R1–R8)
 
 **Wall activo = present re-arm pós-load** — quem **deveria** re-chamar
-`func_00156680` / `func_0014FE18` / `func_002EFD60` (ou path menu equivalente)
-**depois de thr**, e que estado (TYPE15 f4 writer / menu FSM / scene arm) o
-desbloqueia. R5 matou 17ACC; R6–R7 fixam o issuer e **post=0** no path real.
+present **depois de thr** (fora do nest intro CE0A0, que já saiu). R5 matou
+17ACC; R6–R7 fixam issuer + post=0 no path flip; **R8** fixa o hot loop
+`CDBA4→CDC08→CDD00→CDD88→156680` (~41k, **post=0**) e guards de saída CE0A0
+(`u8[obj+4]` / movie_idx==4). Nenhum parent de 156680 reentra pós thr.
 
 **Não** é: empty-list, pad HLE, HEAP40 default, content-hold, ICALL-BAD sole cause,
-nem circuit-breaker nosso em 2EFD60/14FE18 (R7).
+nem circuit-breaker nosso em 2EFD60/14FE18/CDBA4 (R7–R8).
 
 Prioridade de RE/fix:
 
-1. **Re-arm (R8):** callers de `func_00156680` **fora** do ninho intro CE0A0 /
-   schedule present pós thr (sem forjar flip HLE). Critério: SetFlip_after_R_Perm≥1.
+1. **Re-arm (R9):** quem agenda `2C07F8` / `2B21C4` / path menu **após** thr /
+   product TYPE15 (f4 progress). Critério: SetFlip_after_R_Perm≥1.
 2. **f4 writers** TYPE15: quem escreve f4 ∈ {1,5,6,7,8,9} no fluxo natural (não UNSTICK).
 3. ICALL freelist writer em `0x400C3D88` — **co-sinal** (stream/typemap); não gate único.
 4. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
 
 **Não** promover a default: `PS3_CC9D0_LIVE_SKIP`, YIELD, `PS3_ICALL_HEAP40`,
-`PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH` — probes opt-in only.
+`PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH`, `PS3_TRACE_PRESENTLOOP` — probes opt-in only.
 
-### R5–R7 (issuer reclass)
+### R5–R8 (issuer + present-loop parents)
 
 | Task | Outcome |
 |------|---------|
 | **R5** | 17ACC + callers estáticos **tot=0** in-boot; path não é issuer |
 | **R6** | Host BT: issuer `func_002EFD60`/`2EFDA4`, NID `0x21397818` |
 | **R7** | FLIPPATH: 2EFD60/14FE18/156680 tot≈29k **post=0**; 2B2E74 tot=1; Gate A RED |
+| **R8** | PRESENTLOOP: hot=`CDBA4/CDC08/CDD00/CDD88` tot≈41k **post=0**; CE0A0=1; 2C07F8=2 pre-only; exit=u8+4 / movie_idx==4 |
 
 Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
-`r7-flip-path-rearm.md`.
+`r7-flip-path-rearm.md`, `r8-present-loop-parents.md`.
 
 ---
 
@@ -225,11 +229,12 @@ Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 - Metal stack M0/M1 overlay+draw path já GREEN no eixo GPU.
 - M2+ MSL/tex/state não contam como menu; pixels de jogo exigem draws guest (S/M).
 
-### Track M residual / M3+ — R1–R7 **diag closed** no issuer; fix de re-arm **aberto**
+### Track M residual / M3+ — R1–R8 **diag closed** no issuer/loop; fix de re-arm **aberto**
 
 | Item | Status | Acção |
 |------|--------|--------|
-| Present re-arm pós thr | ⬜ wall | R8: callers `156680`/`14FE18` fora CE0A0; SetFlip_after_R_Perm≥1 |
+| Present re-arm pós thr | ⬜ wall | R9: schedule frame/menu (`2C07F8`/`2B21*`) pós thr; SetFlip_after≥1 |
+| Hot intro loop | ✅ R8 | `CDBA4→…→CDD88→156680` ~41k post=0; CE0A0 exit guards |
 | Issuer flip intro | ✅ R6–R7 | `2EFD60`/`14FE18`; 17ACC DEAD (R5) |
 | ICALL-BAD 0x40637488 | ✅ classificado | freelist-as-code; H3 DEAD como sole flip cause; writer exacto opcional |
 | f4 writers | ⬜ aberto | RE estática + store probe se necessário |
