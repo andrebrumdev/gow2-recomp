@@ -21,7 +21,11 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PS3="$HERE/../ps3recomp"
+# Raiz do motor. Override por PS3_ENGINE_ROOT para compilar contra uma worktree
+# git do ps3recomp em vez do checkout ao lado -- necessario quando duas sessoes
+# partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
+# comportamento e' exactamente o de antes.
+PS3="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
 # Default recomp_macos_v2: e o lift em que o apply_all_patches.sh opera (tambem
 # tem esse default). recomp_macos e' um lift ANTIGO sem os patches da sessao --
 # nomeadamente sem o ps3_indirect_tail (fix do bctr), sem o qual o pump da intro
