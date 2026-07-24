@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import sys
 from typing import Optional
+from lift_paths import resolve_lift_paths
 
 MARKER = "[CC9D0-DISC]"
 COUNTER_MARKER = "g_ps3_type15_disc_n"
@@ -257,7 +258,7 @@ def patch(t: str) -> str:
 
 
 def main() -> int:
-    paths = [Path(p) for p in (sys.argv[1:] or ["recomp_macos_v2/ppu_recomp_000.cpp"])]
+    paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_000.cpp")
     rc = 0
     for p in paths:
         if not p.exists():

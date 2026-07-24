@@ -28,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import sys
+from lift_paths import resolve_lift_paths
 
 MARKER = "CLOSE-PRESERVE"
 FN_NAME = "ps3_type15_product_list_reset"
@@ -220,7 +221,7 @@ def patch(t: str) -> str:
 
 
 def main() -> int:
-    paths = [Path(p) for p in (sys.argv[1:] or ["recomp_macos_v2/ppu_recomp_001.cpp"])]
+    paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_001.cpp")
     rc = 0
     for p in paths:
         if not p.exists():

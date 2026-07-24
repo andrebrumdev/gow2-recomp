@@ -81,11 +81,6 @@
 extern unsigned char* vm_base;
 extern int            ppu_guest_range_committed(uint32_t addr, uint32_t n);
 extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao (vm_read8 devolve 1) */
-extern const char*    g_movie_eos_arm_reason;   /* ppu_loader.cpp (default "unknown");
-                                                    este .c e' o UNICO armador real e
-                                                    MUTA-o (nao redefine) antes de armar
-                                                    g_movie_eos_ea -- ver o arm site em
-                                                    movie_sampler_loop() abaixo. */
 extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage) */
 /* Sticky SEQDONE from cellVdec. Weak default 0 so unit tests link without the
  * codec; the strong definition in cellVdec.c wins in the real boot binary. */
@@ -561,14 +556,6 @@ static void movie_sampler_loop(void)
         if (movie_eos_should_arm(s_sampler_eos, g_movie_eos_ea, done, st)
             && !movie_eos_force_blocks_arm(movie_force_seqdone_ms(),
                                           movie_seqdone_seen())) {
-            /* Review fix (Task 5 do motor, Important #1): classifica o motivo
-             * ANTES de armar, para o vm_read8 do motor poder reportar um src=
-             * genuino em vez de "natural" fixo. done_overlay==1 e' o produtor
-             * REAL (overlay ffmpeg/AVAssetReader) -- "natural". done_overlay==0
-             * so' chega aqui com done==1 vindo de movie_done_timebased_poll, o
-             * produtor gated por PS3_MOVIE_DONE_MS que o comentario do topo
-             * deste ficheiro ja documenta como "nao EOF real" -- "forced". */
-            g_movie_eos_arm_reason = done_overlay ? "natural" : "forced";
             g_movie_eos_ea = obj + MOVIE_OFF_EOS;
             fprintf(stderr,
                     "[MOVIEEOS] %s done (st620=%u seqdone=%d force_ms=%d) -> arming EOS read-hook at 0x%08X ([obj+0x744])\n",
