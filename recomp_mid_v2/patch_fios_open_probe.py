@@ -133,11 +133,42 @@ fonte que nao compila.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 MARKER = "FIOS-OPEN-PROBE"
 ENV = "PS3_TRACE_FIOSOPEN"
+
+# CORRECCAO 2026-07-25 (shape-LR)
+# --------------------------------
+# O lifter passou a emitir as chamadas com o link register explicito a frente:
+#     ctx->lr = 0x002B4404; func_0030D578(ctx); DRAIN_TRAMPOLINE(ctx);
+# (antes: so' "func_0030D578(ctx); DRAIN_TRAMPOLINE(ctx);"). Medido: a needle
+# literal passou a aparecer 0x na regiao de func_002B43C0 e o script abortava.
+#
+# Duas mudancas, ambas conservadoras:
+#  1. as needles passam por flex(): o prefixo `ctx->lr = 0x........; ` e'
+#     OPCIONAL, por isso a agulha casa com o lift antigo E com o novo;
+#  2. `edit()` deixou de RE-EMITIR a needle -- agora so' insere `pre` antes e
+#     `post` depois do texto REALMENTE encontrado. Re-emitir o literal antigo
+#     apagaria o `ctx->lr = ...` que o lifter agora emite, o que seria mudar
+#     comportamento do jogo dentro de um patch que so' devia medir.
+LR_OPT = r"(?:ctx->lr = 0x[0-9A-Fa-f]{8}; )?"
+_CALL_RE = re.compile(r"func_[0-9A-Fa-f]{8}\(ctx\); DRAIN_TRAMPOLINE\(ctx\);")
+
+
+def flex(lit: str) -> str:
+    """Regex do bloco literal, com o prefixo de LR opcional nas chamadas."""
+    out = []
+    for line in lit.split("\n"):
+        body = line.lstrip(" ")
+        indent = line[: len(line) - len(body)]
+        if _CALL_RE.fullmatch(body):
+            out.append(re.escape(indent) + LR_OPT + re.escape(body))
+        else:
+            out.append(re.escape(line))
+    return "\n".join(out)
 
 # Prologo do gate por env. Repetido em cada bloco porque cada probe vive num
 # escopo proprio (os `static` sao locais ao bloco instrumentado).
@@ -201,7 +232,7 @@ B4340_PROBE = (
 CALL_NEEDLE = "        func_0030D578(ctx); DRAIN_TRAMPOLINE(ctx);\n"
 
 
-def call_wrap(site: str, creg: int) -> str:
+def call_pre(site: str) -> str:
     return (
         "        /* " + MARKER + "(pre-" + site + "): pedido de open FIOS. r5 e' o\n"
         "         * caminho ja' passado a minusculas por func_002B3890. */\n"
@@ -213,8 +244,12 @@ def call_wrap(site: str, creg: int) -> str:
         "              _n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],_pt,\n"
         "              (uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[7]);\n"
         "            fflush(stderr); } } }\n"
-        + CALL_NEEDLE
-        + "        /* " + MARKER + "(pos-" + site + "): retorno do open. ret==0 => F2 do\n"
+    )
+
+
+def call_post(site: str, creg: int) -> str:
+    return (
+        "        /* " + MARKER + "(pos-" + site + "): retorno do open. ret==0 => F2 do\n"
         "         * plano. [container+4]=obj+0x630 (objecto de ficheiro),\n"
         "         * [container+8]=obj+0x634 = ret (escrito logo a seguir). */\n"
         + GATE
@@ -231,8 +266,7 @@ def call_wrap(site: str, creg: int) -> str:
 # --- func_0030D5CC: separar F2a (sem op) de F2b (ficheiro recusado) --------
 ALLOC_NEEDLE = "        func_00307C8C(ctx); DRAIN_TRAMPOLINE(ctx);\n"
 ALLOC_PROBE = (
-    ALLOC_NEEDLE
-    + "        /* " + MARKER + "(op_alloc): alocacao da op assincrona. r3==0 faz\n"
+    "        /* " + MARKER + "(op_alloc): alocacao da op assincrona. r3==0 faz\n"
     "         * func_0030D578 devolver 0 SEM sequer olhar ao caminho (F2a). */\n"
     + GATE
     + "          if(_on){ static int _n=0; if(_n++<8){\n"
@@ -244,8 +278,7 @@ ALLOC_PROBE = (
 
 FILE_NEEDLE = "        func_0030D29C(ctx); DRAIN_TRAMPOLINE(ctx);\n"
 FILE_PROBE = (
-    FILE_NEEDLE
-    + "        /* " + MARKER + "(file_new): abertura do membro. r3==0 => 0x8001070A e\n"
+    "        /* " + MARKER + "(file_new): abertura do membro. r3==0 => 0x8001070A e\n"
     "         * obj+0x630 fica 0 (F2b). r5/r25 e' o caminho pedido. */\n"
     + GATE
     + "          if(_on){ static int _n=0; if(_n++<8){\n"
@@ -321,8 +354,9 @@ def sig(name: str) -> str:
     return "void " + name + "(ppu_context* ctx) {\n"
 
 
-def edit(root: Path, func: str, tag: str, needle: str, repl: str, what: str) -> str:
-    """Substitui `needle` por `repl` DENTRO da regiao de `func`.
+def edit(root: Path, func: str, tag: str, needle: str,
+         pre: str, post: str, what: str) -> str:
+    """Insere `pre` antes e `post` depois de `needle`, DENTRO da regiao de `func`.
 
     A regiao vai da assinatura ate' a definicao seguinte -- o marcador so' e'
     procurado ai, porque a mesma needle aparece noutras funcoes.
@@ -330,9 +364,13 @@ def edit(root: Path, func: str, tag: str, needle: str, repl: str, what: str) -> 
     O guarda de idempotencia e' `MARKER(tag)`, nao `MARKER` a seco: ha funcoes
     (func_0030D5CC, func_002B43C0) com DUAS insercoes distintas, e um guarda
     por-funcao faria a segunda ser saltada para sempre.
+
+    A needle e' casada por flex() (prefixo de LR opcional) e o texto encontrado
+    e' PRESERVADO tal e qual -- ver a nota de correccao shape-LR no topo.
     """
     signature = sig(func)
     stamp = MARKER + "(" + tag + ")"
+    pat = re.compile(flex(needle))
     for path in sorted(root.glob("ppu_recomp_*.cpp")):
         src = path.read_text(encoding="utf-8", errors="replace")
         i = src.find(signature)
@@ -342,12 +380,14 @@ def edit(root: Path, func: str, tag: str, needle: str, repl: str, what: str) -> 
         region = src[i:j] if j > i else src[i:]
         if stamp in region:
             return f"{path.name}: {func} ({what}) ja instrumentada"
-        if region.count(needle) != 1:
+        hits = list(pat.finditer(region))
+        if len(hits) != 1:
             raise SystemExit(
-                f"{func}: needle de {what} aparece {region.count(needle)}x na "
+                f"{func}: needle de {what} aparece {len(hits)}x na "
                 "regiao (esperado 1) -- o shape do lift mudou, reveja a probe"
             )
-        region = region.replace(needle, repl, 1)
+        m = hits[0]
+        region = region[:m.start()] + pre + m.group(0) + post + region[m.end():]
         path.write_text(src[:i] + region + (src[j:] if j > i else ""),
                         encoding="utf-8", newline="\n")
         return f"{path.name}: {func} ({what}) instrumentada"
@@ -363,27 +403,31 @@ def main() -> int:
         print(f"FAIL: nenhum ppu_recomp_*.cpp em {root}", file=sys.stderr)
         return 1
 
-    # (funcao, tag de idempotencia, needle, substituicao, descricao)
+    # (funcao, tag de idempotencia, needle, texto ANTES, texto DEPOIS, descricao)
     jobs = [
         ("func_002C00DC", "play", sig("func_002C00DC"),
-         sig("func_002C00DC") + PLAY_PROBE, "entrada de Play"),
+         "", PLAY_PROBE, "entrada de Play"),
         ("func_002B4340", "4340", sig("func_002B4340"),
-         sig("func_002B4340") + B4340_PROBE, "entrada do open de media"),
-        ("func_002B43C0", "pre-43C0", CALL_NEEDLE, call_wrap("43C0", 28),
+         "", B4340_PROBE, "entrada do open de media"),
+        ("func_002B43C0", "pre-43C0", CALL_NEEDLE,
+         call_pre("43C0"), call_post("43C0", 28),
          "chamada a 0030D578 (ramo do filme)"),
-        ("func_002B43DC", "pre-43DC", CALL_NEEDLE, call_wrap("43DC", 28),
+        ("func_002B43DC", "pre-43DC", CALL_NEEDLE,
+         call_pre("43DC"), call_post("43DC", 28),
          "chamada a 0030D578 (cauda partilhada)"),
         ("func_002B4490", "4490", sig("func_002B4490"),
-         sig("func_002B4490") + B4490_PROBE, "beacon do 2o helper"),
-        ("func_0030D5CC", "op_alloc", ALLOC_NEEDLE, ALLOC_PROBE, "alocacao da op"),
-        ("func_0030D5CC", "file_new", FILE_NEEDLE, FILE_PROBE, "abertura do membro"),
+         "", B4490_PROBE, "beacon do 2o helper"),
+        ("func_0030D5CC", "op_alloc", ALLOC_NEEDLE, "", ALLOC_PROBE,
+         "alocacao da op"),
+        ("func_0030D5CC", "file_new", FILE_NEEDLE, "", FILE_PROBE,
+         "abertura do membro"),
         ("func_002B4224", "4224", sig("func_002B4224"),
-         sig("func_002B4224") + B4224_PROBE, "poll do estado 1"),
+         "", B4224_PROBE, "poll do estado 1"),
         ("func_002B4274", "4274", sig("func_002B4274"),
-         sig("func_002B4274") + B4274_PROBE, "ramo 'done' do poll"),
+         "", B4274_PROBE, "ramo 'done' do poll"),
     ]
-    for func, tag, needle, repl, what in jobs:
-        print(edit(root, func, tag, needle, repl, what))
+    for func, tag, needle, pre, post, what in jobs:
+        print(edit(root, func, tag, needle, pre, post, what))
     print(f"probe {MARKER} pronta -- corra com {ENV}=1")
     return 0
 

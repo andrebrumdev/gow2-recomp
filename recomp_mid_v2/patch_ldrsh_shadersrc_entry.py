@@ -28,54 +28,126 @@ nota no relatorio).
 
 Ambos sao diagnosticos puros em stderr (nao alteram control-flow),
 idempotentes, e OFF por default (sem env = no-op), regra 6 do CLAUDE.md.
+
+Correccao 2026-07-25 (relift): as duas agulhas eram literais e partiram-se
+com tres mudancas de forma do lifter, nenhuma delas semantica:
+  a) shape-callee-save -- func_0032109C passou a abrir com
+     "uint64_t _cs_27 = ctx->gpr[27];" (x5) antes do prologo, por isso a
+     agulha "header + vm_write64(...-0xB0...)" deixou de casar. Deixamos de
+     reescrever o header: o probe e' inserido IMEDIATAMENTE ANTES da linha
+     de prologo, seja qual for o que a precede.
+  b) shape-LR -- as chamadas passaram a ter prefixo "ctx->lr = 0x003CC26C;"
+     colado ao "func_001856A8(ctx);", partindo a agulha do SHADERSRC. A
+     regex torna esse prefixo opcional.
+  c) chunk-fixo -- ROOT/"ppu_recomp_001.cpp" fixo; o lifter passou de 31 para
+     7 chunks e o apply_all_patches.sh passa um DIRECTORIO. Passa a usar
+     resolve_lift_paths() e a procurar as funcoes em qualquer chunk.
+Todas as agulhas sao tolerantes a espacos/indentacao, para casarem com o lift
+antigo E com o novo.
 """
 from pathlib import Path
+import re
 import sys
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
-C1 = ROOT / "ppu_recomp_001.cpp"
+from lift_paths import resolve_lift_paths
 
-s1 = C1.read_text(encoding="utf-8", errors="replace")
 
-# --- [LDRSH] entry probe: func_0032109C ---
-if "[LDRSH]" in s1:
-    print("LDRSH already present")
-else:
-    old = """void func_0032109C(ppu_context* ctx) {
-        vm_write64(ctx->gpr[1] + -0xB0, ctx->gpr[1]); ctx->gpr[1] += -0xB0;"""
-    new = """void func_0032109C(ppu_context* ctx) {
-        { static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_LDRSH")||getenv("PS3_TRACE_TYMAP"))?1:0;}
+def _flex(literal: str) -> str:
+    """Literal -> regex tolerante a variacoes de espacos/indentacao/quebras."""
+    return r"\s*".join(re.escape(tok) for tok in literal.split())
+
+
+LDRSH_FN_RE = re.compile(r"void\s+func_0032109C\s*\(\s*ppu_context\s*\*\s*ctx\s*\)\s*\{")
+# Ponto de insercao: a linha de prologo da propria func_0032109C.
+LDRSH_ANCHOR_RE = re.compile(
+    r"([ \t]*)"
+    + _flex("vm_write64(ctx->gpr[1] + -0xB0, ctx->gpr[1]); ctx->gpr[1] += -0xB0;")
+)
+
+LDRSH_PROBE = '''{ static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_LDRSH")||getenv("PS3_TRACE_TYMAP"))?1:0;}
           if(on){ static int n=0; if(n++<32)
             fprintf(stderr,"[LDRSH] #%d entry r3=0x%08X r4=0x%08X\\n", n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); fflush(stderr);} }
-        vm_write64(ctx->gpr[1] + -0xB0, ctx->gpr[1]); ctx->gpr[1] += -0xB0;"""
-    if s1.count(old) != 1:
-        raise SystemExit(f"0032109C entry needle count={s1.count(old)} (expected 1)")
-    s1 = s1.replace(old, new, 1)
-    print("LDRSH entry probe added")
+'''
 
-# --- [SHADERSRC] N=<n>: func_003CC208, logo apos a leitura do count no stream ---
-if "[SHADERSRC]" in s1:
-    print("SHADERSRC already present")
-else:
-    old = """        func_001856A8(ctx); DRAIN_TRAMPOLINE(ctx);
-        /* nop */;
-        ctx->gpr[25] = vm_read32(ctx->gpr[1] + 0x70);
-        ctx->gpr[0] = (int64_t)(int32_t)((uint32_t)0x4EC << 16);
-        ctx->gpr[30] = ppc_rldicl(ctx->gpr[26], 0, 32);
-        ctx->gpr[0] = ctx->gpr[0] | 0x4EC4;"""
-    new = """        func_001856A8(ctx); DRAIN_TRAMPOLINE(ctx);
-        /* nop */;
-        ctx->gpr[25] = vm_read32(ctx->gpr[1] + 0x70);
+SRC_FN_RE = re.compile(r"void\s+func_003CC208\s*\(\s*ppu_context\s*\*\s*ctx\s*\)\s*\{")
+# Leitura do campo de contagem do stream; "ctx->lr = 0x...;" e' o prefixo novo
+# (shape-LR) e por isso opcional.
+SRC_RE = re.compile(
+    r"(?:ctx->lr\s*=\s*0x[0-9A-Fa-f]+;\s*)?"
+    + _flex("func_001856A8(ctx); DRAIN_TRAMPOLINE(ctx);")
+    + r"\s*"
+    + _flex("/* nop */;")
+    + r"\s*"
+    + _flex("ctx->gpr[25] = vm_read32(ctx->gpr[1] + 0x70);")
+    + r"(?=\s*"
+    + _flex("ctx->gpr[0] = (int64_t)(int32_t)((uint32_t)0x4EC << 16);")
+    + r"\s*"
+    + _flex("ctx->gpr[30] = ppc_rldicl(ctx->gpr[26], 0, 32);")
+    + r"\s*"
+    + _flex("ctx->gpr[0] = ctx->gpr[0] | 0x4EC4;")
+    + r")"
+)
+
+SRC_PROBE = '''
         { static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_SHADERSRC")||getenv("PS3_TRACE_TYMAP"))?1:0;}
           if(on){ static int n=0; if(n++<32)
-            fprintf(stderr,"[SHADERSRC] #%d N=%d obj=0x%08X\\n", n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-        ctx->gpr[0] = (int64_t)(int32_t)((uint32_t)0x4EC << 16);
-        ctx->gpr[30] = ppc_rldicl(ctx->gpr[26], 0, 32);
-        ctx->gpr[0] = ctx->gpr[0] | 0x4EC4;"""
-    if s1.count(old) != 1:
-        raise SystemExit(f"003CC208 count-read needle count={s1.count(old)} (expected 1)")
-    s1 = s1.replace(old, new, 1)
-    print("SHADERSRC N= probe added")
+            fprintf(stderr,"[SHADERSRC] #%d N=%d obj=0x%08X\\n", n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }'''
 
-C1.write_text(s1, encoding="utf-8", newline="\n")
-print("OK patch_ldrsh_shadersrc_entry")
+
+def _apply_ldrsh(s: str) -> tuple[str, str]:
+    if "[LDRSH]" in s:
+        return s, "LDRSH already present"
+    fn = LDRSH_FN_RE.search(s)
+    if not fn:
+        return s, ""  # nao vive neste chunk
+    m = LDRSH_ANCHOR_RE.search(s, fn.end())
+    if not m:
+        raise SystemExit("0032109C: prologo -0xB0 nao encontrado (lift shape changed?)")
+    indent = m.group(1)
+    return s[: m.start()] + indent + LDRSH_PROBE + s[m.start():], "LDRSH entry probe added"
+
+
+def _apply_shadersrc(s: str) -> tuple[str, str]:
+    if "[SHADERSRC]" in s:
+        return s, "SHADERSRC already present"
+    fn = SRC_FN_RE.search(s)
+    if not fn:
+        return s, ""  # nao vive neste chunk
+    hits = list(SRC_RE.finditer(s, fn.end()))
+    if len(hits) < 1:
+        raise SystemExit("003CC208 count-read needle nao encontrada (lift shape changed?)")
+    m = hits[0]
+    return s[: m.end()] + SRC_PROBE + s[m.end():], "SHADERSRC N= probe added"
+
+
+def main() -> int:
+    paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_001.cpp")
+    rc = 0
+    done = {"LDRSH": False, "SHADERSRC": False}
+    for p in paths:
+        if not p.exists():
+            print(f"skip {p} (inexistente)")
+            continue
+        s = orig = p.read_text(encoding="utf-8", errors="replace")
+        for key, fn in (("LDRSH", _apply_ldrsh), ("SHADERSRC", _apply_shadersrc)):
+            try:
+                s, msg = fn(s)
+            except SystemExit as e:
+                print(f"FAILED {p}: {e}")
+                rc = 1
+                continue
+            if msg:
+                done[key] = True
+                print(f"{p.name}: {msg}")
+        if s != orig:
+            p.write_text(s, encoding="utf-8", newline="\n")
+    missing = [k for k, v in done.items() if not v]
+    if missing:
+        print(f"FAILED: alvos ausentes de todos os chunks: {missing}")
+        rc = 1
+    print("OK patch_ldrsh_shadersrc_entry" if rc == 0 else "NOK patch_ldrsh_shadersrc_entry")
+    return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

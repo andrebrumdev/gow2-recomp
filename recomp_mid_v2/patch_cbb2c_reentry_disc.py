@@ -30,17 +30,24 @@ from pathlib import Path
 import sys
 from lift_paths import resolve_lift_paths
 
+# CORRECCAO 2026-07-25 (re-lift): a agulha antiga era a assinatura da funcao
+# SEGUIDA do bloco de probe "[POSTINTRO] enter func_...". Esse bloco POSTINTRO
+# era uma edicao manual de sessao que NENHUM patch_*.py escreve (grep POSTINTRO
+# em patch_*.py: so' aparece como agulha, nunca como insercao) e por isso nao
+# existe no lift limpo -> as duas agulhas falhavam em todos os chunks.
+# O bloco POSTINTRO nunca foi requisito de comportamento, so' ancora: o proprio
+# docstring pede a insercao "no topo da funcao, antes de qualquer mutacao de
+# registo/stack". Passamos a ancorar na ASSINATURA da funcao (unica em todo o
+# lift, verificado por grep -c = 1 em ppu_recomp_000.cpp e 0 nos restantes),
+# o que casa com o lift NOVO e tambem com o antigo (onde o nosso bloco fica
+# apenas ANTES do POSTINTRO -- mesma posicao semantica: topo da funcao).
 MARKER = "[CBB2C-DISC]"
+MARKER_CB56C = "[CB56C-DISC]"
 
 
-def patch(t: str) -> str:
-    if MARKER in t:
-        return t
-
-    cbb2c_needle = '''void func_000CBB2C(ppu_context* ctx) {
-        { static int _n=0; if(_n++<6){
-            fprintf(stderr,"[POSTINTRO] enter func_000CBB2C #%d r3=0x%08X\\n",
-              _n, (unsigned)(uint32_t)ctx->gpr[3]); fflush(stderr);} }'''
+def patch(t: str) -> tuple[str, str]:
+    """Devolve (texto, estado) com estado em {APPLIED, ALREADY, SKIP}."""
+    cbb2c_needle = "void func_000CBB2C(ppu_context* ctx) {\n"
     cbb2c_insert = cbb2c_needle + '''
         { static int _on=-1; if(_on<0){extern char* getenv(const char*);
             const char* e=getenv("PS3_TRACE_CBB2C_DISC"); _on=(e&&*e&&*e!='0')?1:0;}
@@ -56,12 +63,10 @@ def patch(t: str) -> str:
               fprintf(stderr,"[CBB2C-DISC] base=0x%08X lr=0x%08X count_for_base=%u\\n",
                 _base, _lr, (unsigned)(_idx>=0?_counts[_idx]:0u));
             fflush(stderr);
-          } }'''
+          } }
+'''
 
-    cb56c_needle = '''void func_000CB56C(ppu_context* ctx) {
-        { static int _n=0; if(_n++<6){
-            fprintf(stderr,"[POSTINTRO] enter func_000CB56C #%d r3=0x%08X\\n",
-              _n, (unsigned)(uint32_t)ctx->gpr[3]); fflush(stderr);} }'''
+    cb56c_needle = "void func_000CB56C(ppu_context* ctx) {\n"
     cb56c_insert = cb56c_needle + '''
         { static int _on=-1; if(_on<0){extern char* getenv(const char*);
             const char* e=getenv("PS3_TRACE_CBB2C_DISC"); _on=(e&&*e&&*e!='0')?1:0;}
@@ -75,38 +80,51 @@ def patch(t: str) -> str:
               fprintf(stderr,"[CB56C-DISC] obj=0x%08X caller_lr=0x%08X pre+4=0x%08X pre+54=0x%02X pre+D8=0x%08X\\n",
                 _obj, _lr, _pre4, _pre54, _preD8);
             fflush(stderr);
-          } }'''
+          } }
+'''
 
-    if cbb2c_needle not in t:
-        raise SystemExit("cbb2c needle missing (lift shape changed?)")
-    if cb56c_needle not in t:
-        raise SystemExit("cb56c needle missing (lift shape changed?)")
-
-    t = t.replace(cbb2c_needle, cbb2c_insert, 1)
-    t = t.replace(cb56c_needle, cb56c_insert, 1)
-    return t
+    # CORRECCAO 2026-07-25 (chunk-fixo): com um DIRECTORIO em argv o script varre
+    # os 7 chunks; as duas funcoes vivem so' num deles. Antes qualquer chunk sem a
+    # agulha dava "FAILED" e rc=1. Agora cada site e' tratado de forma
+    # independente e "funcao nao esta' neste chunk" e' SKIP, nao falha; so' se
+    # NENHUM chunk tiver as funcoes e' que main() devolve rc=1.
+    state = "SKIP"
+    if cbb2c_needle in t:
+        if MARKER in t:
+            state = "ALREADY"
+        else:
+            t = t.replace(cbb2c_needle, cbb2c_insert, 1)
+            state = "APPLIED"
+    if cb56c_needle in t:
+        if MARKER_CB56C in t:
+            state = "ALREADY" if state != "APPLIED" else "APPLIED"
+        else:
+            t = t.replace(cb56c_needle, cb56c_insert, 1)
+            state = "APPLIED"
+    return t, state
 
 
 def main() -> int:
     paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_000.cpp")
-    rc = 0
+    hit = False
     for p in paths:
         if not p.exists():
             print(f"skip {p}")
             continue
         t = p.read_text()
-        try:
-            t2 = patch(t)
-        except SystemExit as e:
-            print(f"FAILED {p}: {e}")
-            rc = 1
+        t2, state = patch(t)
+        if state == "SKIP":
             continue
+        hit = True
         if t2 != t:
             p.write_text(t2, newline="\n")
             print(f"APPLIED {p}")
         else:
             print(f"ALREADY-APPLIED {p}")
-    return rc
+    if not hit:
+        print("FAILED: func_000CBB2C/func_000CB56C nao encontradas em nenhum chunk")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

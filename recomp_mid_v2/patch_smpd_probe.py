@@ -202,27 +202,95 @@ plano e' matar so' pelo PID capturado, TERM depois -9, nunca pkill nu). Fix
 nos comandos de re-verificacao usados para testar este ficheiro, documentado
 no relatorio (seccao "Fix (findings 1+2)"), nao no script.
 
+CORRECCAO 2026-07-25 (re-lift: handlers da FSM deixaram de ser funcoes)
+------------------------------------------------------------------------
+Contra um lift limpo do ppu_lifter.py actual, 5 dos 6 alvos deixaram de
+existir como `void func_XXXXXXXX(...)`:
+
+    func_002C07D8, func_002C05C8, func_002C069C, func_002C05F8, func_002C0788
+    -> "funcao(oes) nunca encontrada(s) em nenhum ppu_recomp_*.cpp"
+
+O COMPORTAMENTO NAO DESAPARECEU -- mudou de forma. O lifter passou a resolver
+a jump table do pump: `func_002C0508` tem agora
+
+    switch ((uint32_t)ctx->ctr) { ... case 0x002C07D8u: goto loc_002C07D8; ... }
+
+e cada handler de estado e' um LABEL (`loc_002C05F8:`, `loc_002C069C:`,
+`loc_002C0788:`, `loc_002C07D8:`) DENTRO de func_002C0508, em vez de um
+fragmento standalone duplicado. As leituras de `+0x744` continuam la',
+uma por handler (verificado: 5 ocorrencias de
+`vm_read8(ctx->gpr[30] + 0x744)` em ppu_recomp_001.cpp, nas linhas dos
+labels 05F8 / 069C / 0788 / 07D8 / 082C).
+
+Consequencia deste re-shape para os Sites B e F: no lift ANTIGO havia DUAS
+copias textuais da MESMA instrucao guest `0x002C05F8` (uma dentro do
+fragmento duplicado `func_002C05C8`, que caia por fall-through
+05C8 -> 05F0 -> 05F8, e outra em `func_002C05F8`). O lifter novo emite UMA
+so'. Para NAO perder a distincao que os relatorios usam
+(`site=002C05C8` = gate alcancado pelo retry do estado 1;
+`site=002C05F8` = gate alcancado pelo estado 3 via jump table ou por 07D8),
+introduz-se uma flag LOCAL do host em func_002C0508 (`_smpd_from05C8`,
+`int`, inicializada a 0 no topo da funcao e posta a 1 no `loc_002C05C8`).
+Nao toca em `ctx->gpr` nem em memoria guest, nao altera fluxo, e' apenas o
+registo do caminho tomado -- os dois blocos de log ficam entao ancorados na
+mesma leitura, mutuamente exclusivos pela flag, reproduzindo exactamente as
+duas linhas de log que o lift antigo produzia.
+
+O script aceita AS DUAS FORMAS: se `void func_002C05F8(...)` existir (lift
+antigo) usa a regiao dessa funcao e nao mexe na flag; caso contrario procura
+o label dentro de `func_002C0508`. Os Sites C/D (`func_002BFF88`) nao foram
+afectados -- essa funcao continua standalone.
+
+Idempotencia: passou a ser por TAG unico dentro do bloco (`SMPD-PROBE#A`...)
+em vez de "ancora+bloco contiguos". Com dois blocos (B e F) a partilhar a
+mesma ancora, o teste antigo deixava de casar a partir da 2a insercao e o
+script re-inseria em cada corrida.
+
 Uso:  patch_smpd_probe.py [DIR_DE_LIFT]     (default: ../recomp_macos_v2)
 Reaplicado por ../apply_all_patches.sh apos cada re-lift (nao tem check
 registado em apply_all_patches.sh -- e' sonda pura, sem efeito funcional,
 mesmo precedente de patch_st3_probe.py, que tambem nao tem).
 """
 from pathlib import Path
+import re
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lift_paths import resolve_lift_paths  # noqa: E402
+
 MARKER = "SMPD-PROBE"
+# No lift novo os handlers da FSM sao labels DENTRO deste pump (jump table
+# resolvida pelo lifter); no lift antigo eram fragmentos standalone.
+CONTAINER = "func_002C0508"
 
-ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
-        else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
+ROOT_DEFAULT = str(Path(__file__).resolve().parent.parent / "recomp_macos_v2")
 
-# ---- Site A: func_002C07D8 (estado 1) ---------------------------------------
-SITE_A_FUNC = "func_002C07D8"
-SITE_A_SIG = "void " + SITE_A_FUNC + "(ppu_context* ctx) {\n"
-SITE_A_ANCHOR = "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
-SITE_A_BLOCK = (
-    "        /* " + MARKER + ": gate EOS do estado 1 (func_002C07D8) -- brief nao listava este site */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+# Ancora partilhada por A/B/E/F/G: a leitura crua de obj+0x744.
+READ744 = "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
+
+ON = ("{ static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
+      "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n")
+
+# Flag de caminho (so' usada quando os handlers sao labels): distingue o gate
+# 0x002C05F8 alcancado pelo retry do estado 1 (loc_002C05C8 -> 05F0 -> 05F8)
+# do mesmo gate alcancado pelo estado 3 / por loc_002C07D8.
+FLAG_DECL = (
+    "        /* " + MARKER + "#FLAG: caminho ate' ao gate 0x002C05F8 (host-only, nao toca guest) */\n"
+    "        int _smpd_from05C8 = 0; (void)_smpd_from05C8;\n"
+)
+FLAG_SET = (
+    "        /* " + MARKER + "#FLAGSET: entrou pelo retry do estado 1 */\n"
+    "        _smpd_from05C8 = 1;\n"
+)
+
+
+def _blk(tag, body):
+    return "        /* " + MARKER + "#" + tag + ": " + body
+
+
+# ---- Site A: estado 1 (guest 0x002C07D8) ------------------------------------
+SITE_A_BLOCK = _blk("A", "gate EOS do estado 1 (0x002C07D8) -- brief nao listava este site */\n") + (
+    "        " + ON +
     "          if(_on){ static int _n=0; if(_n++<400){\n"
     "            fprintf(stderr,\"[EOSGATE] site=002C07D8 obj=0x%08X ea=0x%08X val=%u branch=%s\\n\",\n"
     "              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],\n"
@@ -230,33 +298,31 @@ SITE_A_BLOCK = (
     "            fflush(stderr); } } }\n"
 )
 
-# ---- Site B: func_002C05C8 (retry do estado 1) -------------------------------
-SITE_B_FUNC = "func_002C05C8"
-SITE_B_SIG = "void " + SITE_B_FUNC + "(ppu_context* ctx) {\n"
-SITE_B_ANCHOR = (
-    "        ctx->gpr[0] = (int64_t)(int32_t)(3);\n"
-    "        vm_write32(ctx->gpr[30] + 0x620, ctx->gpr[0]);\n"
-    "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
-)
-SITE_B_BLOCK = (
-    "        /* " + MARKER + ": gate EOS de func_002C05C8 (retry do estado 1 chamado por 002C07D8 quando val==0) */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+# ---- Site B: gate alcancado pelo retry 0x002C05C8 ----------------------------
+# Lift antigo: corpo proprio de func_002C05C8. Lift novo: mesma leitura de
+# loc_002C05F8, discriminada por _smpd_from05C8.
+SITE_B_BLOCK_FUNC = _blk("B", "gate EOS de func_002C05C8 (retry do estado 1) */\n") + (
+    "        " + ON +
     "          if(_on){ static int _n=0; if(_n++<400){\n"
     "            fprintf(stderr,\"[EOSGATE] site=002C05C8 obj=0x%08X ea=0x%08X val=%u branch=%s\\n\",\n"
     "              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],\n"
     "              ((unsigned)ctx->gpr[0]!=0)?\"adv\":\"wait\");\n"
     "            fflush(stderr); } } }\n"
 )
+SITE_B_BLOCK_LABEL = _blk("B", "gate 0x002C05F8 alcancado pelo retry 0x002C05C8 (estado 1) */\n") + (
+    "        " + ON +
+    "          if(_on && _smpd_from05C8){ static int _n=0; if(_n++<400){\n"
+    "            fprintf(stderr,\"[EOSGATE] site=002C05C8 obj=0x%08X ea=0x%08X val=%u branch=%s\\n\",\n"
+    "              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],\n"
+    "              ((unsigned)ctx->gpr[0]!=0)?\"adv\":\"wait\");\n"
+    "            fflush(stderr); } } }\n"
+)
 
-# ---- Site C: func_002BFF88 (MovieStop) ---------------------------------------
+# ---- Site C: func_002BFF88 (MovieStop), antes do write st620=0 ---------------
 SITE_C_FUNC = "func_002BFF88"
-SITE_C_SIG = "void " + SITE_C_FUNC + "(ppu_context* ctx) {\n"
 SITE_C_ANCHOR = "        vm_write32(ctx->gpr[31] + 0x620, ctx->gpr[0]);\n"
-SITE_C_BLOCK = (
-    "        /* " + MARKER + ": MovieStop antes do write st620=0 (r3/r4 ja setados p/ broadcast SMPD/0x1C) */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+SITE_C_BLOCK = _blk("C", "MovieStop antes do write st620=0 (r3/r4 ja setados p/ broadcast SMPD/0x1C) */\n") + (
+    "        " + ON +
     "          if(_on){ static int _n=0; if(_n++<400){\n"
     "            uint32_t _prev_st620 = (uint32_t)vm_read32(ctx->gpr[31] + 0x620);\n"
     "            fprintf(stderr,\"[STOP] SMPD obj=0x%08X prev_st620=%u r3=0x%08X r4=0x%08X ->0\\n\",\n"
@@ -265,32 +331,18 @@ SITE_C_BLOCK = (
 )
 
 # ---- Site D: func_002BFF88, entrada (ANY branch) -----------------------------
-# Mesma funcao do Site C, ancora DIFERENTE (a 1a leitura de st620, antes de
-# qualquer branch) -- ve TAMBEM o ramo st620==0xB que trampolina para
-# func_002C008C e nunca passa pelo write comum onde o Site C esta.
-SITE_D_FUNC = SITE_C_FUNC
 SITE_D_ANCHOR = "        ctx->gpr[0] = vm_read32(ctx->gpr[31] + 0x620);\n"
-SITE_D_BLOCK = (
-    "        /* " + MARKER + ": entrada do MovieStop (func_002BFF88), TODOS os ramos (<1 / 1..0xA / 0xB) */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+SITE_D_BLOCK = _blk("D", "entrada do MovieStop (func_002BFF88), TODOS os ramos (<1 / 1..0xA / 0xB) */\n") + (
+    "        " + ON +
     "          if(_on){ static int _n=0; if(_n++<400){\n"
     "            fprintf(stderr,\"[STOPENTRY] func_002BFF88 obj=0x%08X st620=%u\\n\",\n"
     "              (uint32_t)ctx->gpr[31],(unsigned)ctx->gpr[0]);\n"
     "            fflush(stderr); } } }\n"
 )
 
-# ---- Site E: func_002C069C (estado 4) -----------------------------------------
-# Primeiro gate de +0x744 a jusante do estado 3. Adicionado so' depois do
-# GREEN #1 (ver docstring) para ter pelo menos UM gate repetivel, nao-capado
-# e fora da FSM de estado 1, que possa mostrar val=1 directamente.
-SITE_E_FUNC = "func_002C069C"
-SITE_E_SIG = "void " + SITE_E_FUNC + "(ppu_context* ctx) {\n"
-SITE_E_ANCHOR = "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
-SITE_E_BLOCK = (
-    "        /* " + MARKER + ": gate EOS do estado 4 (func_002C069C), 1o a jusante do estado 3 */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+# ---- Site E: estado 4 (guest 0x002C069C) -------------------------------------
+SITE_E_BLOCK = _blk("E", "gate EOS do estado 4 (0x002C069C), 1o a jusante do estado 3 */\n") + (
+    "        " + ON +
     "          if(_on){ static int _n=0; if(_n++<400){\n"
     "            fprintf(stderr,\"[EOSGATE] site=002C069C obj=0x%08X ea=0x%08X val=%u branch=%s\\n\",\n"
     "              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],\n"
@@ -298,40 +350,22 @@ SITE_E_BLOCK = (
     "            fflush(stderr); } } }\n"
 )
 
-# ---- Site F: func_002C05F8 (estado 3), SO pos-arme -- fix review finding 1 ---
-# MESMA funcao do ST3-PROBE (patch_st3_probe.py / PS3_TRACE_ST3); ancora
-# IGUAL (a leitura crua de +0x744) mas marker/gate desta sonda e SO loga
-# quando g_movie_eos_ea!=0 (arme ja aconteceu) -- nao reproduz a armadilha do
-# cap do ST3-PROBE (que conta TODAS as chamadas, armadas ou nao, e esgota-se
-# ANTES do arme -- ver docstring, seccao FIX). Insere DEPOIS da leitura crua,
-# ou seja ANTES do bloco ST3-PROBE ja presente ali -- nao o edita nem duplica.
-SITE_F_FUNC = "func_002C05F8"
-SITE_F_SIG = "void " + SITE_F_FUNC + "(ppu_context* ctx) {\n"
-SITE_F_ANCHOR = "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
-SITE_F_BLOCK = (
-    "        /* " + MARKER + ": gate EOS do estado 3 (func_002C05F8), SO pos-arme -- fix review finding 1; convive com ST3-PROBE */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
-    "          if(_on){ extern uint32_t g_movie_eos_ea;\n"
+# ---- Site F: estado 3 (guest 0x002C05F8), SO pos-arme ------------------------
+_F_TAIL = (
+    "        " + ON +
+    "          if(_on%s){ extern uint32_t g_movie_eos_ea;\n"
     "            if(g_movie_eos_ea){ static int _n=0; if(_n++<400){\n"
-    "              fprintf(stderr,\"[EOSGATE] site=002C05F8 obj=0x%08X ea=0x%08X val=%u branch=%s armed_ea=0x%08X\\n\",\n"
+    "              fprintf(stderr,\"[EOSGATE] site=002C05F8 obj=0x%%08X ea=0x%%08X val=%%u branch=%%s armed_ea=0x%%08X\\n\",\n"
     "                (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],\n"
     "                ((unsigned)ctx->gpr[0]!=0)?\"adv\":\"wait\",g_movie_eos_ea);\n"
     "              fflush(stderr); } } } }\n"
 )
+SITE_F_BLOCK_FUNC = _blk("F", "gate EOS do estado 3 (func_002C05F8), SO pos-arme; convive com ST3-PROBE */\n") + (_F_TAIL % "")
+SITE_F_BLOCK_LABEL = _blk("F", "gate EOS do estado 3 (0x002C05F8), SO pos-arme e SO nao vindo do retry 05C8 */\n") + (_F_TAIL % " && !_smpd_from05C8")
 
-# ---- Site G: func_002C0788 (estado 10), SO pos-arme -- fix review finding 1 --
-# Confirmado por RE a ler +0x744 (brief original nunca instrumentava este
-# site; ficava listado como candidato "Site F+" no docstring original). Mesmo
-# padrao de branch=adv|wait derivado de val!=0 (fiel ao branch real: cr&2 ==
-# EQ == val==0 desvia p/ o retry loc_002C07CC; caso contrario cai no avanco).
-SITE_G_FUNC = "func_002C0788"
-SITE_G_SIG = "void " + SITE_G_FUNC + "(ppu_context* ctx) {\n"
-SITE_G_ANCHOR = "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
-SITE_G_BLOCK = (
-    "        /* " + MARKER + ": gate EOS do estado 10 (func_002C0788), SO pos-arme -- fix review finding 1 */\n"
-    "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
-    "            const char* _e=getenv(\"PS3_TRACE_SMPD\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
+# ---- Site G: estado 10 (guest 0x002C0788), SO pos-arme -----------------------
+SITE_G_BLOCK = _blk("G", "gate EOS do estado 10 (0x002C0788), SO pos-arme */\n") + (
+    "        " + ON +
     "          if(_on){ extern uint32_t g_movie_eos_ea;\n"
     "            if(g_movie_eos_ea){ static int _n=0; if(_n++<400){\n"
     "              fprintf(stderr,\"[EOSGATE] site=002C0788 obj=0x%08X ea=0x%08X val=%u branch=%s armed_ea=0x%08X\\n\",\n"
@@ -340,110 +374,161 @@ SITE_G_BLOCK = (
     "              fflush(stderr); } } } }\n"
 )
 
+# Ancora antiga do Site B (corpo standalone de func_002C05C8), so' usada quando
+# essa funcao ainda existe (lift antigo).
+SITE_B_ANCHOR_FUNC = (
+    "        ctx->gpr[0] = (int64_t)(int32_t)(3);\n"
+    "        vm_write32(ctx->gpr[30] + 0x620, ctx->gpr[0]);\n"
+    "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
+)
 
-def _region(t, func):
-    """(i, end, region) da funcao; region vai da assinatura ao proximo 'void func_'."""
-    sig = "void " + func + "(ppu_context* ctx) {\n"
+_LABEL_RX = re.compile(r"^loc_[0-9A-Fa-f]+:$", re.M)
+
+
+def _func_span(t, func):
+    sig = "void %s(ppu_context* ctx) {\n" % func
     i = t.find(sig)
     if i < 0:
-        return -1, -1, ""
+        return None
     j = t.find("\nvoid func_", i + len(sig))
-    end = j if j > i else len(t)
-    return i, end, t[i:end]
+    return i, (j if j > i else len(t)), len(sig)
 
 
-def _edit_after(t, func, anchor, block, tag):
-    i, end, region = _region(t, func)
-    if i < 0:
-        return t, "%s: SKIP(func)" % tag
-    if anchor + block in region:
+def _label_span(t, container, label):
+    sp = _func_span(t, container)
+    if sp is None:
+        return None
+    i, end, _ = sp
+    k = t.find("\n%s:\n" % label, i, end)
+    if k < 0:
+        return None
+    k += 1
+    m = _LABEL_RX.search(t, k + len(label) + 2, end)
+    return k, (m.start() if m else end)
+
+
+def _scope(t, legacy_func, label):
+    """(start, end, modo) do sitio -- aceita lift antigo (funcao) e novo (label)."""
+    sp = _func_span(t, legacy_func)
+    if sp is not None:
+        return sp[0], sp[1], "func"
+    sp = _label_span(t, CONTAINER, label)
+    if sp is not None:
+        return sp[0], sp[1], "label"
+    return None
+
+
+def _edit(t, span, anchor, block, tag, before=False):
+    """Insere block antes/depois de anchor dentro de span. Idempotente por tag."""
+    i, end = span
+    region = t[i:end]
+    uniq = "/* " + MARKER + "#" + tag + ":"
+    if uniq in region:
         return t, "%s: ALREADY" % tag
     c = region.count(anchor)
     if c != 1:
         raise SystemExit(
-            "patch_smpd_probe: ancora de %s aparece %dx em %s (esperado 1) -- "
-            "shape do lift mudou; reveja a needle antes de forcar" % (tag, c, func))
-    region = region.replace(anchor, anchor + block, 1)
+            "patch_smpd_probe: ancora de %s aparece %dx no seu escopo (esperado 1) -- "
+            "shape do lift mudou; reveja a needle antes de forcar" % (tag, c))
+    region = region.replace(anchor, (block + anchor) if before else (anchor + block), 1)
     return t[:i] + region + t[end:], "%s: APPLIED" % tag
 
 
-def _edit_before(t, func, anchor, block, tag):
-    i, end, region = _region(t, func)
-    if i < 0:
-        return t, "%s: SKIP(func)" % tag
-    if block + anchor in region:
-        return t, "%s: ALREADY" % tag
-    c = region.count(anchor)
-    if c != 1:
-        raise SystemExit(
-            "patch_smpd_probe: ancora de %s aparece %dx em %s (esperado 1) -- "
-            "shape do lift mudou; reveja a needle antes de forcar" % (tag, c, func))
-    region = region.replace(anchor, block + anchor, 1)
-    return t[:i] + region + t[end:], "%s: APPLIED" % tag
-
-
-def patch_file(p: Path):
+def patch_file(p: Path, seen: dict):
     t = p.read_text(encoding="utf-8", errors="replace")
-    if (SITE_A_SIG not in t and SITE_B_SIG not in t and SITE_C_SIG not in t
-            and SITE_E_SIG not in t and SITE_F_SIG not in t and SITE_G_SIG not in t):
-        return "SKIP", (False, False, False, False, False, False)
     orig = t
     notes = []
-    found = [False, False, False, False, False, False]  # A, B, C+D (func_002BFF88), E, F, G
-    if SITE_A_SIG in t:
-        found[0] = True
-        t, s = _edit_after(t, SITE_A_FUNC, SITE_A_ANCHOR, SITE_A_BLOCK, "eosgate-07D8")
+
+    # --- Sites C/D: func_002BFF88 (nao afectada pelo re-shape) ---------------
+    sp = _func_span(t, SITE_C_FUNC)
+    if sp is not None:
+        seen[SITE_C_FUNC] = True
+        t, s = _edit(t, (sp[0], sp[1]), SITE_C_ANCHOR, SITE_C_BLOCK, "C", before=True)
         notes.append(s)
-    if SITE_B_SIG in t:
-        found[1] = True
-        t, s = _edit_after(t, SITE_B_FUNC, SITE_B_ANCHOR, SITE_B_BLOCK, "eosgate-05C8")
+        sp = _func_span(t, SITE_C_FUNC)
+        t, s = _edit(t, (sp[0], sp[1]), SITE_D_ANCHOR, SITE_D_BLOCK, "D")
         notes.append(s)
-    if SITE_C_SIG in t:
-        found[2] = True
-        t, s = _edit_before(t, SITE_C_FUNC, SITE_C_ANCHOR, SITE_C_BLOCK, "stop-2bff88-write")
-        notes.append(s)
-        t, s = _edit_after(t, SITE_D_FUNC, SITE_D_ANCHOR, SITE_D_BLOCK, "stop-2bff88-entry")
-        notes.append(s)
-    if SITE_E_SIG in t:
-        found[3] = True
-        t, s = _edit_after(t, SITE_E_FUNC, SITE_E_ANCHOR, SITE_E_BLOCK, "eosgate-069C")
-        notes.append(s)
-    if SITE_F_SIG in t:
-        found[4] = True
-        t, s = _edit_after(t, SITE_F_FUNC, SITE_F_ANCHOR, SITE_F_BLOCK, "eosgate-05F8-postarm")
-        notes.append(s)
-    if SITE_G_SIG in t:
-        found[5] = True
-        t, s = _edit_after(t, SITE_G_FUNC, SITE_G_ANCHOR, SITE_G_BLOCK, "eosgate-0788-postarm")
-        notes.append(s)
+
+    # --- Sites A/B/E/F/G: funcoes (lift antigo) ou labels em func_002C0508 ---
+    plan = [
+        ("A", "func_002C07D8", "loc_002C07D8", READ744, SITE_A_BLOCK, SITE_A_BLOCK),
+        ("E", "func_002C069C", "loc_002C069C", READ744, SITE_E_BLOCK, SITE_E_BLOCK),
+        ("G", "func_002C0788", "loc_002C0788", READ744, SITE_G_BLOCK, SITE_G_BLOCK),
+        ("F", "func_002C05F8", "loc_002C05F8", READ744, SITE_F_BLOCK_FUNC, SITE_F_BLOCK_LABEL),
+        ("B", "func_002C05C8", "loc_002C05F8", None, SITE_B_BLOCK_FUNC, SITE_B_BLOCK_LABEL),
+    ]
+    need_flag = False
+    for tag, legacy, label, anchor, blk_func, blk_label in plan:
+        sc = _scope(t, legacy, label)
+        if sc is None:
+            continue
+        start, end, mode = sc
+        seen[legacy] = True
+        if mode == "func":
+            a = anchor if anchor is not None else SITE_B_ANCHOR_FUNC
+            blk = blk_func
+        else:
+            a = READ744
+            blk = blk_label
+            need_flag = True
+        t, s = _edit(t, (start, end), a, blk, tag)
+        notes.append(s + ("(label)" if mode == "label" else ""))
+
+    # --- flag de caminho (so' no shape novo) ---------------------------------
+    if need_flag:
+        sp = _func_span(t, CONTAINER)
+        if sp is not None:
+            i, end, siglen = sp
+            if ("/* " + MARKER + "#FLAG:") not in t[i:end]:
+                t = t[:i + siglen] + FLAG_DECL + t[i + siglen:]
+                notes.append("FLAG: APPLIED")
+            else:
+                notes.append("FLAG: ALREADY")
+        sp = _label_span(t, CONTAINER, "loc_002C05C8")
+        if sp is not None:
+            region = t[sp[0]:sp[1]]
+            if ("/* " + MARKER + "#FLAGSET:") in region:
+                notes.append("FLAGSET: ALREADY")
+            else:
+                head = "loc_002C05C8:\n"
+                if not region.startswith(head):
+                    raise SystemExit("patch_smpd_probe: loc_002C05C8 com forma inesperada")
+                t = t[:sp[0]] + head + FLAG_SET + region[len(head):] + t[sp[1]:]
+                notes.append("FLAGSET: APPLIED")
+        else:
+            raise SystemExit("patch_smpd_probe: loc_002C05C8 nao encontrado em %s "
+                             "-- sem ele o Site B nao e' distinguivel do Site F" % CONTAINER)
+
+    if not notes:
+        return "SKIP", t != orig
     if t != orig:
         p.write_text(t, encoding="utf-8", newline="\n")
-        return "APPLIED | " + " ; ".join(notes), tuple(found)
-    return "ALREADY | " + " ; ".join(notes), tuple(found)
+        return "APPLIED | " + " ; ".join(notes), True
+    return "ALREADY | " + " ; ".join(notes), False
 
 
 def main() -> int:
-    files = sorted(ROOT.glob("ppu_recomp_*.cpp"))
+    files = [p for p in resolve_lift_paths(sys.argv[1:], ROOT_DEFAULT) if p.is_file()]
     if not files:
-        print("nenhum ppu_recomp_*.cpp em %s" % ROOT)
+        print("nenhum ppu_recomp_*.cpp em %s" % (sys.argv[1:] or ROOT_DEFAULT))
         return 1
+    seen = {}
     any_hit = False
-    seen = [False, False, False, False, False, False]  # 002C07D8/002C05C8/002BFF88/002C069C/002C05F8/002C0788
     for p in files:
-        r, found = patch_file(p)
-        seen = [s or f for s, f in zip(seen, found)]
+        r, _ = patch_file(p, seen)
         if r != "SKIP":
             any_hit = True
             print("%s: %s" % (p.name, r))
-    missing = [name for name, ok in
-               zip((SITE_A_FUNC, SITE_B_FUNC, SITE_C_FUNC, SITE_E_FUNC, SITE_F_FUNC, SITE_G_FUNC), seen) if not ok]
+    missing = [n for n in ("func_002C07D8", "func_002C05C8", SITE_C_FUNC,
+                           "func_002C069C", "func_002C05F8", "func_002C0788")
+               if n not in seen]
     if missing:
         raise SystemExit(
-            "patch_smpd_probe: funcao(oes) nunca encontrada(s) em nenhum "
-            "ppu_recomp_*.cpp: %s (shape do lift mudou?) -- reveja antes de forcar"
-            % ", ".join(missing))
+            "patch_smpd_probe: sitio(s) nunca encontrado(s) nem como funcao nem "
+            "como label em %s: %s (shape do lift mudou?) -- reveja antes de forcar"
+            % (CONTAINER, ", ".join(missing)))
     if not any_hit:
-        print("SKIP: nada para aplicar (tudo ja ALREADY nao deveria cair aqui)")
+        print("SKIP: nada para aplicar")
     return 0
 
 

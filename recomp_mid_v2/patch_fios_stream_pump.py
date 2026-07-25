@@ -17,34 +17,109 @@ Measured 2026-07-21 Mac arm64:
 Markers: FREELIST-TAG-GUARD, ALLOC-NULL-GUARD, F2B-STREAM-PUMP
 Lift gitignored — re-apply after re-lift from session / G4 §22–§23.
 
-Usage: python3 recomp_mid_v2/patch_fios_stream_pump.py [recomp_macos_v2]
+Usage: python3 recomp_mid_v2/patch_fios_stream_pump.py [DIR_DE_LIFT]
+
+ESTADO 2026-07-25 -- VERIFICADOR PURO, ORFAO SEM ESCRITOR
+--------------------------------------------------------
+Este ficheiro NAO escreve nada (grep write_text/.write(/open-w = 0): so'
+confirma marcadores. O comportamento que ele verifica NUNCA teve script
+escritor -- foi edicao manual de sessao dentro do lift gitignored:
+
+  grep -l 'ALLOC-NULL-GUARD' recomp_mid_v2/*.py  -> so' este ficheiro
+  grep -rl 'ALLOC-NULL-GUARD' <repo>             -> este ficheiro, notes/*.md
+                                                    e lift_baseline/MANIFEST.tsv
+  recomp_macos_v2 (lift de producao, 31 chunks)  -> presente (edicao manual):
+      [FREELIST-TAG-GUARD] x5 em ppu_recomp_000.cpp
+      [ALLOC-NULL-GUARD]   x1 em 000 + x1 em 002 (sitios 2550C8 / 2550E8)
+      F2B-STREAM-PUMP      x3 em ppu_recomp_001.cpp
+  lift limpo do ppu_lifter.py actual (7 chunks)   -> AUSENTE
+
+Logo, num lift limpo estes marcadores NAO existem e este verificador TEM de
+falhar (rc=2). Fazer o check passar sem o comportamento existir seria forjar
+resultado (regra 4 do CLAUDE.md). O check FICA com a mesma forca: 4 unidades
+de prova, limiar ok >= 3.
+
+O que se corrigiu foi so' o "chunk-fixo" (e um falso positivo que ele abria)
+-----------------------------------------------------------------------------
+1. O script abria "ppu_recomp_000.cpp"/"001"/"002" pelo NOME e devolvia rc=1
+   ("missing <path>") se algum nao existisse. O lifter passou de 31 para 7
+   chunks e o codigo migra de ficheiro a cada re-lift. Passa a usar
+   resolve_lift_paths (aceita DIRECTORIO) e a avaliar a UNIAO dos chunks.
+2. Ao passar para a uniao dos chunks, a agulha NUA "FREELIST-TAG-GUARD"
+   passaria a casar com um FALSO POSITIVO: patch_ce03c_introseq_block.py
+   injecta um corpo que contem o comentario "...so WAD open after intro does
+   not FREELIST-TAG-GUARD" (mencao em prosa, nao o guard). Para nao
+   ENFRAQUECER o check, as duas agulhas de guard passam a exigir a forma
+   ENTRE PARENTESES RECTOS -- `[FREELIST-TAG-GUARD]` / `[ALLOC-NULL-GUARD]` --
+   que e' exactamente a forma registada em lift_baseline/MANIFEST.tsv
+   (linhas 157 e 176) e a que o lift de producao usa nos fprintf. Isto e'
+   MAIS estrito que antes, nunca menos.
+3. A dupla entrada de ALLOC-NULL-GUARD (000 e 002) nao pode ser contada duas
+   vezes por nome de ficheiro; passa a exigir presenca em >= 2 chunks
+   distintos (os dois sitios 2550C8 / 2550E8 do MANIFEST), preservando as
+   mesmas 4 unidades de prova do check original sem depender do layout.
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "recomp_macos_v2"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lift_paths import resolve_lift_paths  # noqa: E402
+
+# Forma exacta registada em lift_baseline/MANIFEST.tsv (TAG entre [ ]).
+TAG_FREELIST = "[FREELIST-TAG-GUARD]"
+TAG_ALLOCNULL = "[ALLOC-NULL-GUARD]"
+TAG_PUMP = "F2B-STREAM-PUMP"
 
 
 def main() -> int:
+    paths = [p for p in resolve_lift_paths(
+        sys.argv[1:], str(Path(__file__).resolve().parent.parent / "recomp_macos_v2"))
+        if p.is_file()]
+    if not paths:
+        print("FAILED: nenhum chunk de lift encontrado")
+        return 2
+
+    hits: dict[str, list[str]] = {TAG_FREELIST: [], TAG_ALLOCNULL: [], TAG_PUMP: []}
+    for p in paths:
+        text = p.read_text(errors="replace")
+        for tag in hits:
+            if tag in text:
+                hits[tag].append(p.name)
+
     ok = 0
-    for name, marker in (
-        ("ppu_recomp_000.cpp", "FREELIST-TAG-GUARD"),
-        ("ppu_recomp_000.cpp", "ALLOC-NULL-GUARD"),
-        ("ppu_recomp_002.cpp", "ALLOC-NULL-GUARD"),
-        ("ppu_recomp_001.cpp", "F2B-STREAM-PUMP"),
-    ):
-        path = ROOT / name
-        if not path.is_file():
-            print(f"missing {path}")
-            return 1
-        text = path.read_text(errors="replace")
-        if marker in text:
-            print(f"{name}: {marker} present")
-            ok += 1
-        else:
-            print(f"{name}: {marker} MISSING")
+    # 1) freelist tag guard (func_00263178)
+    if hits[TAG_FREELIST]:
+        print("lift: %s present (%s)" % (TAG_FREELIST, ",".join(hits[TAG_FREELIST])))
+        ok += 1
+    else:
+        print("lift: %s MISSING" % TAG_FREELIST)
+    # 2+3) alloc null guard: dois sitios (2550C8 / 2550E8) => >= 2 chunks
+    n_alloc = len(hits[TAG_ALLOCNULL])
+    if n_alloc >= 1:
+        print("lift: %s present (%s)" % (TAG_ALLOCNULL, ",".join(hits[TAG_ALLOCNULL])))
+        ok += 1
+    else:
+        print("lift: %s MISSING" % TAG_ALLOCNULL)
+    if n_alloc >= 2:
+        print("lift: %s em >=2 chunks (2550C8 + 2550E8)" % TAG_ALLOCNULL)
+        ok += 1
+    else:
+        print("lift: %s 2o sitio MISSING (esperado 2550C8 E 2550E8)" % TAG_ALLOCNULL)
+    # 4) host stream pump
+    if hits[TAG_PUMP]:
+        print("lift: %s present (%s)" % (TAG_PUMP, ",".join(hits[TAG_PUMP])))
+        ok += 1
+    else:
+        print("lift: %s MISSING" % TAG_PUMP)
+
+    if ok < 3:
+        print("FAILED: %d/4 unidades de prova em %d chunk(s)." % (ok, len(paths)))
+        print("  ORFAO SEM ESCRITOR: nenhum patch_*.py instala FREELIST-TAG-GUARD /")
+        print("  ALLOC-NULL-GUARD / F2B-STREAM-PUMP; copia forense do comportamento")
+        print("  em ../recomp_macos_v2 (gitignored) e em lift_baseline/MANIFEST.tsv.")
+        print("  O check NAO foi enfraquecido -- ver cabecalho deste ficheiro.")
     return 0 if ok >= 3 else 2
 
 

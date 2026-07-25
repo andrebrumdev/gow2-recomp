@@ -15,34 +15,51 @@ flag so the FSM advances 3->4 without forging st620 or +0x744.
 
 PLACEMENT
 ---------
-Only the live body of func_002C0FA0 (same dead-code trap as
-patch_st3_audio_gate.py: 14 dead copies of the 0045B2A8 call). Anchor on
-the function signature.
+O unico sitio do lift que le `[r30+0x720]` e chama func_0045B2A8 (medido:
+1 ocorrencia em todo o lift). A insercao fica logo apos o retorno da chamada e
+antes do teste de r3, exactamente como no lift antigo.
 
 Gated by the host variable (always linked); host sets it only when
 movie_audio_should_mark_done allows (done producer + st==3 + h720).
 Idempotent marker AUDDONE-FORCE.
+
+REPARACAO 2026-07-25 (re-lift com lifter novo)
+----------------------------------------------
+Duas mudancas de forma partiam a agulha literal:
+
+  1. fragmento->label: `func_002C0FA0` deixou de ser uma funcao propria. O lifter
+     novo fundiu o fragmento no corpo de func_002C0508 (a pump da FSM da intro) e
+     o sitio passou a ser o label `loc_002C0FA0:`. NAO e' codigo diferente: sao as
+     mesmas duas instrucoes guest (lwz r3,0x720(r30); bl 0045B2A8), agora
+     alcancadas por `goto` em vez de chamada.
+  2. shape-LR: a chamada ganhou o prefixo `ctx->lr = 0x002C0FA8; `.
+
+A agulha passa a regex que aceita AMBAS as ancoras (assinatura de funcao antiga
+OU label novo) e o prefixo de LR opcional -- casa com o lift antigo e com o novo.
+Alem disso o alvo passa por `resolve_lift_paths` (aceita dir ou ficheiro).
 """
-from pathlib import Path
+from __future__ import annotations
+
+import re
 import sys
+from pathlib import Path
+
+from lift_paths import resolve_lift_paths
 
 MARKER = "AUDDONE-FORCE"
 
 ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
         else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
 
-NEEDLE = (
-    "void func_002C0FA0(ppu_context* ctx) {\n"
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[30] + 0x720);\n"
-    "        func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);\n"
+NEEDLE_RE = re.compile(
+    r"(?:void func_002C0FA0\(ppu_context\* ctx\) \{|loc_002C0FA0:)\n"
+    r"        ctx->gpr\[3\] = vm_read32\(ctx->gpr\[30\] \+ 0x720\);\n"
+    r"        (?:ctx->lr = 0x[0-9A-Fa-f]+; )?func_0045B2A8\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n"
 )
 
-# Insert after 0045B2A8 (+ optional AUDGATE probe if already present is OK:
-# we match the three lines above which precede any probe insert).
-INSERT = (
-    "void func_002C0FA0(ppu_context* ctx) {\n"
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[30] + 0x720);\n"
-    "        func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);\n"
+# Inserido logo a seguir ao bloco casado (a chamada e' reemitida tal e qual, com
+# o LR que o lifter tiver posto -- nunca reescrito a mao).
+INSERT_TAIL = (
     "        /* " + MARKER + ": A3b HLE -- se host marcou stream-complete, "
     "forca rc!=0 (equiv. sess+0x1B8) */\n"
     "        { extern int g_movie_audio_gate_force;\n"
@@ -54,15 +71,22 @@ def patch_file(p: Path) -> str:
     t = p.read_text(encoding="utf-8", errors="replace")
     if MARKER in t:
         return "ALREADY"
-    if NEEDLE not in t:
+    hits = list(NEEDLE_RE.finditer(t))
+    if not hits:
         return "SKIP"
-    t = t.replace(NEEDLE, INSERT, 1)
+    if len(hits) > 1:
+        raise SystemExit(
+            "%s: agulha AUDDONE ambigua (%d sitios) -- reveja antes de forcar"
+            % (p.name, len(hits))
+        )
+    m = hits[0]
+    t = t[: m.end()] + INSERT_TAIL + t[m.end():]
     p.write_text(t, encoding="utf-8")
     return "APPLIED"
 
 
 def main() -> int:
-    files = sorted(ROOT.glob("ppu_recomp_*.cpp"))
+    files = [p for p in resolve_lift_paths(sys.argv[1:], str(ROOT)) if p.exists()]
     if not files:
         print("nenhum ppu_recomp_*.cpp em %s" % ROOT)
         return 1

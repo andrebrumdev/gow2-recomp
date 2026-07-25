@@ -23,6 +23,7 @@ Gated by PS3_TRACE_ST3, OFF by default. Read-only (logs, no guest writes).
 Idempotent (marker ST3-PROBE). Never forges st620 / +0x744.
 """
 from pathlib import Path
+import re
 import sys
 
 MARKER = "ST3-PROBE"
@@ -30,19 +31,31 @@ MARKER = "ST3-PROBE"
 ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
         else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
 
-NEEDLE = (
-    "void func_002C05F8(ppu_context* ctx) {\n"
-    "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
+# CORRECCAO 2026-07-25 (shape-outro: fragmento virou label):
+# a agulha literal exigia "void func_002C05F8(ppu_context* ctx) {" seguido do
+# read de +0x744. O lifter actual deixou de emitir 0x2C05F8 como funcao propria:
+# fundiu o fragmento na funcao maior e o EA aparece apenas como "loc_002C05F8:"
+# (ppu_recomp_001.cpp:45603 do lift limpo). O COMPORTAMENTO e' o mesmo -- a
+# proxima instrucao continua a ser exactamente
+#   ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);
+# (verificado: 5 sitios leem +0x744 no chunk, mas so' um vem logo a seguir ao
+# label/assinatura de 0x2C05F8). Regex tolerante que casa AS DUAS formas, para
+# o patch continuar a funcionar no lift antigo (funcao) e no novo (label).
+# Continua a ser so' log: nao escreve estado guest nem forja st620/+0x744.
+NEEDLE_RE = re.compile(
+    r"(?:^|\n)"
+    r"(?:void[ \t]+func_002C05F8\(ppu_context\*[ \t]*ctx\)[ \t]*\{|loc_002C05F8:)"
+    r"[ \t]*\n"
+    r"[ \t]*ctx->gpr\[0\][ \t]*=[ \t]*vm_read8\(ctx->gpr\[30\][ \t]*\+[ \t]*0x744\);"
+    r"[ \t]*\n"
 )
 
-INSERT = (
-    "void func_002C05F8(ppu_context* ctx) {\n"
-    "        ctx->gpr[0] = vm_read8(ctx->gpr[30] + 0x744);\n"
+PROBE = (
     "        /* " + MARKER + ": valor lido no gate de avancar 3->5 */\n"
     "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
     "            const char* _e=getenv(\"PS3_TRACE_ST3\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
     "          if(_on){ static int _n=0; if(_n++<400){\n"
-    "            fprintf(stderr,\"[ST3] func_002C05F8 obj=0x%08X ea=0x%08X read[+0x744]=%u\\n\",\n"
+    "            fprintf(stderr,\"[ST3] loc_002C05F8 obj=0x%08X ea=0x%08X read[+0x744]=%u\\n\",\n"
     "              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0]);\n"
     "            fflush(stderr); } } }\n"
 )
@@ -52,9 +65,10 @@ def patch_file(p: Path) -> str:
     t = p.read_text(encoding="utf-8", errors="replace")
     if MARKER in t:
         return "ALREADY"
-    if NEEDLE not in t:
+    m = NEEDLE_RE.search(t)
+    if not m:
         return "SKIP"
-    t = t.replace(NEEDLE, INSERT, 1)
+    t = t[: m.end()] + PROBE + t[m.end():]
     p.write_text(t, encoding="utf-8")
     return "APPLIED"
 

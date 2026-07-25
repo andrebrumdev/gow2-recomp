@@ -12,7 +12,7 @@ Same-class follow-ups (audit 2026-07-22):
   - 002E1228 / 11EC / 1290 consume without refill/clamp (siblings of 1480)
   - state=3 rem=0 at FO FULL → eof_try_complete → state=0
 
-Fix in ppu_recomp_001/002 (lift, re-apply after re-lift):
+Fix esperado no lift (re-aplicar apos re-lift):
   - f2b_stream_fill: loop until ring full or min_need met
   - f2b_stream_ensure(type_sys): refill when avail short
   - f2b_stream_eof_try_complete(type_sys): idle SM at FO EOF
@@ -22,14 +22,64 @@ Fix in ppu_recomp_001/002 (lift, re-apply after re-lift):
 
 Markers: F2B multi-MB fix, F2B-STREAM-ENSURE, F2B-STREAM-CLAMP,
          F2B-STREAM-EOF-DONE, f2b_stream_pre_consume
-Usage: python3 recomp_mid_v2/patch_f2b_multimb_stream.py [recomp_macos_v2]
+Usage: python3 recomp_mid_v2/patch_f2b_multimb_stream.py [DIR_DE_LIFT]
+
+ESTADO 2026-07-25 -- VERIFICADOR PURO, ORFAO SEM ESCRITOR
+--------------------------------------------------------
+Este ficheiro NAO escreve nada (grep write_text/.write(/open-w = 0): so'
+confirma marcadores e presenca de chamadas dentro de corpos de funcao. O
+comportamento que verifica NUNCA teve script escritor -- foi edicao manual de
+sessao no lift gitignored:
+
+  grep -l 'f2b_stream_ensure' recomp_mid_v2/*.py -> so' este ficheiro
+  grep -rl 'f2b_stream_ensure' <repo>            -> este ficheiro, notes/*.md,
+       lift_baseline/MANIFEST.tsv e lift_baseline/injected_001.cpp/002.cpp
+       (copia FORENSE das edicoes manuais, nao um patch executavel)
+  recomp_macos_v2 (lift de producao, 31 chunks)  -> presente
+  lift limpo do ppu_lifter.py actual (7 chunks)  -> AUSENTE (score ok=0 fail=21)
+
+Logo, num lift limpo estes marcadores NAO existem e este verificador TEM de
+falhar (rc=2). Fazer o check passar sem o comportamento existir seria forjar
+resultado (regra 4 do CLAUDE.md). O check FICA com a mesma forca: mesma lista
+de marcadores, mesmas funcoes, mesmo limiar (fail==0 e ok>=12).
+
+Correccao aplicada: so' o "chunk-fixo"
+--------------------------------------
+O script abria "ppu_recomp_001.cpp"/"002" pelo NOME (rc=1 se 001 faltasse) e
+procurava os marcadores e as PRE_FUNCS SO' em 001. O lifter passou de 31 para
+7 chunks e as funcoes migram de ficheiro a cada re-lift -- 002E1480 podia
+nascer em 003 e o veredicto ficaria errado por motivo de layout, nao de
+comportamento. Passa a usar resolve_lift_paths (aceita DIRECTORIO) e a
+avaliar a UNIAO dos chunks: marcadores procurados em qualquer chunk, corpo de
+cada funcao procurado no chunk onde ela estiver. Verificado nos dois sentidos:
+lift limpo -> ok=0 fail=21 rc=2; ../recomp_macos_v2 -> rc=0.
+
+Corrigido tambem o fim-de-regiao de _fn_body: quando a funcao era a ULTIMA do
+chunk, o corpo era truncado nos primeiros 400 caracteres (numero magico), o
+que podia dar "MISSING" a uma chamada que existia mais abaixo. Passa a ir ate'
+ao fim do texto -- mais fiel, nunca mais permissivo do que a regiao real.
 """
 from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "recomp_macos_v2"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lift_paths import resolve_lift_paths  # noqa: E402
+
+ROOT_DEFAULT = str(Path(__file__).resolve().parent.parent / "recomp_macos_v2")
+
+MARKERS = (
+    "F2B multi-MB fix",
+    "f2b_stream_ensure",
+    "f2b_stream_eof_try_complete",
+    "f2b_stream_pre_consume",
+    "F2B-STREAM-ENSURE",
+    "F2B-STREAM-CLAMP",
+    "F2B-STREAM-EOF-DONE",
+    "Always top-up",
+)
 
 # Wait/dispatch sites that must call ensure (type_sys in r31)
 ENSURE_FUNCS = (
@@ -46,6 +96,7 @@ PRE_FUNCS = (
     "func_002E1290",
     "func_002E1480",
 )
+EOF_FUNCS = ("func_002BA9F0", "func_002BA9F4", "func_002BA76C", "func_002BAB88")
 # Produce/init — must NOT look like wait-without-refill (documented only)
 PRODUCE_OR_INIT = (
     "func_002E1254",  # avail += need (producer)
@@ -54,46 +105,39 @@ PRODUCE_OR_INIT = (
 )
 
 
-def _fn_body(text: str, name: str) -> str | None:
-    m = re.search(rf"^void {name}\(ppu_context\* ctx\) \{{", text, re.M)
-    if not m:
-        return None
-    nxt = re.search(r"^void func_", text[m.end() :], re.M)
-    end = m.end() + (nxt.start() if nxt else 400)
-    return text[m.start() : end]
+def _fn_body(texts: dict, name: str) -> str | None:
+    """Corpo da funcao no chunk onde ela existir (assinatura -> proxima 'void func_')."""
+    for text in texts.values():
+        m = re.search(rf"^void {name}\(ppu_context\* ctx\) \{{", text, re.M)
+        if not m:
+            continue
+        nxt = re.search(r"^void func_", text[m.end():], re.M)
+        end = m.end() + nxt.start() if nxt else len(text)
+        return text[m.start():end]
+    return None
 
 
 def main() -> int:
-    p1 = ROOT / "ppu_recomp_001.cpp"
-    p2 = ROOT / "ppu_recomp_002.cpp"
-    if not p1.is_file():
-        print(f"missing {p1}")
+    paths = [p for p in resolve_lift_paths(sys.argv[1:], ROOT_DEFAULT) if p.is_file()]
+    if not paths:
+        print("FAILED: nenhum chunk de lift encontrado")
         return 1
-    s1 = p1.read_text(encoding="utf-8", errors="replace")
-    s2 = p2.read_text(encoding="utf-8", errors="replace") if p2.is_file() else ""
+    texts = {p.name: p.read_text(encoding="utf-8", errors="replace") for p in paths}
+
     ok = 0
     fail = 0
 
-    for m in (
-        "F2B multi-MB fix",
-        "f2b_stream_ensure",
-        "f2b_stream_eof_try_complete",
-        "f2b_stream_pre_consume",
-        "F2B-STREAM-ENSURE",
-        "F2B-STREAM-CLAMP",
-        "F2B-STREAM-EOF-DONE",
-        "Always top-up",
-    ):
-        if m in s1:
-            print(f"001: {m} present")
+    for m in MARKERS:
+        where = [n for n, t in texts.items() if m in t]
+        if where:
+            print("lift: %s present (%s)" % (m, ",".join(where)))
             ok += 1
         else:
-            print(f"001: {m} MISSING")
+            print("lift: %s MISSING" % m)
             fail += 1
 
-    combined = s1 + "\n" + s2
     for name in ENSURE_FUNCS:
-        body = _fn_body(combined, name)
+        body = _fn_body(texts, name)
         if body is None:
             print(f"ENSURE {name}: MISSING fn")
             fail += 1
@@ -106,7 +150,7 @@ def main() -> int:
             fail += 1
 
     for name in PRE_FUNCS:
-        body = _fn_body(s1, name)
+        body = _fn_body(texts, name)
         if body is None:
             print(f"PRE {name}: MISSING fn")
             fail += 1
@@ -119,8 +163,8 @@ def main() -> int:
             fail += 1
 
     # BA9F0 + BA9F4 should also eof-complete (body wait at FO end)
-    for name in ("func_002BA9F0", "func_002BA9F4", "func_002BA76C", "func_002BAB88"):
-        body = _fn_body(combined, name)
+    for name in EOF_FUNCS:
+        body = _fn_body(texts, name)
         if body and "f2b_stream_eof_try_complete" in body:
             print(f"EOF {name}: ok")
             ok += 1
@@ -129,7 +173,7 @@ def main() -> int:
             fail += 1
 
     for name in PRODUCE_OR_INIT:
-        body = _fn_body(s1, name)
+        body = _fn_body(texts, name)
         if body is None:
             print(f"DOC {name}: fn missing (ok if re-lift renamed)")
             continue
@@ -139,6 +183,10 @@ def main() -> int:
             print(f"DOC {name}: produce/init — no pre_consume (expected)")
 
     print(f"score ok={ok} fail={fail}")
+    if fail:
+        print("  ORFAO SEM ESCRITOR: nenhum patch_*.py instala f2b_stream_*; copia")
+        print("  forense em ../recomp_macos_v2 e lift_baseline/injected_00{1,2}.cpp.")
+        print("  O check NAO foi enfraquecido -- ver cabecalho deste ficheiro.")
     return 0 if fail == 0 and ok >= 12 else 2
 
 

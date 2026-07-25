@@ -17,28 +17,64 @@ Idempotent note: lift is gitignored; re-apply by re-running session edit or
 restoring recomp_macos_v2 after re-lift + this note.
 
 Usage: python3 recomp_mid_v2/patch_fios_f2b_fo_ctor.py [recomp_macos_v2]
+
+Estado 2026-07-25 (relift limpo) — VERIFICADOR PURO, CONTINUA A FALHAR
+----------------------------------------------------------------------
+Este ficheiro nao escreve nada (0 write_text/open('w')): so' confirma que o
+bloco F2B (edicao manual de sessao) esta' presente. Medido contra um lift
+limpo do ppu_lifter.py actual:
+
+  marcador       ocorrencias no repo             escritor
+  -------------  ------------------------------  ---------------------------
+  F2B-FO-CTOR    so' este ficheiro               NENHUM
+  F2B-MOVIEIO    docstrings de 2 patches + notes  NENHUM
+
+Nenhum dos dois existe no lift de producao actual (recomp_macos_v3/*.cpp).
+O proprio docstring acima admite-o: "re-apply by re-running session edit".
+As funcoes guest do ctor natural (func_0031F1A4, func_00307774, func_0030D29C)
+existem no lift limpo (ppu_recomp_001.cpp), mas o BLOCO F2B que as encadeia
+depois do movie_io open e' codigo escrito a mao que nunca teve script.
+
+Portanto o veredicto negativo e' CORRECTO: o comportamento nao existe. O check
+NAO foi enfraquecido e o rc continua != 0. Reparar exige escrever o bloco F2B
+(trabalho de bring-up, nao de reparacao de agulha) — faze-lo passar sem esse
+bloco seria forjar resultado (regra 4 do CLAUDE.md).
+
+Unica correccao aplicada em 2026-07-25 (mecanica, nao enfraquece nada):
+chunk-fixo. Abria sempre ROOT/"ppu_recomp_001.cpp"; o lifter passou de 31 para
+7 chunks e nada garante que o bloco caia nesse. Passa a procurar em todos os
+ppu_recomp_*.cpp do lift via resolve_lift_paths(). A logica de decisao e' a
+mesma, agora com parenteses explicitos (o `or`/`and` sem parenteses ja' se
+agrupava assim; so' estava ilegivel).
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "recomp_macos_v2"
+from lift_paths import resolve_lift_paths
+
 MARKER = "F2B-FO-CTOR"
 
 
 def main() -> int:
-    target = ROOT / "ppu_recomp_001.cpp"
-    if not target.is_file():
-        print(f"missing {target}")
+    args = sys.argv[1:] or [str(Path(__file__).resolve().parent.parent / "recomp_macos_v2")]
+    paths = [p for p in resolve_lift_paths(args, "recomp_macos_v2") if p.exists()]
+    if not paths:
+        print(f"missing: nenhum ppu_recomp_*.cpp em {args}")
         return 1
-    text = target.read_text(errors="replace")
-    if MARKER in text or "func_0031F1A4(ctx); DRAIN_TRAMPOLINE(ctx);" in text and "F2B-MOVIEIO" in text:
-        # Detect live lift: ctor call inside F2B block
-        if "func_00307774(ctx)" in text and "F2B-MOVIEIO" in text:
-            print(f"{target.name}: F2B guest ctor already present")
-            return 0
-    print(f"{target.name}: F2B FO ctor not found — re-apply from session or G4 §21")
+    for target in paths:
+        text = target.read_text(errors="replace")
+        if MARKER in text or (
+            "func_0031F1A4(ctx); DRAIN_TRAMPOLINE(ctx);" in text and "F2B-MOVIEIO" in text
+        ):
+            # Detect live lift: ctor call inside F2B block
+            if "func_00307774(ctx)" in text and "F2B-MOVIEIO" in text:
+                print(f"{target.name}: F2B guest ctor already present")
+                return 0
+    print(f"F2B FO ctor not found em {len(paths)} chunk(s) — re-apply from session or G4 §21")
+    print("  -> marcadores F2B-FO-CTOR/F2B-MOVIEIO sem escritor no repo "
+          "(edicao manual orfa; comportamento ausente, nao e' bug de agulha)")
     return 2
 
 

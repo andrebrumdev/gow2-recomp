@@ -10,11 +10,27 @@ the WAD/group content dispatcher that never reaches ICGLdr.
 """
 from __future__ import annotations
 from pathlib import Path
+import re
 import sys
+from lift_paths import resolve_lift_paths
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
-C1 = ROOT / "ppu_recomp_001.cpp"
+# CORRECCAO 2026-07-25 (re-lift):
+#  a) chunk-fixo: abria sempre ROOT/"ppu_recomp_001.cpp"; o lift passou de 31
+#     para 7 chunks e a funcao pode migrar. Passa por resolve_lift_paths (aceita
+#     directorio) e procura o chunk que TEM func_002A209C.
+#  b) o lifter actual JA' materializa esta jump table sozinho: em vez de
+#     "ctx->ctr = ...; ps3_indirect_call(ctx); return;" emite um
+#     "switch ((uint32_t)ctx->ctr) { case 0x002A221Cu: goto loc_002A221C; ... }"
+#     com os 54 alvos distintos (as 58 entradas tem 4 repetidas). A agulha
+#     literal antiga deixou de existir.
+#     NAO se enfraquece nada: em vez de assumir, VERIFICA-SE que o switch do
+#     lifter cobre exactamente os mesmos 58 alvos (0x2A2134 + offset) que este
+#     patch instalaria. So' se a verificacao falhar e' que se injecta o
+#     dispatch a' mao (caminho legado, agora por regex tolerante ao cast
+#     (uint32_t)/(uint64_t) do ppc_rlwinm).
 MARKER = "Task5 FIX: PPC switch jump-table 2A209C"
+FUNC_SIG = "void func_002A209C(ppu_context* ctx) {"
+JT_BASE = 0x002A2134
 
 OLD = """        if (((ctx->cr >> 0) & 4)) goto loc_002A2238;
         ctx->gpr[11] = vm_read32(ctx->gpr[2] + -0x1694);
@@ -119,15 +135,74 @@ NEW = """        if (((ctx->cr >> 0) & 4)) goto loc_002A2238;
         }
         ctx->gpr[31] = (int64_t)(int32_t)(ctx->gpr[1] + 0x70);"""
 
+# Os 58 offsets vem das proprias linhas ".word" da agulha antiga -- uma unica
+# fonte de verdade, tanto para injectar como para verificar o switch do lifter.
+JT_OFFSETS = [int(w, 16) for w in re.findall(r"\.word (0x[0-9A-Fa-f]{8})", OLD)]
+
+# Caminho legado: mesma extensao exacta que a agulha literal OLD cobria (ate' a'
+# linha do gpr[31] inclusive, que NEW volta a emitir), so' que tolerante ao cast
+# do ppc_rlwinm -- (uint32_t) no lift antigo, (uint64_t) no actual.
+LEGACY_RE = re.compile(
+    r"        if \(\(\(ctx->cr >> 0\) & 4\)\) goto loc_002A2238;\n"
+    r"        ctx->gpr\[11\] = vm_read32\(ctx->gpr\[2\] \+ -0x1694\);\n"
+    r"        ctx->gpr\[9\] = \((?:uint32_t|uint64_t)\)ppc_rlwinm\(\(uint32_t\)ctx->gpr\[9\], 2, 22, 29\);\n"
+    r"        ctx->gpr\[0\] = vm_read32\(\(ctx->gpr\[9\] \+ ctx->gpr\[11\]\)\);\n"
+    r"        ctx->gpr\[0\] = \(int64_t\)\(int32_t\)ctx->gpr\[0\];\n"
+    r"        ctx->gpr\[0\] = ctx->gpr\[0\] \+ ctx->gpr\[11\];\n"
+    r"        ctx->ctr = \(uint32_t\)ctx->gpr\[0\];\n"
+    r"        ps3_indirect_call\(ctx\); return;\n"
+    r"(?:        /\* TODO: \.word 0x[0-9A-Fa-f]{8} \*/;\n)+"
+    r"        ctx->gpr\[31\] = \(int64_t\)\(int32_t\)\(ctx->gpr\[1\] \+ 0x70\);"
+)
+
+
+def func_body(s: str) -> str | None:
+    """Corpo de func_002A209C (ate' a' funcao seguinte), ou None."""
+    i = s.find(FUNC_SIG)
+    if i < 0:
+        return None
+    j = s.find("\nvoid func_", i + len(FUNC_SIG))
+    return s[i:] if j < 0 else s[i:j]
+
+
+def lifter_already_resolved(body: str) -> tuple[bool, int, int]:
+    """O switch emitido pelo lifter cobre os mesmos alvos que este patch poria?"""
+    targets = sorted({JT_BASE + off for off in JT_OFFSETS})
+    hit = sum(1 for t in targets
+              if f"case 0x{t:08X}u: goto loc_{t:08X};" in body)
+    return hit == len(targets), hit, len(targets)
+
+
 def main() -> None:
-    s = C1.read_text(encoding="utf-8", errors="replace")
-    if MARKER in s:
-        print("OK: already patched")
+    paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_001.cpp")
+    for p in paths:
+        if not p.exists():
+            continue
+        s = p.read_text(encoding="utf-8", errors="replace")
+        body = func_body(s)
+        if body is None:
+            continue
+        if MARKER in body:
+            print(f"OK: already patched ({p.name})")
+            return
+        ok, hit, tot = lifter_already_resolved(body)
+        if ok:
+            print(f"OK: jump table ja' materializada pelo proprio lifter em "
+                  f"{p.name} -- switch cobre {hit}/{tot} alvos 0x2A2134+offset; "
+                  f"nada a injectar")
+            return
+        m = LEGACY_RE.search(body)
+        if not m:
+            print(f"FAILED {p.name}: func_002A209C presente mas nem o switch do "
+                  f"lifter cobre os alvos ({hit}/{tot}) nem a forma legada "
+                  f"(ctr + ps3_indirect_call + .word) foi encontrada")
+            raise SystemExit(1)
+        new_body = body[:m.start()] + NEW + body[m.end():]
+        p.write_text(s.replace(body, new_body, 1), encoding="utf-8", newline="\n")
+        print(f"OK: patched func_002A209C jump table ({p.name})")
         return
-    if OLD not in s:
-        raise SystemExit("needle missing for 2A209C")
-    C1.write_text(s.replace(OLD, NEW, 1), encoding="utf-8", newline="\n")
-    print("OK: patched func_002A209C jump table")
+    print("FAILED: func_002A209C nao encontrada em nenhum chunk")
+    raise SystemExit(1)
 
 if __name__ == "__main__":
     main()
