@@ -508,3 +508,57 @@ Quem chama o `CBB2C`, e o que é suposto correr a seguir nesse mesmo caminho.
 O `stw r28, 0x0(r9)` para o global em `TOC-0x5EB0` é um bom alvo: se esse
 global for o "há trabalho agendado", vigiá-lo com o `PS3_WATCH_W32` diz se
 alguém alguma vez o volta a pôr.
+
+---
+
+# Adenda 7: o `CBB2C` é INIT, não teardown — e isso mata as duas hipóteses do 2b2e04
+
+Cadeia de chamadores, cada elo com **exactamente um** chamador estático:
+
+```
+main → ppu_run → 10230 → 10354 → 25C838 → 2B2E74 → B71B8 → CBC20 → CBB2C
+```
+
+Corroborado por duas notas anteriores, escritas por outra via:
+
+- `notes/2026-07-20-postmerge-rebaseline.md:31`
+  `main → ppu_run → func_00010230 → func_00010354 → func_0025C838`
+- `notes/2026-07-21-smpd-consumer.md:164-171`
+  `func_002B2E74` ← `func_0025C838`, *"~11 chamadas de init em linha, sem
+  condição"*, *"~9 chamadas de init em linha, sem condição"*, *"os dois
+  dispatchers intermédios não têm NENHUM `if` — são listas planas de
+  InitSubsystem()"*
+
+## Consequência
+
+O `CBB2C` **não é um teardown que dispara indevidamente**. Corre uma vez, sem
+condição nenhuma, a partir do entry point, como parte da sequência de
+inicialização do jogo. Zerar os componentes ali é *inicializá-los*.
+
+Isto fecha as duas hipóteses que o `2b2e04` deixou em aberto:
+
+| hipótese | estado |
+|---|---|
+| **B** — `CBB2C`/`CB56C` invocados a cada tick | **MORTA** — 1 escrita por objecto em 8,4M ticks (adenda 4) |
+| **A** — `CB56C` deveria preservar `+0x4` no caminho de *reuse* | **MORTA** — não há reuse. É init, corre uma vez, incondicional |
+
+## Onde isto deixa o wall
+
+O componente é **correctamente inicializado a ocioso** no arranque. Os campos
+`+0x0` e `+0x4` são referências que o construtor põe e que o init limpa — e
+depois o tick roda 8,4M vezes a fazer o seu trabalho de idle, que é o correcto
+para um componente sem nada agendado.
+
+Não há bug neste objecto, neste tick, nem neste reset. O que falta está a
+jusante: **quem devia dar-lhe trabalho depois do load**. É o mesmo sítio onde o
+Gate A falha (`SetFlip_after_R_Perm=0`), e não uma segunda avaria independente.
+
+## Recomendação
+
+Encerrar a linha `f4`/`TYPE15 state` como causa. Sete adendas, quatro leads
+mortos com medição, e o veredicto é que o subsistema está são. O esforço deve
+voltar ao Gate A propriamente dito: o re-arm do present pós-load.
+
+E antes disso, ao **RDY-0**: o lift em produção é de 20 de Julho e não tem as
+correcções do lifter desta semana. Enquanto o re-lift não fechar, qualquer
+diagnóstico corre sobre um artefacto desactualizado — incluindo este.
