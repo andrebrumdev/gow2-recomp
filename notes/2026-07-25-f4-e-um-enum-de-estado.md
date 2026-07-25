@@ -449,3 +449,62 @@ derivadas: o decompilador (que tipou o objecto como `float*`) e o nosso próprio
 disassembler (que imprimia FPR como GPR). **O assembly é o árbitro.** O Ghidra
 serve para orientar e para responder depressa; a decisão final lê-se na
 instrução.
+
+---
+
+# Adenda 6: o `+0x0` tem os MESMOS dois escritores — e nenhum instala trabalho
+
+`PS3_WATCH_W32=0x4066D798,0x4066D804`, 8.428.284 ticks. **Duas escritas:**
+
+```
+[0x4066D798]=0x4063686C  ra0=func_00263178+0x9C4  ra1=func_002A6608+0x278
+[0x4066D798]=0x00000000  ra0=func_000CB56C+0x36C  ra1=func_000CBB2C+0x45C
+[0x4066D804]=0x00000000  ra0=func_000CB56C+0x36C  ra1=func_000CBB2C+0x45C
+```
+
+Exactamente o mesmo par que escreve o `+0x4`: construção pelo alocador
+(`263178`←`2A6608`) e reset (`CB56C`←`CBB2C`). **Nunca 1, nunca 2** — os dois
+valores que o tick sabe despachar.
+
+Corroborado estaticamente: das 9 funções que comprovadamente tocam neste
+objecto, só `2A64F4` (ctor), `CB56C` e `CBB2C` escrevem o `+0x0`; o `CC9D0`
+nunca o escreve. Nenhuma instala estado de trabalho.
+
+## Os dois campos "de estado" nascem com PONTEIROS
+
+`+0x0 = 0x4063686C` e `+0x4 = 0x40004020` na construção — ambos endereços de
+heap guest, não enums. Depois o reset zera os dois. A leitura "máquina de
+estados com enum" é o que o tick FAZ com os campos depois de zerados; o que o
+construtor lá põe são referências.
+
+## `CBB2C` é o teardown, e falta-lhe o contraparte
+
+```
+0x000CBB64  bl    0xCB56C            ; reset deste componente
+0x000CBB68  cmpw  cr7, r30, r29      ; ... em loop sobre uma lista
+0x000CBB6C  bne   cr7, 0xCBB5C
+0x000CBB88  stw   r28, 0x0(r9)       ; limpa um global (TOC-0x5EB0)
+0x000CBB8C  stw   r29, 0xD8(r31)     ; e campos do gestor (+0xD8..+0xE8)
+0x000CBB94  stfs  f31, 0xE4(r31)
+```
+
+`CBB2C` percorre uma lista, reseta cada componente e depois limpa campos do
+objecto GESTOR (o `r31` dele vai até `+0xE8`, logo é maior que os `0xD0` do
+componente). É um **reset-all**.
+
+## Resposta à pergunta
+
+**Ninguém escreve o `+0x0` para além da construção e do reset.** Não há, neste
+build, nenhum caminho que ponha o componente em estado de trabalho depois do
+`CBB2C` correr.
+
+O que falta não é um escritor do `+0x0` — é o **contraparte de setup do
+`CBB2C`**: o que quer que normalmente re-popule os componentes depois de um
+reset-all. O `CBB2C` desliga tudo e nada volta a ligar.
+
+## Próximo fio
+
+Quem chama o `CBB2C`, e o que é suposto correr a seguir nesse mesmo caminho.
+O `stw r28, 0x0(r9)` para o global em `TOC-0x5EB0` é um bom alvo: se esse
+global for o "há trabalho agendado", vigiá-lo com o `PS3_WATCH_W32` diz se
+alguém alguma vez o volta a pôr.
