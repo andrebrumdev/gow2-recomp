@@ -136,6 +136,26 @@ void ps3_cd498_on_enter(int id, ppu_context* ctx) {
     unsigned long long t = ++g_ps3_cd498_tot[id];
     int post = (g_ps3_rperma_full != 0);
     if (post) g_ps3_cd498_post[id]++;
+    /* Discriminador: para o CC9D0 (id 5, o objecto VIVO) ler o vptr do
+     * objecto e compara-lo com os vptr das duas classes que detem o metodo
+     * instalador de estado (1D7FCC -> 0x00513F40, 1A9D24 -> 0x00513520).
+     * Binario: igual -> mesma classe, construida por caminho nao instrumentado;
+     * diferente -> o f4 daquele objecto nao e' o mesmo campo semantico. */
+    if (id == 5) {
+        static int vt_logged = 0;
+        if (vt_logged < 6) {
+            vt_logged++;
+            uint32_t obj = (uint32_t)ctx->gpr[3];
+            uint32_t vt  = obj ? vm_read32(obj) : 0u;
+            const char* verdict =
+                (vt == 0x00513F40u) ? "IGUAL a classe-1D7FCC"
+              : (vt == 0x00513520u) ? "IGUAL a classe-1A9D24"
+              : "DIFERENTE das duas";
+            fprintf(stderr, "[CD498] VPTR obj=0x%08X vptr=0x%08X  %s\n",
+                    obj, vt, verdict);
+            fflush(stderr);
+        }
+    }
     if (g_ps3_cd498_logged[id] < (unsigned long long)g_ps3_cd498_log_cap[id]) {
         g_ps3_cd498_logged[id]++;
         fprintf(stderr,

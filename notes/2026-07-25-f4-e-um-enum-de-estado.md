@@ -248,3 +248,71 @@ com `0x513F40` / `0x513520`. Uma leitura, resposta binária:
   instrumentado (construção por outro caminho? placement? cópia?);
 - **diferente** → o `f4` daquele objecto não é o mesmo campo semântico, o lead
   inteiro cai, e o wall está noutro sítio.
+
+---
+
+# Adenda 3: o discriminador refuta o meu próprio lead
+
+```
+[CD498] VPTR obj=0x4066D798 vptr=0x00000000  DIFERENTE das duas
+[CD498] VPTR obj=0x4066D804 vptr=0x00000000  DIFERENTE das duas   (x3 cada)
+[CD498] SUMMARY fn=CC9D0(ctrl) tot=7620252 post=7620252 pre=0
+```
+
+`vptr = 0` não é "outra classe". É **nenhuma vtable** — e a premissa da comparação
+estava errada. O `+0x0` deste objecto não é um ponteiro:
+
+```c
+_opd_FUN_000cc9d0:  if (*param_1 == 1.4013e-45)      /* +0x0 == 1 */
+                    if (*param_1 != 2.8026e-45)      /* +0x0 == 2 */
+_opd_FUN_000cb56c:  *param_1 = 0;                    /* zera +0x0 */
+```
+
+É **outro enum pequeno** ∈ {0,1,2}, adjacente ao `f4`. O objecto vivo é uma
+struct simples, não um objecto polimórfico.
+
+## Consequência: o lead `1D7FCC` está morto
+
+`1D7FCC`/`1A9D24` só são alcançáveis pelo slot 2 de vtables de classes
+polimórficas. O objecto que o `CC9D0` tica não tem vtable, logo **não pode ser
+instância dessas classes**. A coincidência de layout que me convenceu
+(`stw ...,0x4(r25)` + `lwz ...,0x8(r25)`) era mesmo coincidência: dois enums
+adjacentes seguidos de um ponteiro é um shape comum.
+
+Confirmação independente: os 12 construtores dessas classes dão `tot=0` — nunca
+são instanciadas de todo. Coerente, e agora explicado.
+
+## O que sobra provado, depois de três rondas
+
+1. `f4` = campo em `+0x4`, enum ∈ {0,1,2,5,6,7,8,9}; `f54` = byte em `+0x54`.
+2. `CC9D0` é o tick; `f4=0` é estado terminal; gira ~7,6-7,8M vezes pós-load,
+   zero antes.
+3. `CB56C` zera `+0x54` mas **não** toca `+0x4` (corrige o verdicto do 2b2e04).
+4. Nenhum dos 6 sítios que escrevem um literal `{5,6,7,9}` a um `+0x4` é
+   alcançado — e nenhum pertence a este tipo de objecto.
+5. O objecto vivo não é polimórfico (`+0x0` é enum, não vptr).
+
+## Porque é que o varrimento não encontrou o escritor certo
+
+O varrimento procurou `li rX,{5,6,7,9}` seguido de `stw rX, 0x4(rY)`. Não
+apanha: valor vindo de outro registo/campo, offset calculado, `stmw`, `memcpy`
+de um template, ou escrita pelo host (HLE/patch). O escritor legítimo do `f4`
+deste objecto pode estar em qualquer dessas formas — ou não existir, e `f4=0`
+ser o idle correcto, como a nota de 22-07 suspeitava.
+
+## Próximo experimento: watchpoint de escrita, não mais busca estática
+
+Parar de procurar o escritor no binário e **apanhá-lo em flagrante**. O runtime
+já tem o gancho: `ps3_type15_block_stomp()` é chamado de dentro do `vm_write32`
+(`runtime/ppu/ppu_loader.cpp:1114-1116`). Um watchpoint gated no mesmo sítio,
+a vigiar `0x4066D79C` (= `this+0x4`) e `0x4066D808`, responde de vez:
+
+- **alguém escreve** → temos o culpado, com o valor e o momento;
+- **ninguém escreve em 7,6M ticks** → o `f4` nunca é tocado depois da
+  construção, e a pergunta passa a ser se isso é o comportamento correcto
+  (hipótese de 22-07) ou se falta um subsistema inteiro a montante.
+
+Nota: os endereços `0x4066D798`/`0x4066D804` repetiram-se em todas as corridas
+desta sessão e nas notas de 22-07 e 23-07, portanto são estáveis o suficiente
+para servirem de alvo; mesmo assim o watchpoint deve aceitar o endereço por env
+var em vez de o fixar.
