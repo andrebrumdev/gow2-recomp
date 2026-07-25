@@ -1,0 +1,34 @@
+# Baseline forense do RDY-0 -- contadores do boot de referencia
+# Medido em 2026-07-25 contra boot_gow2 md5 72fa17c3900f5ef3c36049032c50e01a
+# (copia preservada em boot_gow2.rdy0_ref, gitignored).
+#
+# ATENCAO: este binario NAO foi construido a partir do branch macos-arm64-port-f0-f2.
+# O ppu_loader.o referencia _ps3_checkpoint_fire e _ps3_mem_oob_report, que so
+# existem na worktree ../ps3recomp-bringup. Enquanto o passo 6 da Task 1 nao
+# fixar o engine root e regravar, estes numeros descrevem um binario de safra
+# mista (lift 23 jul, runtime 24 jul, engine de outra worktree).
+#
+# Recipe: braco M0 -- PS3_NO_RSX=1 PS3_PERF_FSM=1 PS3_MOVIE_EOS=0, PS3_TRACE_* limpos,
+# PS3_MOVIE_DONE_MS e PS3_VDEC_FORCE_SEQDONE_MS por definir, 25 s, kill por PID.
+#
+# metrica	valor	tipo	nota
+st620_max_run1	11	obs	>=3
+st620_max_run2	11	obs	>=3
+st620_max_run3	1	obs	preso em 1
+st620_max_run4	11	obs	>=3
+st620_max_run5	11	obs	>=3
+st620_max_run6	1	obs	preso em 1
+st620_runs_ok	4	gate	de 6 -- no limite do criterio 4-de-6
+swap_used_mb	6616	ambiente	ACIMA do limiar ~4000M documentado; explica os 2 runs presos em 1
+boot_lifted_functions	56223	gate	linha [boot] N lifted functions registered
+lift_function_table_count	56072	gate	const em ppu_recomp_030.cpp -- numero DIFERENTE do de cima
+imp_modules	13	gate	linha [imp]
+imp_imports	151	gate	linha [imp]
+orfaos_pos_run	0	gate	pgrep -f boot_gow2 | wc -l
+lift_chunks	31	estrutura	o lifter actual produz 7 -- gate nunca por indice de chunk
+lift_injected_lines	1662	estrutura	000=704 001=910 002=20 003=16 004/005/006=4
+manifest_markers	244	gate	verify_lift_baseline.sh; 98 TAG + 71 SYM + 75 GLOBAL
+#
+# NAO observavel nesta recipe (nao usar como gate M0):
+# R_PermA bytes_read/size -- 0 ocorrencias no log M0; so aparece na recipe
+# menu-fast (FORCE_SEQDONE + AUTO_LOAD), que e' outra recipe e outro baseline.

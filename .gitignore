@@ -72,3 +72,6 @@ frame_*.png
 
 # App bundles gerados (icone derivado do jogo + hard-link do boot)
 *.app/
+recomp_pre/
+recomp_macos_v3/
+boot_gow2.rdy0_ref
