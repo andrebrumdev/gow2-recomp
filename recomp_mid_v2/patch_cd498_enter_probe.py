@@ -53,16 +53,33 @@ SITES = [
     # constante. Se ele der tot=0 tambem, a probe esta' partida e nenhum
     # dos zeros acima significa nada.
     ("CC9D0", "func_000CC9D0", 3),
+    # Construtores das duas classes cujas vtables contem 1D7FCC/1A9D24 no
+    # slot 2 (+8). Carregam a vtable do TOC (0xCAE0 / 0xCBBC) logo a
+    # entrada. Se nenhum correr, a classe nunca e' construida e nenhum
+    # despacho pode alcancar o instalador de estado.
+    ("C96014", "func_00196014", 2),
+    ("C96FF0", "func_00196FF0", 2),
+    ("C9DCF4", "func_0019DCF4", 2),
+    ("C9FBE0", "func_0019FBE0", 2),
+    ("CA3AB0", "func_001A3AB0", 2),
+    ("CA3B68", "func_001A3B68", 2),
+    ("CAD870", "func_001AD870", 2),
+    ("CADA28", "func_001ADA28", 2),
+    ("CADBD4", "func_001ADBD4", 2),
+    ("CCAE1C", "func_001CAE1C", 2),
+    ("CCAE90", "func_001CAE90", 2),
+    ("CDAFB4", "func_001DAFB4", 2),
 ]
 
 HELPER_BLOCK = r'''
 /* CD498-PROBE: instalador do estado TYPE15 chega a correr? (PS3_TRACE_CD498=1) */
 #include <signal.h>
 extern "C" volatile int g_ps3_rperma_full;
-enum { PS3_CD498_FN_N = 6 };
+enum { PS3_CD498_FN_N = 18 };
 static const char* const g_ps3_cd498_fn_name[PS3_CD498_FN_N] =
-    { "CD7B4", "CD498", "CD9DC", "1D7FCC", "1A9D24", "CC9D0(ctrl)" };
-static const int g_ps3_cd498_log_cap[PS3_CD498_FN_N] = { 8, 8, 8, 8, 8, 3 };
+    { "CD7B4", "CD498", "CD9DC", "1D7FCC", "1A9D24", "CC9D0(ctrl)",
+      "C96014", "C96FF0", "C9DCF4", "C9FBE0", "CA3AB0", "CA3B68", "CAD870", "CADA28", "CADBD4", "CCAE1C", "CCAE90", "CDAFB4" };
+static const int g_ps3_cd498_log_cap[PS3_CD498_FN_N] = { 8, 8, 8, 8, 8, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
 unsigned long long g_ps3_cd498_tot[PS3_CD498_FN_N];
 unsigned long long g_ps3_cd498_post[PS3_CD498_FN_N];
 static unsigned long long g_ps3_cd498_logged[PS3_CD498_FN_N];

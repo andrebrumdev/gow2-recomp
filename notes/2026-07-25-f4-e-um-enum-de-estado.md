@@ -176,3 +176,75 @@ instalado.
 Binário compilado com WIP não-committado de outra sessão em `movie_eos_arm.c`
 (fonte do `st620`). Não invalida um resultado binário sobre funções guest, mas
 é a primeira variável a eliminar se algo aqui for contestado.
+
+---
+
+# Adenda 2: as classes do instalador nunca são construídas
+
+18 sítios, mesmo binário, mesma corrida (pós-load: `rperma_full=1`, R_PermA
+completo).
+
+```
+CD7B4 CD498 CD9DC 1D7FCC 1A9D24 ............................ tot=0
+C96014 C96FF0 C9DCF4 C9FBE0 CA3AB0 CA3B68 ................... tot=0
+CAD870 CADA28 CADBD4 CCAE1C CCAE90 CDAFB4 ................... tot=0
+CC9D0 (controlo) ............................ tot=7737370  post=7737370  pre=0
+```
+
+## Como se chegou aos 12 construtores
+
+`1D7FCC` e `1A9D24` não têm chamador estático — mas, ao contrário do `CD9DC`,
+**têm o OPD referenciado**: em `0x513F48` e `0x513528`. A zona repete o padrão
+`00 FFFFFFFFF 000 FFFFFFFFF 00` — vtables Itanium com RTTI removido
+(offset-to-top e typeinfo a zero) e 9 métodos virtuais cada. Nas duas, o nosso é
+o **slot 2** (`+8`): são o mesmo método virtual de duas classes irmãs.
+
+Procurar quem despacha o slot `+8` dá 538 sítios — inútil. Inverteu-se a
+pergunta: cada vptr (`0x513F40`, `0x513520`) é referenciado **uma vez**, em
+entradas de TOC (`TOC-13600` e `TOC-13380`, `TOC=0x541178` lido do OPD). Doze
+sítios do `.text` carregam essas entradas, todos à entrada da função — padrão de
+construtor. **Nenhum dos doze corre.**
+
+## O lead era válido: o layout confere
+
+`0x001D83B4  lwz r3, 0x8(r25)` e `0x001D840C  stw r0, 0x4(r25)`.
+
+Isso é exactamente a forma do objecto TYPE15 que a probe do `CC9D0` lê:
+`f4 = vm_read32(th+0x4)`, `prod = vm_read32(th+0x8)`. Somado a escrever
+precisamente os estados de arranque `{5,6,7,9}` que o tick consome, o caso é
+forte — ainda que não seja prova de identidade de tipo.
+
+## Conclusão
+
+O enquadramento muda outra vez, e para mais fundo:
+
+> Não é "um campo não é escrito". É **um subsistema inteiro que nunca é
+> instanciado**. As duas classes que detêm o método instalador de estado nunca
+> têm um construtor executado neste boot, enquanto o tick que consumiria esse
+> estado gira 7,7 milhões de vezes.
+
+## O que isto exclui, e o que reabre
+
+Exclui: qualquer explicação do `f4=0` baseada em "quem escreve foi apagado" ou
+"o escritor corre mas falha" — os seis únicos sítios do binário capazes de
+escrever um estado de arranque nunca são atingidos, e as classes que os detêm
+nunca existem.
+
+Reabre a hipótese que a nota de 22-07 já tinha levantado e que ficou por
+testar (`2026-07-22-type15-cb56c-attach-diagnostic.md:105`):
+
+> *"`f4=0` may be the correct idle value for an object waiting on that"*
+
+Se o objecto vivo em `0x4066D798` é de uma classe **diferente** daquelas duas, o
+`f4=0` pode ser legítimo e o wall não está aqui — está em quem devia ter criado
+os objectos das classes instaladoras.
+
+## Próximo discriminador proposto
+
+Ler o vptr do objecto vivo (`vm_read32(0x4066D798)`) durante o boot e compará-lo
+com `0x513F40` / `0x513520`. Uma leitura, resposta binária:
+
+- **igual** → é a mesma classe, e a pergunta é porque não passou pelo construtor
+  instrumentado (construção por outro caminho? placement? cópia?);
+- **diferente** → o `f4` daquele objecto não é o mesmo campo semântico, o lead
+  inteiro cai, e o wall está noutro sítio.
