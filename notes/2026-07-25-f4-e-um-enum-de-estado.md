@@ -316,3 +316,62 @@ Nota: os endereços `0x4066D798`/`0x4066D804` repetiram-se em todas as corridas
 desta sessão e nas notas de 22-07 e 23-07, portanto são estáveis o suficiente
 para servirem de alvo; mesmo assim o watchpoint deve aceitar o endereço por env
 var em vez de o fixar.
+
+---
+
+# Adenda 4: o watchpoint apanha o escritor — e corrige a minha adenda 3
+
+`PS3_WATCH_W32=0x4066D79C,0x4066D808`, corrida com 8.207.786 ticks de `CC9D0`.
+**Exactamente 3 escritas** (cap de 200 nunca atingido):
+
+```
+[0x4066D79C]=0x40004020  ra0=func_00263178+0x9E0  ra1=func_002A6608+0x278
+[0x4066D79C]=0x00000000  ra0=func_000CB56C+0x674  ra1=func_000CBB2C+0x45C
+[0x4066D808]=0x00000000  ra0=func_000CB56C+0x674  ra1=func_000CBB2C+0x45C
+```
+
+## Correcção: a secção 3 desta nota estava ERRADA
+
+Eu tinha escrito que `CB56C` não toca no `+0x4`, com base em o disassembly só
+mostrar `stw r0,0x0(r3)` e `stw r0,0x8(r3)`. **Está errado.** O `CB56C` escreve
+através de um ponteiro DERIVADO (`r9`, que o loop faz avançar a partir de
+`r3+12`), não de `0x4(r3)`. Procurei a forma literal e concluí de menos.
+
+O watchpoint prova o que a análise estática me escondeu: a escrita de `CB56C`
+**aterra em `this+0x4`**.
+
+**Portanto o verdicto de `2026-07-23-2b2e04-typewrites-diagnostic.md:131` está
+CONFIRMADO**, e por medição directa, não por inferência: `2A6608` (pelo
+alocador, `263040`→`263178`) escreve `0x40004020` no `+0x4` durante a
+construção; `CB56C`, invocado por `CBB2C`, apaga-o; e nada o volta a escrever.
+
+## O que é novo: discrimina entre as duas hipóteses do 2b2e04
+
+O 2b2e04 deixou duas hipóteses em aberto, deliberadamente por decidir:
+
+- **A** — `CB56C` deveria preservar `+0x4` no caminho de reuse
+- **B** — `CBB2C`/`CB56C` estão a ser invocados repetidamente (todos os ticks)
+  quando deviam correr uma vez
+
+**A medição mata a B.** Em 8,2 milhões de ticks houve **uma única** escrita de
+zero por objecto. O `CB56C` não está a correr repetidamente — zerou uma vez e
+nunca mais. A frequência de invocação não é o bug.
+
+Sobra a **A**, ou uma terceira que a medição sugere: o reset é legítimo, e o que
+falta é quem devia **re-preencher** o `+0x4` a seguir — que nunca corre.
+
+## Ressalva por resolver
+
+O valor de construção é `0x40004020` — um **ponteiro** guest, não um enum de
+`{1,2,5,6,7,8,9}`. Isso não casa com o `CC9D0` a comparar `param_1[1]` contra
+denormais pequenos. Ou o `th` da probe do `CC9D0` não é a mesma base que o
+`param_1` do decompilado, ou o campo é reinterpretado. Fica por resolver e é o
+próximo fio: **não construir nenhum fix sobre a leitura "enum" enquanto isto não
+fechar.**
+
+## Ferramenta
+
+`PS3_WATCH_W32` passou a aceitar até 8 moradas separadas por vírgula e a
+simbolizar `ra0`/`ra1` por `dladdr` — que em código liftado devolve o
+`func_<EA guest>` envolvente. Sem isso os `ra` eram ponteiros host slidados por
+ASLR, e simbolizá-los exigia `vmmap` no pid vivo (ver ledger, 2026-07-23).
