@@ -21,7 +21,17 @@ new = """          { static int on=-1; if(on<0){extern char* getenv(const char*)
 if "desc=0x%08X raw=" in s1:
     print("TYDISP already enhanced")
 elif old not in s1:
-    raise SystemExit("TYDISP needle missing")
+    # NON-FATAL (2026-07-21, Task 1 fix): patch_tydisp_lr.py is an ALTERNATE
+    # enhancement of this same [TYDISP] fprintf, not a prerequisite (see
+    # apply_all_patches.sh header note on patch_tymap_probes2.py). When
+    # tydisp_lr runs first (alphabetical order: tydisp_lr < tymap_probes2)
+    # it consumes this exact needle and leaves the "lr" variant instead of
+    # the "desc/raw/w1/w2" variant this block wants -- expected, harmless.
+    # Previously this branch did `raise SystemExit(...)`, which aborted the
+    # WHOLE script before reaching Part 2 ([TYMAP-171] entry probe, the one
+    # this script exists to install) and Part 3 ([TYMAP-GS]). Downgrade to
+    # a skip so the required probes below still get applied.
+    print("TYDISP needle missing (superseded by patch_tydisp_lr.py order) -- skip, non-fatal")
 else:
     C1.write_text(s1.replace(old, new, 1), encoding="utf-8", newline="\n")
     print("TYDISP enhanced")

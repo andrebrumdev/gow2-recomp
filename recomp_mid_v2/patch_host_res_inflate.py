@@ -36,6 +36,12 @@ if brace < 0:
 insert = (
     "{\n"
     "        /* Host gzip path for embedded EBOOT resources (see host_res_inflate.c). */\n"
+    "        { static int on=-1; if(on<0){extern char* getenv(const char*);\n"
+    "            const char* e=getenv(\"PS3_TRACE_HOSTRES\"); on=(e&&*e&&*e!='0')?1:0;}\n"
+    "          if(on){ static int n=0; if(n++<48)\n"
+    "            fprintf(stderr,\"[HOSTRES-ENTER] #%d dst=0x%08X src=0x%08X clen=0x%X\\n\",\n"
+    "              n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6]);\n"
+    "            fflush(stderr);} }\n"
     "        if (host_res_inflate(ctx)) return;\n"
 )
 # replace "void func...{\n" with insert version

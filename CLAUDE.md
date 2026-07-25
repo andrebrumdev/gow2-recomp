@@ -19,8 +19,31 @@ Regras que valem dobrado AQUI (é o repo mais perto dos dados do jogo):
    boot_v2_new.exe` antes/depois de cada run.
 
 Atalhos:
-- Rodar (usuário, com janela): `recomp_mid_v2/rodar_gow2_intro_skip.cmd`
-- Smokes: `recomp_mid_v2/bt_intro_wads.sh` (FORCE→WADs), `bt_visual_combo.sh` (EOS visual),
-  `smoke_asset_pipeline.sh` (métricas de raiz), `run_basecase.sh` (heap/free-list)
-- Build/relink: ver `recomp_mid_v2/build_crc.sh` (padrão de compile+link)
-- Recipe de env canônico e armadilhas (VDEC_ASYNC obrigatório etc.): CLAUDE.md do ps3recomp
+- Rodar (usuário, com janela): `recomp_mid_v2/rodar_gow2_intro_skip.cmd` (Win) /
+  `./rodar_gow2.sh` (macOS: **Metal default** M10) ou `PS3_NO_RSX=1 ./boot_gow2 EBOOT.ELF`
+- Smokes Mac: `./smoke_intro_macos.sh`, `./smoke_boot_mac.sh`, `./smoke_perf_macos.sh`,
+  `./smoke_metal_matrix_mac.sh` (M10 matriz metal), `./smoke_metal_draw_mac.sh`
+- Build Mac: `./build_macos.sh` (LIFT_OPT/HOST_OPT/OUT para A/B; default `-O0`)
+- Smokes Win: `recomp_mid_v2/bt_intro_wads.sh`, `bt_visual_combo.sh`, etc.
+- Recipe de env e **como puxar o upstream sp00nznet sem partir o Mac/GoW2**:
+  ver secção **«Integrar melhorias do projeto original»** em `../ps3recomp/CLAUDE.md`
+
+### Port Apple (obrigatório ler no motor)
+
+Qualquer feature **macOS** (janela, vídeo, áudio, RSX, perf): seguir
+`../ps3recomp/Claude.md` § **«Port Apple / macOS — optimização e baixo nível»**.
+
+- Default GPU: **Metal nativo** (`PS3_RSX_BACKEND=metal`), não “port preguiçoso” do Win.
+- Vídeo overlay: **VideoToolbox** (planos M0/M4), não ffmpeg CLI nem reencode Theora.
+- Stack de planos: `../ps3recomp/docs/superpowers/plans/2026-07-21-00-macos-metal-stack-INDEX.md`
+  (M0–M10: overlay, draw, MSL, tex, state, RT, content hold, vdec present, ops).
+- Backlog do que falta portar: `../ps3recomp/docs/superpowers/plans/2026-07-21-00-macos-metal-pending-backlog.md`.
+- Overlay **não** substitui WAD/vdec (cadeia `intro-vdec-open-force-wad`).
+
+### Não-regressão Mac após merge do motor
+Depois de qualquer integrate de `sp00nznet/ps3recomp` no `../ps3recomp`:
+1. `cmake --build ../ps3recomp/build-macos -j…` + `./build_macos.sh`
+2. Smoke 25s probes OFF: max `st620 ≥ 3` e sticky vivo
+3. Matar boot pelo **PID** (TERM, depois -9) — nunca deixar órfãos a 90% CPU
+4. Se st620=0 ou OOB `0xFFFF*`: **regressão do merge** — não commitar como “OK”;
+   ver CLAUDE do motor (cherry-pick vs revert)

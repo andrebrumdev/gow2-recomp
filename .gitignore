@@ -1,4 +1,6 @@
 # ---- Game data (copyright — NEVER commit) ----
+*.pkg
+*.rap
 extracted/
 EBOOT.ELF
 EBOOT.BIN
@@ -24,6 +26,12 @@ movie_cache/
 
 # ---- Generated lift chunks (regenerable from functions.json + lifter) ----
 recomp/
+recomp_macos/
+# Saida de lift re-gerada com o lifter actual (Task 3.2, wall M2). Mesmo motivo
+# do recomp_macos/: 31 chunks de centenas de milhares de linhas, regeneraveis
+# com ppu_lifter.py; nunca versionar.
+recomp_macos_v2/
+boot_gow2
 recomp_full/
 recomp_mid/
 recomp_compile/
@@ -54,3 +62,18 @@ recomp_mid_v2/*.bin
 nm_*.txt
 *.txt
 !SPURS*.md
+
+# Oracle session outputs (RPCS3 diff)
+oracle_out/
+
+# RSX frame dumps (local debug, not source)
+frame_*.bmp
+frame_*.png
+
+# App bundles gerados (icone derivado do jogo + hard-link do boot)
+*.app/
+recomp_pre/
+recomp_macos_v3/
+boot_gow2.rdy0_ref
+ghidra_out/
+ghidra_analysis/
