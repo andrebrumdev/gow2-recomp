@@ -32,3 +32,27 @@ manifest_markers	244	gate	verify_lift_baseline.sh; 98 TAG + 71 SYM + 75 GLOBAL
 # NAO observavel nesta recipe (nao usar como gate M0):
 # R_PermA bytes_read/size -- 0 ocorrencias no log M0; so aparece na recipe
 # menu-fast (FORCE_SEQDONE + AUTO_LOAD), que e' outra recipe e outro baseline.
+#
+# === BASELINE 2 (2026-07-25, apos merge origin + rebuild da lib) ===
+# Engine root FIXADO: ps3recomp @ d039469 (merge que trouxe runtime/trace/, onde
+# vivem ps3_checkpoint_fire e ps3_mem_oob_report). Exigiu reconstruir o
+# libps3recomp_runtime.a -- o de 24 jul nao os tinha e o link falhava.
+# boot_gow2 md5 d0f32f9e7b741f2c741146507857bb44
+#
+# ATENCAO -- ESTE BUILD DEPENDE DE CODIGO NAO-COMMITADO. Ver adenda no
+# 2026-07-25-baseline-depende-de-wip.md: o lift chama movie_done_timebased_reset,
+# que so' existe no movie_eos_arm.c por committar de outra sessao. Um build a
+# partir de HEAD NAO LINKA.
+#
+st620_max_run1_b2	11	obs	>=3
+st620_max_run2_b2	11	obs	>=3
+st620_max_run3_b2	11	obs	>=3
+st620_max_run4_b2	11	obs	>=3
+st620_max_run5_b2	11	obs	>=3
+st620_max_run6_b2	11	obs	>=3
+st620_runs_ok_b2	6	gate	6 de 6 (o baseline 1 deu 4/6, com 6616M de swap)
+swap_used_mb_b2	5911	ambiente	abaixo do limiar ~4000M? nao, mas melhor que o b1
+boot_lifted_functions_b2	56223	gate	inalterado
+imp_modules_b2	13	gate	inalterado
+imp_imports_b2	151	gate	inalterado
+orfaos_pos_run_b2	0	gate	
