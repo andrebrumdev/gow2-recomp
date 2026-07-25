@@ -40,15 +40,29 @@ MARKER = "CD498-PROBE"
 SITES = [
     ("CD7B4", "func_000CD7B4", 8),
     ("CD498", "func_000CD498", 8),
+    # topo da cadeia: CD9DC nao tem chamador estatico nem referencia ao seu OPD
+    # em lado nenhum da imagem -- so' entra por despacho indirecto (ou nunca).
+    ("CD9DC", "func_000CD9DC", 8),
+    # candidatos encontrados por varrimento de instrucoes em todo o .text:
+    # `li rX,{5,6,7,9}` seguido de `stw rX, 0x4(rY)` -- os estados de arranque
+    # que faltavam. NAO esta' provado que operem no objecto TYPE15; a probe
+    # existe precisamente para nao adivinhar.
+    ("1D7FCC", "func_001D7FCC", 8),
+    ("1A9D24", "func_001A9D24", 8),
+    # CONTROLO POSITIVO: CC9D0 e' o tick que as notas mostram em spin
+    # constante. Se ele der tot=0 tambem, a probe esta' partida e nenhum
+    # dos zeros acima significa nada.
+    ("CC9D0", "func_000CC9D0", 3),
 ]
 
 HELPER_BLOCK = r'''
 /* CD498-PROBE: instalador do estado TYPE15 chega a correr? (PS3_TRACE_CD498=1) */
 #include <signal.h>
 extern "C" volatile int g_ps3_rperma_full;
-enum { PS3_CD498_FN_N = 2 };
-static const char* const g_ps3_cd498_fn_name[PS3_CD498_FN_N] = { "CD7B4", "CD498" };
-static const int g_ps3_cd498_log_cap[PS3_CD498_FN_N] = { 8, 8 };
+enum { PS3_CD498_FN_N = 6 };
+static const char* const g_ps3_cd498_fn_name[PS3_CD498_FN_N] =
+    { "CD7B4", "CD498", "CD9DC", "1D7FCC", "1A9D24", "CC9D0(ctrl)" };
+static const int g_ps3_cd498_log_cap[PS3_CD498_FN_N] = { 8, 8, 8, 8, 8, 3 };
 unsigned long long g_ps3_cd498_tot[PS3_CD498_FN_N];
 unsigned long long g_ps3_cd498_post[PS3_CD498_FN_N];
 static unsigned long long g_ps3_cd498_logged[PS3_CD498_FN_N];

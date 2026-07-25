@@ -113,3 +113,66 @@ instalado, em curso".
   mesmo tipo de objecto.
 - Nada disto foi observado em execução — é análise estática do binário original.
   O passo in-boot é instrumentar `CD7B4`/`CD498`.
+
+---
+
+# Adenda in-boot (2026-07-25): medido, com controlo positivo
+
+Probe `recomp_mid_v2/patch_cd498_enter_probe.py` (gated `PS3_TRACE_CD498=1`,
+OFF por omissão). Recipe menu-fast headless, `TIMEOUT=90`, corrida que chegou ao
+pós-load: `rperma_full=1`, `thr_auto_load() end`, `bytes_read=20169344 == size`.
+
+```
+[CD498] SUMMARY fn=CD7B4       tot=0
+[CD498] SUMMARY fn=CD498       tot=0
+[CD498] SUMMARY fn=CD9DC       tot=0
+[CD498] SUMMARY fn=1D7FCC      tot=0
+[CD498] SUMMARY fn=1A9D24      tot=0
+[CD498] SUMMARY fn=CC9D0(ctrl) tot=7840456  post=7840456  pre=0
+```
+
+**Controlo positivo**: `CC9D0` correu **7.840.456 vezes**, todas depois do
+R_PermA, nenhuma antes — e com `r3` a alternar entre `0x4066D798` e
+`0x4066D804`, exactamente os dois `this` que as notas de 22-07 documentam. A
+instrumentação dispara, conta e lê o registo certo; portanto os cinco zeros
+significam mesmo *não são alcançados*.
+
+## Os cinco sítios que sabem instalar um estado de arranque
+
+Varrimento de instruções sobre as 957k palavras do `.text` (`li rX,{5,6,7,9}`
+seguido de `stw rX, 0x4(rY)` — independente do que o decompilador rendeu):
+
+| endereço | escreve | função contentora |
+|---|---:|---|
+| `0x001D8408` | 6 | `func_001D7FCC` |
+| `0x001D8414` | 9 | `func_001D7FCC` |
+| `0x001D8438` | 7 | `func_001D7FCC` |
+| `0x001D845C` | 5 | `func_001D7FCC` |
+| `0x001AA124` | 5 | `func_001A9D24` |
+| `0x000CD62C` | 9 | `func_000CD498` |
+
+**Nenhum é atingido.**
+
+## Estado do wall, agora preciso
+
+Não é "campo por escrever" nem "campo apagado por um reset" (esse mecanismo foi
+refutado para o `+0x4` — ver secção 3). É:
+
+> uma máquina de estados a girar **7,8 milhões de vezes** sobre um estado que
+> **ninguém instala**.
+
+O tick é armado pelo load (`pre=0`, `post=7840456`); o *trabalho* é que nunca é
+instalado.
+
+## Pergunta seguinte
+
+1. O que deveria chamar `func_001D7FCC`? (é quem detém os quatro estados)
+2. Porque está a cadeia `CD9DC → CD7B4 → CD498` inerte — sem chamador estático
+   **e** sem uma única referência ao seu OPD (`0x51E028/30/38`) em toda a
+   imagem carregada? Vtable construída em runtime, ou código morto neste build?
+
+## Ressalva
+
+Binário compilado com WIP não-committado de outra sessão em `movie_eos_arm.c`
+(fonte do `st620`). Não invalida um resultado binário sobre funções guest, mas
+é a primeira variável a eliminar se algo aqui for contestado.
