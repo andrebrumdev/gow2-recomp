@@ -375,3 +375,77 @@ fechar.**
 simbolizar `ra0`/`ra1` por `dladdr` — que em código liftado devolve o
 `func_<EA guest>` envolvente. Sem isso os `ra` eram ponteiros host slidados por
 ASLR, e simbolizá-los exigia `vmmap` no pid vivo (ver ledger, 2026-07-23).
+
+---
+
+# Adenda 5: a máquina lida em assembly — e `f4=0` é um caminho normal
+
+Reli o `CC9D0` ao nível da instrução, depois de descobrir que o `ppu_disasm`
+imprimia FPRs como `rN` (corrigido em `ps3recomp` `25ecd24`) e que o Ghidra
+tipava o objecto como `float*`, transformando os enums em denormais. **As duas
+representações que usei nas adendas anteriores eram enganosas.**
+
+## O que a máquina faz, de facto
+
+```
+CC9D0(obj):                       ; obj em r31
+  0xCC9FC  f54 = obj[+0x54]       ; byte
+  0xCCA0C  se f54 != 0 -> 0xCCBF0 ; outro caminho
+  0xCCA10  f4  = obj[+0x4]
+  0xCCA14  se f4 == 1 -> 0xCCCBC
+  0xCCA1C  se f4 == 0 -> 0xCCA40  <-- o caso observado
+  0xCCA24  se f4 == 9 -> 0xCCA40
+           senao: se prod[+0xCE] <= 0 -> 0xCCC4C (escreve f4 = 0)
+
+0xCCA40:   s0 = obj[+0x0]
+  0xCCA44  se s0 == 1 -> 0xCCB9C
+  0xCCA4C  se s0 == 2 -> 0xCCC0C
+           senao (s0 == 0) -> 0xCCA54
+
+0xCCA54:   li r9,4 ; addi r11,r29,12 ...   <-- loop de 4 canais a partir de +12
+```
+
+Escritas de `f4` no corpo: `0` (0xCCC5C), `8` (0xCCC04), `1` (0xCCCB4).
+
+## Correcção: `f4=0` NÃO é estado terminal
+
+Escrevi na adenda 1 que "com `f4=0` nenhum case casa". Errado. O `f4=0` tem um
+`beq` próprio (0xCCA20) para `0xCCA40`, que despacha no **`+0x0`** — a variável
+de estado primária. Com `+0x0 = 0` segue para `0xCCA54`, o loop de interpolação
+de 4 canais (decaimento por frame), e depois chama `2A3AA4` duas vezes.
+
+Ou seja: **o tick está a executar um caminho de idle bem definido, não a bater
+numa parede.** O `f4` é sub-estado; o estado primário é o `+0x0`.
+
+## Consequência para o wall
+
+Isto sustenta a hipótese que a nota de 22-07 levantou e que ficou por testar:
+
+> *"`f4=0` may be the correct idle value for an object waiting on that"*
+
+Um objecto interpolador de 4 canais, com estado primário 0 e sub-estado 0, a
+decair por frame e a reportar duas flags — é exactamente o que um componente
+**ocioso** faz. Não há evidência de que esteja avariado.
+
+**Reenquadramento honesto:** as rondas R12 e as minhas quatro rondas
+perseguiram um sintoma que é provavelmente comportamento correcto. A pergunta
+não é *"porque é que o `f4` não avança"*, é *"porque é que ninguém dá trabalho
+a este componente"* — e essa pergunta é sobre quem devia escrever o `+0x0`
+(estado primário) ou agendar trabalho a montante, não sobre o `+0x4`.
+
+## O que fica provado e reutilizável
+
+- `f4` = `+0x4`, sub-estado inteiro; `f54` = `+0x54`, byte; `+0x0` = estado primário
+- construção escreve `+0x4 = 0x40004020`; `CB56C`←`CBB2C` zera-o, **uma vez por
+  objecto** em 8,2M ticks (mata a hipótese "invocado a cada tick")
+- `CC9D0` corre ~7,6-8,2M vezes, sempre pós-R_Perm, nunca antes
+- nenhum dos 6 escritores literais de `{5,6,7,9}` a um `+0x4` é alcançado, e as
+  classes que os detêm nunca são construídas
+
+## Lição de método
+
+Duas conclusões erradas nesta sessão vieram de confiar em representações
+derivadas: o decompilador (que tipou o objecto como `float*`) e o nosso próprio
+disassembler (que imprimia FPR como GPR). **O assembly é o árbitro.** O Ghidra
+serve para orientar e para responder depressa; a decisão final lê-se na
+instrução.
