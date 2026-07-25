@@ -75,3 +75,5 @@ frame_*.png
 recomp_pre/
 recomp_macos_v3/
 boot_gow2.rdy0_ref
+ghidra_out/
+ghidra_analysis/

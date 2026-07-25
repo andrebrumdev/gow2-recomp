@@ -38,11 +38,25 @@ if ! file "$ELF" | grep -q 'ELF 64-bit MSB.*PowerPC'; then
 fi
 
 # `command -v java` NAO chega: o macOS traz um stub em /usr/bin/java que existe
-# e falha ao correr ("Unable to locate a Java Runtime"). Testar a execucao.
+# e falha ao correr ("Unable to locate a Java Runtime"). E o openjdk@21 do brew
+# e' keg-only -- fica fora do PATH mesmo depois de `brew install ghidra`.
+# Testar a execucao e, se preciso, apontar o JAVA_HOME ao keg.
+if ! java -version >/dev/null 2>&1; then
+    for _j in "${JAVA_HOME:-}" /opt/homebrew/opt/openjdk@21 /opt/homebrew/opt/openjdk \
+              /usr/local/opt/openjdk@21; do
+        if [ -n "$_j" ] && [ -x "$_j/bin/java" ]; then
+            export JAVA_HOME="$_j"
+            export PATH="$_j/bin:$PATH"
+            echo "[java] keg-only detectado: JAVA_HOME=$JAVA_HOME"
+            break
+        fi
+    done
+fi
 if ! java -version >/dev/null 2>&1; then
     fail "um JDK a funcionar (o Ghidra exige JDK 21)" \
         "brew install ghidra    # puxa o openjdk@21 como dependencia" \
-        "nota: /usr/bin/java existe no macOS mesmo sem JDK -- e' um stub"
+        "nota: /usr/bin/java existe no macOS mesmo sem JDK -- e' um stub," \
+        "      e o openjdk do brew e' keg-only (fora do PATH)"
 fi
 
 if ! "$PY" "$PS3/tools/ghidra_analyze.py" --help >/dev/null 2>&1; then
