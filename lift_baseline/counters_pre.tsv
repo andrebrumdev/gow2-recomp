@@ -114,3 +114,22 @@ apply_all_checks_v4	5	gate	5 de 5 verdes; so' os 2 FAILED provados impossiveis
 # VEREDICTO RDY-0: um lift regenerado do ZERO produz um binario equivalente ao de
 # producao no gate M0. A cadeia lifter -> apply_all_patches -> build_macos corre sem
 # uma unica edicao manual no lift.
+#
+# === PROMOCAO (2026-07-26) — o lift regenerado E' AGORA A PRODUCAO ===
+# recomp_macos_v2 (lift de 20 jul, escrito a mao) -> recomp_macos_v2.pre_v4 (preservado)
+# recomp_macos_v4 (regenerado)                    -> recomp_macos_v2
+# boot_gow2 reconstruido a partir dele; boot_gow2.pre_v4 preservado. Reversivel.
+#
+st620_max_run1_prom	11	obs	>=3
+st620_max_run2_prom	11	obs	>=3
+st620_max_run3_prom	11	obs	>=3
+st620_max_run4_prom	11	obs	>=3
+st620_max_run5_prom	11	obs	>=3
+st620_max_run6_prom	11	obs	>=3
+st620_runs_ok_prom	6	gate	6 de 6 — IGUALA o baseline 2 da producao antiga (tambem 6/6).
+#	 	 	Confirma que o 5/6 do v4 era flakiness de timing, nao defeito estrutural.
+boot_lifted_functions_prom	52068	gate	inalterado vs v4
+#
+# A partir daqui o lift de producao E' reproduzivel: apagar recomp_macos_v2 e correr
+#   ppu_lifter.py + apply_all_patches.sh + build_macos.sh
+# devolve um binario equivalente. Era isto o RDY-0.
