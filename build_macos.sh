@@ -115,6 +115,24 @@ cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
     clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
+# host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
+# versionado (commit 1f651aa). Compila-se SO' quando o lift NAO traz as
+# definicoes dentro dele -- o lift antigo (recomp_macos_v2) tem-nas escritas a
+# mao, e linkar as duas dava "duplicate symbol". Um lift regenerado so' tem as
+# declaracoes (patch_zz_host_api_decls.py) e precisa deste objecto.
+if [ -f "$HERE/host_gow2_factory.cpp" ]; then
+    # Procura a DEFINICAO (corpo, chaveta) e nao o prototipo: o patch_zz injecta
+    # `...(uint32_t obj);` no preambulo, e um grep que casasse com isso mandaria
+    # saltar a compilacao mesmo sem definicao nenhuma -> undefined symbol.
+    if grep -lq 'extern "C" int ps3_factory_repair_vt(uint32_t obj) *{' "$LIFT"/ppu_recomp_*.cpp 2>/dev/null; then
+        echo "  host_gow2_factory: definicoes ja' no lift -- nao compilar (evita duplicate symbol)"
+        rm -f "$LIFT/host_gow2_factory.o"
+    else
+        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" \
+            "$HERE/host_gow2_factory.cpp" -o "$LIFT/host_gow2_factory.o"
+        echo "  host_gow2_factory: compilado"
+    fi
+fi
 # host_res_inflate: runtime/ppu is excluded from libps3recomp_runtime.a (same as
 # ppu_loader). Required for EBOOT gzip HOSTRES (gowshader.cfx, *.ctxr) after
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
@@ -212,6 +230,7 @@ clang++ -std=c++20 $HOST_OPT \
     "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
+    $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
