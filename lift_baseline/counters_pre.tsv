@@ -133,3 +133,39 @@ boot_lifted_functions_prom	52068	gate	inalterado vs v4
 # A partir daqui o lift de producao E' reproduzivel: apagar recomp_macos_v2 e correr
 #   ppu_lifter.py + apply_all_patches.sh + build_macos.sh
 # devolve um binario equivalente. Era isto o RDY-0.
+#
+# === CORRECCAO AO VEREDICTO ACIMA (2026-07-26, mais tarde no mesmo dia) ===
+# "equivalente" acima esta' MEDIDO SO' NA INTRO. O gate M0 mede st620 ate' 11 e nao ve'
+# mais nada. Ao classificar os 33 marcadores para a Fase 3 descobriu-se perda funcional
+# real no lift promovido, invisivel ao M0:
+#   causa: o lifter passou a materializar o TOC estaticamente
+#          (gpr[2] = 0x00541178ULL /*TOCFIX*/, 17268 sitios) em vez de o ler da pilha
+#          (vm_read64(gpr[1]+0x28), 17602 -> 4). Todas as agulhas dos patch_*_opd.py
+#          terminam na linha antiga e deixaram de casar.
+#   E OS PATCHES NAO SE QUEIXARAM: 'fixed 0' + 'OK' + rc=0 -> o runner classifica
+#   ALREADY-APPLIED (conteudo nao mudou) e o gate fica verde. Ver
+#   notes/2026-07-26-tocfix-matou-36-conversoes-opd.md
+#
+# Nota de contagem: 52 NAO sao 52 conversoes. 52 e' a contagem da string ps3_call_opd no
+# lift antigo = 47 CHAMADAS + 3 declaracoes + 2 comentarios. O alvo real sao 47 chamadas.
+#
+opd_calls_pre_v4	47	ref	ps3_call_opd(ctx, -- o alvo
+opd_calls_prod_antes	11	obs	depois da promocao, ANTES de corrigir as agulhas
+opd_calls_prod_depois	35	obs	depois de 5 patches corrigidos (+24). FALTAM 12.
+opd_calls_em_falta	12	gap	TODAS de func_0014B1F0. O dono patch_14b1f0_opd.py tem o
+#	 	 	defeito IDENTICO: 'replaced pat1=0 pat2=0 / remaining indirect 12 / OK' rc=0.
+guarda_4F000000_pre_v4	111	ref	bounds-check contra memoria-lixo
+guarda_4F000000_prod	76	obs	era 75; os 5 patches repoem 1. FALTAM 35, em 13 funcoes,
+#	 	 	com ~30 patch_*.py donos, todos com o mesmo defeito silencioso (spot-check
+#	 	 	de 5: todos rc=0 / inalterado / ALREADY-APPLIED, um chega a imprimir
+#	 	 	'score ok=21 fail=0' com blocos funcionais inteiros ausentes do lift).
+familias_marcador_degradadas	17	gap	os 5 patches repoem 6, ficam 9. As maiores:
+#	 	 	POSTINTRO 74->19, FIOSOPEN 70->35.
+#
+# Smoke apos repor as 24 conversoes: st620=11 em 5/6 (run3 em 1 por flakiness de timing --
+# 3181 linhas contra 3218 e faz o allocate de 0x7D00000). Passa o gate, sem regressao.
+# As probes novas nao aparecem no log porque estao gated por env var, como manda a regra.
+#
+# O run_checks do apply_all_patches.sh tem 5 verificacoes e NENHUMA conta conversoes por
+# funcao -- e' por isso que um lift a 35/47 chamadas e a 76/111 guardas passa --check a
+# verde. Corrigir isso e' a Fase 4 (catalogo de patches como gate que falha).
