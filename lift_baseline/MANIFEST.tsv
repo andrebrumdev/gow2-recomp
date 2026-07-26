@@ -1,5 +1,43 @@
 # MANIFEST do baseline forense do lift -- RDY-0 Task 1
 # gerado por gen_manifest.py a partir de recomp_macos_v2
+#
+# Reconciliacao das tres cifras do criterio 1 do ROADMAP (D-2.2, Fase 2,
+# 02-CONTEXT.md): 1603 (plano RDY-0, DESACTUALIZADA -- veio de uma contagem
+# que usou ppu_recomp_002.cpp, que tem 20 linhas injectadas, como referencia
+# "limpa" errada) / 1662 (gate anterior a esta fase -- so' injected_00{0..6}.cpp,
+# 1662 linhas) / 1793 REAL (1662 + as 131 linhas do preambulo puro em
+# preamble_pure.cpp, que ate' agora nao tinham marcador nenhum). Esta fase
+# (D-2.1) fecha esse gap com os 2 marcadores de tipo novo (coluna `tipo`
+# das 2 linhas abaixo) que cobrem o preambulo puro.
+#
+# Exclusao deliberada (D-2.1): dos 3 identificadores do preambulo puro
+# (ps3_timebase_now, ps3_indirect_call, g_trampoline_fn), so' os 2 ultimos
+# ganham marcador do tipo novo. ps3_timebase_now fica FORA -- foi superseded
+# pelo contrato ppu_timebase_now (Fase 1, commit e441f37,
+# runtime/syscalls/sys_timer.c:80-101); so' sobrevive hoje numa probe do
+# chunk 000 (ppu_recomp_000.cpp, simbolo ps3_pt_now_ns) de uma arvore de
+# safra mista. Gate a-lo produziria alarme falso num re-lift limpo, nao
+# uma regressao real -- por isso a exclusao e' codificada em gen_manifest.py
+# (`preamble_syms = lifter_syms - {"ps3_timebase_now"}`), nao um acidente.
+#
+# Divergencia conhecida, FORA de escopo desta fase (medida nesta sessao):
+# o checkout ../gow2-recomp/recomp_macos_v2 real (produção pos-promocao
+# 57b418f, 7 chunks) ja diverge de 33 dos 244 marcadores TAG/SYM/GLOBAL
+# pre-existentes (211/244 no --verify contra ele; familias CD498/WADLD-GATE/
+# WADLD-VT48 novas, TYPE15/ty15_vt_looks_live/fact_snap_idx/k_cap etc ja
+# ausentes/reduzidas). Essa deriva pre-existe a este plano e a sua resolucao
+# pertence a Fase 3 ("Re-lift num diretorio novo com gate de baseline"), que
+# tera' um lift fresco para medir contra -- nao regenerado aqui para nao
+# misturar a deriva nao-relacionada com a cobertura do preambulo (D-2.1).
+# Os 2 marcadores novos abaixo FORAM medidos contra esse mesmo
+# recomp_macos_v2 real (168753/15795 ocorrencias, 2026-07-26) porque e' o
+# lift de producao actual e e' o que este gate deve proteger daqui para a
+# frente; o --verify de aceitacao desta task corre contra
+# recomp_macos_v2.pre_v4 (o lift preservado de 20 jul que efectivamente
+# gerou o baseline de 244 marcadores: --verify contra ele confirma 244/244
+# rc=0 antes desta mudanca) para isolar a prova de D-2.1 da deriva acima,
+# que nao e' desta fase.
+#
 # marcador	tipo	min_count	chunks_origem
 g_f2b_fill_file_pos	GLOBAL	28	ppu_recomp_001.cpp
 g_f2b_fill_fo	GLOBAL	2	ppu_recomp_001.cpp
@@ -76,6 +114,8 @@ g_wadld_eof_ea	GLOBAL	2	ppu_recomp_001.cpp
 k_cap	GLOBAL	2	ppu_recomp_001.cpp
 k_fl_pin	GLOBAL	15	ppu_recomp_001.cpp
 k_ty15_pin	GLOBAL	26	ppu_recomp_001.cpp
+g_trampoline_fn	PREAMBLE	168753	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp
+ps3_indirect_call	PREAMBLE	15795	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp
 f2b_fo_mfd_get	SYM	6	ppu_recomp_001.cpp
 f2b_fo_mfd_put	SYM	3	ppu_recomp_001.cpp
 f2b_fo_sz_get	SYM	3	ppu_recomp_001.cpp

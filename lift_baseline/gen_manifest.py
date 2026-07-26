@@ -91,6 +91,13 @@ def main() -> int:
     pure_text = PURE.read_text(errors="replace")
     # simbolos e globais que o proprio lifter emite -- nao sao injeccao nossa
     lifter_syms = set(SYM_RE.findall(pure_text)) | set(GLOBAL_RE.findall(pure_text))
+    # D-2.1 (02-CONTEXT.md, Fase 2): dos 3 identificadores do preambulo puro,
+    # so' 2 ganham marcador kind=PREAMBLE. ps3_timebase_now fica EXCLUIDO --
+    # foi superseded pelo contrato ppu_timebase_now (Fase 1, commit e441f37,
+    # runtime/syscalls/sys_timer.c:80-101). So' sobrevive hoje numa probe do
+    # chunk 000 de uma arvore de safra mista; gatea-lo produziria alarme
+    # falso num re-lift limpo, nao uma regressao real.
+    preamble_syms = lifter_syms - {"ps3_timebase_now"}
 
     counts: dict[tuple[str, str], int] = defaultdict(int)
     origin: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -115,6 +122,15 @@ def main() -> int:
         for gvar in set(GLOBAL_RE.findall(blob)) - lifter_syms:
             counts[("GLOBAL", gvar)] += text.count(gvar)
             origin[("GLOBAL", gvar)].add(name)
+
+        # PREAMBLE: confirma que o preambulo puro (nao-injectado) SOBREVIVE
+        # no chunk alvo. Diferente do bloco SYM/GLOBAL acima -- conta contra
+        # o `text` do ficheiro INTEIRO, nao contra `blob`/`injected`, porque
+        # o objectivo aqui nao e' detectar injeccao, e' confirmar sobrevivencia.
+        for sym in preamble_syms:
+            if sym in text:
+                counts[("PREAMBLE", sym)] += text.count(sym)
+                origin[("PREAMBLE", sym)].add(name)
 
     print("# MANIFEST do baseline forense do lift -- RDY-0 Task 1")
     print(f"# gerado por gen_manifest.py a partir de {lift.name}")
