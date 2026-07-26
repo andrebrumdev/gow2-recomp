@@ -127,13 +127,23 @@ def strip_block(text: str) -> str:
 
 def defines(text: str, sym: str) -> bool:
     """O proprio ficheiro ja' DEFINE o simbolo (corpo, nao so' prototipo)?"""
+    if sym not in text:                        # atalho barato (ver needed)
+        return False
     return re.search(rf"\b{sym}\s*\([^;()]*\)\s*\{{", text) is not None
 
 
 def needed(text: str) -> list[str]:
-    """Simbolos usados como CHAMADA e ainda sem declaracao neste ficheiro."""
+    """Simbolos usados como CHAMADA e ainda sem declaracao neste ficheiro.
+
+    O `sym not in text` a' frente do regex nao e' cosmetico: os chunks tem
+    ~15 MB e a maioria dos simbolos nao aparece em nenhum deles. A procura de
+    substring e' Boyer-Moore em C; o regex tem de varrer os 15 MB. Sem o
+    atalho, uma passagem levava 1m44s em 7 chunks.
+    """
     out = []
     for sym, decl in DECLS.items():
+        if sym not in text:                    # atalho barato
+            continue
         if decl in text:                       # ja' declarado
             continue
         if defines(text, sym):                 # definido aqui -- nao declarar

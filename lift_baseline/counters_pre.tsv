@@ -55,4 +55,34 @@ swap_used_mb_b2	5911	ambiente	abaixo do limiar ~4000M? nao, mas melhor que o b1
 boot_lifted_functions_b2	56223	gate	inalterado
 imp_modules_b2	13	gate	inalterado
 imp_imports_b2	151	gate	inalterado
-orfaos_pos_run_b2	0	gate	
+orfaos_pos_run_b2	0	gate
+#
+# === RELIFT V3 (2026-07-26) — 1o binario de um lift 100% REGENERADO ===
+# Cadeia inteira sem uma unica edicao manual no lift:
+#   ppu_lifter.py EBOOT.ELF --functions functions.json -o recomp_macos_v3 -j 4   (15s, 7 chunks)
+#   ./apply_all_patches.sh recomp_macos_v3   (converge em 2 passagens)
+#   OUT=./boot_gow2_v3 ./build_macos.sh recomp_macos_v3
+# Dois orfaos fechados para isto acontecer:
+#   - declaracoes da API host -> recomp_mid_v2/patch_zz_host_api_decls.py (gow2-recomp f9ec60f)
+#   - ppu_timebase_now, que o lifter emite e o runtime nao definia (ps3recomp e441f37)
+# Mesma recipe M0, mesmo ambiente e MESMO grep que o baseline 2 (corrigido: o formato do log
+# e' "[MOVIEFSM] st620 <de> -> <para>", nao "st620=N"; 4294967295 e' o sem-estado inicial).
+#
+st620_max_run1_v3	0	obs	REGRESSAO (baseline2: 11)
+st620_max_run2_v3	0	obs	REGRESSAO
+st620_max_run3_v3	0	obs	REGRESSAO
+st620_max_run4_v3	0	obs	REGRESSAO
+st620_max_run5_v3	0	obs	REGRESSAO
+st620_max_run6_v3	0	obs	REGRESSAO
+st620_runs_ok_v3	0	gate	0 de 6 (gate >=4). Reconferido: producao da' 11 em 6/6 no mesmo ambiente.
+boot_lifted_functions_v3	51990	gate	-4233 vs 56223
+lift_functions_v3	51839	estrutura	'void func_X(' no lift; v2 tem 56072 -> 4262 ausentes, 29 novas
+lift_chunks_v3	7	estrutura	4.03M linhas
+manifest_markers_v3	211	gate	de 244; 9 ausentes, 24 a menos
+apply_all_checks_v3	5	gate	5 de 5 verdes; so' os 2 FAILED provados impossiveis
+chamadas_sem_definicao_v3	0	estrutura	lift auto-consistente -> as 4262 so' entram por despacho INDIRECTO
+#
+# PONTO EXACTO DE PARAGEM (medido, /tmp/smoke_boot_gow2*_run1.log):
+#   producao: allocate(0x100000)->0x40000000  E  allocate(0x7D00000)->0x40100000 (125MB, heap principal)
+#   v3:       so' a 1a. A 2a NUNCA acontece; o boot fica preso no sampler e o log acaba em 55 linhas
+#             (producao: 3235 linhas). Tudo ate' ai' e' identico linha a linha.
