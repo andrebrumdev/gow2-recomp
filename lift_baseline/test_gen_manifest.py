@@ -195,6 +195,145 @@ def check_manifest_header_reconciles_three_figures() -> None:
     )
 
 
+def check_gap_before_obsoleto_grupo_mechanism() -> None:
+    """Teste RED (gap real): confirma que o mecanismo OBSOLETO/GRUPO existe no
+    codigo -- se este teste falhar, a Task 1 (03-03-PLAN.md) ainda nao foi
+    implementada. Nao mede comportamento; mede presenca do mecanismo."""
+    src = (HERE / "gen_manifest.py").read_text()
+    assert "OBSOLETO" in src and "GRUPO" in src, (
+        "gen_manifest.py ainda nao tem o mecanismo OBSOLETO/GRUPO (Task 1, 03-03-PLAN.md)"
+    )
+    print("[PASS] gen_manifest.py contem o mecanismo OBSOLETO/GRUPO (gap fechado)")
+
+
+def check_obsoleto_marker_missing_does_not_fail_gate() -> None:
+    """Teste 1: marcador OBSOLETO ausente (found==0) nao aparece em AUSENTE,
+    aparece numa categoria informativa separada, e nao faz verify() falhar."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        dirp = Path(d)
+        chunk = _write_tmp(dirp, "ppu_recomp_000.cpp", "void func_00000000() {}\n")
+        manifest = _write_tmp(
+            dirp,
+            "MANIFEST.tsv",
+            "[OPDISP]\tTAG\t1\tppu_recomp_001.cpp\t"
+            "OBSOLETO: lifter materializa switch nativo cobrindo 54/54 alvos\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gen_manifest.verify([chunk], manifest)
+        out = buf.getvalue()
+        assert rc == 0, f"esperado rc=0 (marcador so' obsoleto ausente), obtido {rc}"
+        assert "AUSENTE" not in out, f"OBSOLETO nao deve aparecer como AUSENTE: {out!r}"
+        assert "OBSOLETO" in out and "[OPDISP]" in out, (
+            f"linha OBSOLETO informativa nao encontrada: {out!r}"
+        )
+    print(
+        "[PASS] marcador OBSOLETO ausente (found==0) nao aparece em AUSENTE, "
+        "verify() continua rc=0"
+    )
+
+
+def check_obsoleto_is_selective_not_global_switch() -> None:
+    """Teste 2 (regressao/seletividade): um marcador SEM nota, ausente, continua
+    a aparecer em AUSENTE e a fazer verify() devolver 1 -- OBSOLETO nao mascara
+    outros marcadores no mesmo manifesto."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        dirp = Path(d)
+        chunk = _write_tmp(dirp, "ppu_recomp_000.cpp", "void func_00000000() {}\n")
+        manifest = _write_tmp(
+            dirp,
+            "MANIFEST.tsv",
+            "[OPDISP]\tTAG\t1\tppu_recomp_001.cpp\tOBSOLETO: prova citada\n"
+            "[WADLD-ALLOC]\tTAG\t1\tppu_recomp_002.cpp\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gen_manifest.verify([chunk], manifest)
+        out = buf.getvalue()
+        assert rc == 1, f"esperado rc=1 (marcador sem nota, ausente), obtido {rc}"
+        assert "AUSENTE  TAG    [WADLD-ALLOC]" in out, (
+            f"[WADLD-ALLOC] (sem nota) devia continuar AUSENTE: {out!r}"
+        )
+    print(
+        "[PASS] OBSOLETO e' seletivo por marcador -- marcador sem nota continua "
+        "AUSENTE e verify() devolve 1 (nao e' um interruptor global)"
+    )
+
+
+def check_grupo_sum_passes_combined_threshold() -> None:
+    """Teste 3: dois marcadores com o mesmo GRUPO:<id>, um individualmente abaixo
+    do min_count mas a SOMA >= soma dos min_count -- verify() devolve 0, nenhum
+    dos dois aparece em A MENOS individual."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        dirp = Path(d)
+        # ps3_indirect_call: min_count=10, found=6 (individualmente 'a menos')
+        # ps3_call_opd:      min_count=2,  found=8 (individualmente 'ok')
+        # soma: min_count=12, found=14 -- grupo passa
+        chunk = _write_tmp(
+            dirp,
+            "ppu_recomp_000.cpp",
+            "ps3_indirect_call(ctx);\n" * 6 + "ps3_call_opd(ctx,\n" * 8,
+        )
+        manifest = _write_tmp(
+            dirp,
+            "MANIFEST.tsv",
+            "ps3_indirect_call\tPREAMBLE\t10\tppu_recomp_000.cpp\tGRUPO:opd-dispatch\n"
+            "ps3_call_opd\tSYM\t2\tppu_recomp_000.cpp\tGRUPO:opd-dispatch\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gen_manifest.verify([chunk], manifest)
+        out = buf.getvalue()
+        assert rc == 0, f"esperado rc=0 (soma do grupo cumpre o limiar), obtido {rc}"
+        assert "A MENOS  PREAMBLE ps3_indirect_call" not in out, (
+            f"membro do grupo nao deve aparecer em A MENOS individual: {out!r}"
+        )
+        assert "A MENOS (grupo)" not in out, f"grupo nao devia falhar: {out!r}"
+    print(
+        "[PASS] GRUPO soma as contagens -- par com soma >= soma dos min_count "
+        "passa (rc=0), sem punir o membro individualmente abaixo do seu proprio limiar"
+    )
+
+
+def check_grupo_sum_below_threshold_fails() -> None:
+    """Teste 4: mesmo par GRUPO, mas com a SOMA de found abaixo da soma de
+    min_count -- verify() devolve 1 e cita o id do grupo."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        dirp = Path(d)
+        # soma min_count=12, soma found = 6+2 = 8 < 12 -- grupo falha
+        chunk = _write_tmp(
+            dirp,
+            "ppu_recomp_000.cpp",
+            "ps3_indirect_call(ctx);\n" * 6 + "ps3_call_opd(ctx,\n" * 2,
+        )
+        manifest = _write_tmp(
+            dirp,
+            "MANIFEST.tsv",
+            "ps3_indirect_call\tPREAMBLE\t10\tppu_recomp_000.cpp\tGRUPO:opd-dispatch\n"
+            "ps3_call_opd\tSYM\t2\tppu_recomp_000.cpp\tGRUPO:opd-dispatch\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gen_manifest.verify([chunk], manifest)
+        out = buf.getvalue()
+        assert rc == 1, f"esperado rc=1 (soma do grupo abaixo do limiar), obtido {rc}"
+        assert "A MENOS (grupo)  opd-dispatch" in out, (
+            f"linha do grupo falhado (citando o id) nao encontrada: {out!r}"
+        )
+    print(
+        "[PASS] GRUPO cuja soma nao cumpre o limiar combinado faz verify() devolver 1, "
+        "citando o id do grupo na saida"
+    )
+
+
 def main() -> int:
     checks = (
         check_verify_pass_with_both_preamble_markers,
@@ -202,6 +341,11 @@ def main() -> int:
         check_verify_mutation_missing_indirect_call,
         check_generation_excludes_ps3_timebase_now,
         check_manifest_header_reconciles_three_figures,
+        check_gap_before_obsoleto_grupo_mechanism,
+        check_obsoleto_marker_missing_does_not_fail_gate,
+        check_obsoleto_is_selective_not_global_switch,
+        check_grupo_sum_passes_combined_threshold,
+        check_grupo_sum_below_threshold_fails,
     )
     for check in checks:
         check()

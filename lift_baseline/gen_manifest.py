@@ -44,34 +44,86 @@ def preamble_end(text: str) -> int:
     return len(text.splitlines())
 
 
+GRUPO_RE = re.compile(r"GRUPO:(\S+)")
+
+
 def verify(chunks, manifest: Path) -> int:
-    """Conta cada marcador do manifesto em todo o lift alvo. rc=1 se faltar."""
-    wanted: list[tuple[str, str, int, str]] = []
+    """Conta cada marcador do manifesto em todo o lift alvo. rc=1 se faltar.
+
+    Suporta uma 5a coluna opcional (`nota`), aditiva e retro-compativel --
+    marcadores sem ela seguem exactamente o comportamento pre-existente:
+      - `OBSOLETO: <razao>`  -- o marcador nunca falha o gate (Repudiation
+        T-03-08); e' impresso numa categoria informativa separada, nunca
+        em AUSENTE/A MENOS.
+      - `GRUPO:<id>`         -- marcadores com o mesmo id sao verificados
+        pela SOMA de found/min_count do grupo, nao individualmente
+        (D-3.1c: conversoes que trocam substituicao 1-para-1 entre dois
+        marcadores nao devem punir o par quando a soma se mantem).
+    """
+    wanted: list[tuple[str, str, int, str, str]] = []
     for line in manifest.read_text().splitlines():
         if line.startswith("#") or not line.strip():
             continue
-        marker, kind, n, chunks_s = line.split("\t")
-        wanted.append((marker, kind, int(n), chunks_s))
+        parts = line.split("\t")
+        marker, kind, n, chunks_s = parts[:4]
+        nota = parts[4] if len(parts) > 4 else ""
+        wanted.append((marker, kind, int(n), chunks_s, nota))
 
-    found = {marker: 0 for marker, _, _, _ in wanted}
+    found = {marker: 0 for marker, _, _, _, _ in wanted}
     for path in chunks:
         text = path.read_text(errors="replace")
         for marker in found:
             found[marker] += text.count(marker)
 
-    missing = [(m, k, n, found[m]) for m, k, n, _ in wanted if found[m] == 0]
-    short = [(m, k, n, found[m]) for m, k, n, _ in wanted if 0 < found[m] < n]
+    obsolete_entries = [w for w in wanted if w[4].startswith("OBSOLETO")]
+    grouped_entries = [w for w in wanted if GRUPO_RE.match(w[4])]
+    obsolete_or_grouped = {w[0] for w in obsolete_entries} | {w[0] for w in grouped_entries}
+    normal_entries = [w for w in wanted if w[0] not in obsolete_or_grouped]
+
+    missing = [(m, k, n, found[m]) for m, k, n, _, _ in normal_entries if found[m] == 0]
+    short = [(m, k, n, found[m]) for m, k, n, _, _ in normal_entries if 0 < found[m] < n]
 
     for marker, kind, want, got in missing:
         print(f"AUSENTE  {kind:6} {marker}  (esperado >={want}, encontrado 0)")
     for marker, kind, want, got in short:
         print(f"A MENOS  {kind:6} {marker}  (esperado >={want}, encontrado {got})")
 
+    # OBSOLETO (T-03-08 mitigado): nunca falha o gate, seja found==0 ou >0.
+    for marker, kind, want, chunks_s, nota in obsolete_entries:
+        razao = nota[len("OBSOLETO"):].lstrip(":").strip()
+        print(f"OBSOLETO  {kind}  {marker} -- {razao}")
+
+    # GRUPO (D-3.1c): soma de found/min_count decide, nao cada marcador isolado.
+    groups: dict[str, list[tuple[str, str, int, int]]] = defaultdict(list)
+    for marker, kind, want, chunks_s, nota in grouped_entries:
+        gid = GRUPO_RE.match(nota).group(1)
+        groups[gid].append((marker, kind, want, found[marker]))
+
+    group_failed = 0
+    group_passed = 0
+    for gid, items in sorted(groups.items()):
+        sum_want = sum(want for _, _, want, _ in items)
+        sum_found = sum(got for _, _, _, got in items)
+        if sum_found < sum_want:
+            group_failed += 1
+            names = "+".join(m for m, _, _, _ in items)
+            print(
+                f"A MENOS (grupo)  {gid}: {names} "
+                f"esperado>={sum_want} encontrado={sum_found}"
+            )
+        else:
+            group_passed += 1
+
     total = len(wanted)
-    ok = total - len(missing) - len(short)
+    ok = total - len(missing) - len(short) - len(obsolete_entries) - len(grouped_entries)
     print(f"\nbaseline: {ok}/{total} marcadores intactos, "
           f"{len(missing)} ausentes, {len(short)} a menos")
-    return 1 if (missing or short) else 0
+    print(
+        f"obsoletos: {len(obsolete_entries)} citados (nunca falham o gate) | "
+        f"grupos: {group_passed} passaram, {group_failed} falharam "
+        f"(de {len(groups)} grupos, {len(grouped_entries)} marcadores)"
+    )
+    return 1 if (missing or short or group_failed) else 0
 
 
 def main() -> int:
