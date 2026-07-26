@@ -178,6 +178,40 @@ if [ -f "$HERE/host_gow2_factory.cpp" ]; then
         echo "  host_gow2_factory: compilado"
     fi
 fi
+# host_gow2_f2b: subsistema F2B (mapa file-object->mfd/tamanho + preenchimento
+# de stream FIOS do movie player) extraido POR SIMBOLO (D-2.3/D-2.4,
+# 02-CONTEXT.md) para games/gow2/host_gow2_f2b.c (plano 02-02). Mesma logica
+# de guard anti-duplicate-symbol do host_gow2_factory acima, MAS com uma
+# diferenca critica medida nesta sessao (02-03): dos 17 simbolos F2B, so' 2
+# funcoes (f2b_stream_ensure, f2b_stream_eof_try_complete) tem linkagem
+# EXTERNA (`extern "C"`) no lift de producao actual -- as outras 5 funcoes E
+# os 10 globais sao `static` (linkagem INTERNA, ex.: `static void
+# f2b_fo_mfd_put(...)`, `static uint32_t g_f2b_fo_mfd_fo[8];`). Um guard que
+# so' detectasse a forma `extern "C" ... *{` (como o do factory acima) nunca
+# apanharia um lift onde esses 5/10 simbolos `static` continuassem la' mas os
+# 2 `extern` tivessem desaparecido: nesse caso NAO haveria "duplicate symbol"
+# nenhum (linkagens diferentes nunca colidem no link), mas haveria ESTADO
+# DUPLICADO EM SILENCIO -- o chunk continuaria a usar a sua copia `static`
+# interna, e o host_gow2_f2b.o ficaria morto no binario, sem erro nenhum que
+# avisasse. Por isso o guard abaixo tem TRES condicoes, nao uma: (1) a
+# definicao do simbolo-ancora `f2b_stream_ensure` independentemente do prefixo
+# de linkagem (static/extern "C"/nenhum -- so' a assinatura + chaveta de
+# abertura, nunca o `;` do prototipo); (2) qualquer uma das 5 funcoes `static`
+# conhecidas; (3) qualquer um dos 10 globais `static` conhecidos. Presente
+# qualquer uma -> salta a compilacao (hoje, medido: as tres batem no lift de
+# producao actual -- portanto NAO compila).
+if [ -f "$HERE/host_gow2_f2b.c" ]; then
+    if grep -Eq 'f2b_stream_ensure\(uint32_t type_sys\) *\{' "$LIFT"/ppu_recomp_*.cpp 2>/dev/null || \
+       grep -Eq '^static .*\bf2b_(fo_mfd_put|fo_mfd_get|fo_sz_get|stream_fill|stream_pre_consume)\b' "$LIFT"/ppu_recomp_*.cpp 2>/dev/null || \
+       grep -Eq '^static .*\bg_f2b_(fo_mfd_fo|fo_mfd_fd|fo_mfd_sz|fo_mfd_n|natural_movie_fo|fill_fo|fill_mfd|fill_sz|fill_file_pos|fill_stream)\b' "$LIFT"/ppu_recomp_*.cpp 2>/dev/null; then
+        echo "  host_gow2_f2b: definicao (static ou extern) ja' no lift -- nao compilar (evita duplicate symbol OU estado duplicado em silencio)"
+        rm -f "$LIFT/host_gow2_f2b.o"
+    else
+        clang -std=c11 $HOST_OPT -w -c "${INC[@]}" \
+            "$HERE/host_gow2_f2b.c" -o "$LIFT/host_gow2_f2b.o"
+        echo "  host_gow2_f2b: compilado"
+    fi
+fi
 # host_res_inflate: runtime/ppu is excluded from libps3recomp_runtime.a (same as
 # ppu_loader). Required for EBOOT gzip HOSTRES (gowshader.cfx, *.ctxr) after
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
@@ -276,6 +310,7 @@ clang++ -std=c++20 $HOST_OPT \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
     $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
+    $([ -f "$LIFT/host_gow2_f2b.o" ] && echo "$LIFT/host_gow2_f2b.o") \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \

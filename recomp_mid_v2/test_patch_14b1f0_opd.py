@@ -41,6 +41,41 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PATCH_PATH = HERE / "patch_14b1f0_opd.py"
+
+
+def _pick_python() -> str:
+    """Interprete >=3.10 para correr os patches, como o apply_all_patches.sh faz.
+
+    Os patch_*.py usam Path.write_text(..., newline="\\n") -- kwarg que so' existe
+    em Python 3.10+ e que NAO deve ser removido: e' ele que evita CRLF no lado
+    Windows do port. O python3 do sistema no macOS e' o 3.9.6 da Apple, que
+    estoura TypeError DEPOIS de todo o trabalho em memoria.
+
+    O apply_all_patches.sh resolve isto com um pick_python(); o teste tem de
+    fazer o mesmo, senao passa na maquina de quem tem 3.12 no PATH e falha na de
+    quem so' tem o do sistema. Medido em 2026-07-26:
+      TypeError: write_text() got an unexpected keyword argument 'newline'
+    """
+    import shutil
+    if sys.version_info >= (3, 10):
+        return sys.executable
+    for cand in ("python3.14", "python3.13", "python3.12", "python3.11",
+                 "python3.10", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"):
+        path = shutil.which(cand) or (cand if Path(cand).exists() else None)
+        if not path:
+            continue
+        try:
+            r = subprocess.run(
+                [path, "-c", "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"],
+                capture_output=True)
+            if r.returncode == 0:
+                return path
+        except OSError:
+            continue
+    return sys.executable          # sem alternativa: falha com diagnostico claro
+
+
+PY = _pick_python()
 REAL_LIFT_DIR = HERE.parent / "recomp_macos_v2"
 REAL_LIFT_000 = REAL_LIFT_DIR / "ppu_recomp_000.cpp"
 
@@ -111,7 +146,15 @@ _PREAMBLE = (
 def _write_fixture(tmpdir: str, region: str, preamble: bool = True) -> Path:
     p = Path(tmpdir) / "ppu_recomp_000.cpp"
     content = (_PREAMBLE if preamble else "") + region + _NEXT_FUNC_STUB
-    p.write_text(content, encoding="utf-8", newline="\n")
+    # open(..., newline="\n") e nao Path.write_text(newline=...): o kwarg de
+    # write_text so' existe em Python 3.10+, e o python3 do sistema no macOS e'
+    # o 3.9.6 da Apple. O patch em si pode dar-se ao luxo de exigir 3.10 porque
+    # o apply_all_patches.sh escolhe um interprete >=3.10 (pick_python); o TESTE
+    # nao pode -- corre pelo scripts/test_python.sh e pelo CTest, que usam o
+    # interpretador que estiver a' mao. Medido: rebentava com
+    #   TypeError: write_text() got an unexpected keyword argument 'newline'
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
     return p
 
 
@@ -255,7 +298,7 @@ def test_red_bug_medido_no_script_congelado() -> None:
         frozen_script = Path(td) / "patch_14b1f0_opd_PRE_FIX_snapshot.py"
         frozen_script.write_text(OLD_SCRIPT_SRC, encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(frozen_script), td],
+            [PY, str(frozen_script), td],
             capture_output=True, text=True,
         )
         check("script congelado: rc", result.returncode, 0)
@@ -280,7 +323,7 @@ def test_green1_convertido_regiao_nova() -> None:
     with tempfile.TemporaryDirectory() as td:
         f = _write_fixture(td, REGION_NEW)
         result = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN1 rc", result.returncode, 0)
         check("GREEN1 pat1+pat2 == 12", _count_replaced(result.stdout), 12)
@@ -299,7 +342,7 @@ def test_green2_compat_regiao_antiga() -> None:
     with tempfile.TemporaryDirectory() as td:
         f = _write_fixture(td, REGION_OLD)
         result = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN2 rc", result.returncode, 0)
         check("GREEN2 pat1+pat2 == 12", _count_replaced(result.stdout), 12)
@@ -318,12 +361,12 @@ def test_green3_idempotencia_ate_terceira_corrida() -> None:
     with tempfile.TemporaryDirectory() as td:
         f = _write_fixture(td, REGION_NEW)
         r1 = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN3 1a corrida rc", r1.returncode, 0)
 
         r2 = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN3 2a corrida rc", r2.returncode, 0)
         check("GREEN3 2a corrida 0 conversoes novas", _count_replaced(r2.stdout), 0)
@@ -334,7 +377,7 @@ def test_green3_idempotencia_ate_terceira_corrida() -> None:
         after2 = f.read_text(encoding="utf-8")
 
         r3 = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         after3 = f.read_text(encoding="utf-8")
         check("GREEN3 3a corrida rc", r3.returncode, 0)
@@ -357,7 +400,7 @@ def test_green4_sem_efeito_rc3() -> None:
     with tempfile.TemporaryDirectory() as td:
         f = _write_fixture(td, region_sem_match)
         result = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN4 rc == RC_NO_EFFECT (3)", result.returncode, 3)
         check("GREEN4 veredicto SEM-EFEITO", "SEM-EFEITO" in result.stdout, True)
@@ -384,7 +427,7 @@ def test_green5_e2e_copia_scratch_do_chunk_real() -> None:
             "ps3_call_opd(ctx,"
         )
         result = subprocess.run(
-            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+            [PY, str(PATCH_PATH), td], capture_output=True, text=True,
         )
         check("GREEN5 rc", result.returncode, 0)
         after_count = scratch.read_text(encoding="utf-8", errors="replace").count(
