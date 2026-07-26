@@ -99,3 +99,46 @@ Além disso, os patches têm de **falhar** quando não convertem nada. `fixed 0`
 patches como gate que falha).
 
 Ver também: [`2026-07-26-strip-block-comeu-o-lift.md`](2026-07-26-strip-block-comeu-o-lift.md)
+
+---
+
+## Adenda (fim do dia): as 47 conversões voltaram, e o gate ainda acusa
+
+Depois de corrigir as agulhas dos cinco patches OPD e o `patch_14b1f0_opd.py`, o
+lift **regenerado do zero** tem as conversões todas:
+
+```
+ps3_call_opd(ctx,  no recomp_macos_v3  =  47      (alvo pre_v4: 47)
+```
+
+O gate de baseline, já com os critérios reformulados, dá **243/246 com 0 ausentes
+e 0 a menos**. O que resta é um único par de grupo:
+
+```
+A MENOS (grupo) opd-dispatch: ps3_indirect_call+ps3_call_opd
+                esperado >=15847  encontrado 15811
+```
+
+### O deficit de 319 não é perda — é a soma de duas populações opostas
+
+Medido por função, cruzando `recomp_macos_v2.pre_v4` com `recomp_macos_v3`:
+
+| | sítios de dispatch |
+|---|---|
+| perdidos em funções que só existem no lift ANTIGO (4252 funções, 170 com dispatch) | −619 |
+| **ganhos** em 90 funções COMUNS | **+291** |
+| saldo | **−319** |
+
+As funções comuns onde o v3 tem MAIS dispatch (`func_00362E00` 0→16,
+`func_00029E28` 0→12, e mais 88) são o **`truncated-bounds repair` a recuperar
+código que o lift antigo descartava**. E boa parte das 4252 ausentes é lixo: já
+estava medido que 1919 das funções só-no-antigo caem fora de qualquer secção
+executável — o lift antigo desassemblou dados.
+
+Ou seja: o limiar absoluto soma código inventado a partir de dados com código
+real recuperado, e chama ao resultado uma regressão. **É o mesmo defeito de
+critério que fez o `PREAMBLE ps3_indirect_call` falhar quando o lift melhorou.**
+
+Fica como dívida declarada para a Fase 4: o limiar do grupo `opd-dispatch` tem
+de ser recalibrado contra o lift actual, excluindo as funções que não existem em
+ambos — comparar populações diferentes não mede nada.
