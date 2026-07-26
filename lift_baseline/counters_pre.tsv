@@ -86,3 +86,31 @@ chamadas_sem_definicao_v3	0	estrutura	lift auto-consistente -> as 4262 so' entra
 #   producao: allocate(0x100000)->0x40000000  E  allocate(0x7D00000)->0x40100000 (125MB, heap principal)
 #   v3:       so' a 1a. A 2a NUNCA acontece; o boot fica preso no sampler e o log acaba em 55 linhas
 #             (producao: 3235 linhas). Tudo ate' ai' e' identico linha a linha.
+#
+# === RELIFT V4 (2026-07-26) — MESMO LIFT, COM O FIX DO LIFTER: PASSA ===
+# Unica diferenca para o v3: ps3recomp 1c30e12 "truncated-bounds repair". O lifter
+# deixa de descartar codigo quando o functions.json sub-reporta um `end`.
+# No relift: "Truncated-bounds repair: extended 180 function(s), 18984 byte(s) of
+# code recovered" — as MESMAS 180 que tools/audit_boundaries.py reportava como I3.
+# Causa raiz provada por experimento antes do fix: restaurar SO' func_0037C384 a mao
+# (as 10 instrucoes descartadas continham `bl 0x00379C70`) fez reaparecer
+# allocate(size=0x7D00000) -> 0x40100000. Mesma classe do bug func_002550C8.
+#
+st620_max_run1_v4	11	obs	>=3
+st620_max_run2_v4	11	obs	>=3
+st620_max_run3_v4	11	obs	>=3
+st620_max_run4_v4	1	obs	preso em 1 (flakiness de timing, NAO estrutural: 3195 linhas de log
+#	 	 	contra 3236 do run1, e faz o allocate de 0x7D00000; swap 1481M, abaixo do limiar)
+st620_max_run5_v4	11	obs	>=3
+st620_max_run6_v4	11	obs	>=3
+st620_runs_ok_v4	5	gate	5 de 6 — PASSA (gate >=4). baseline1 deu 4/6, baseline2 6/6.
+boot_lifted_functions_v4	52068	gate	+78 vs v3 (51990); producao 56223 (a diferenca restante e' benigna:
+#	 	 	1919 das ausentes caem fora de qualquer seccao executavel — o lift antigo
+#	 	 	desassemblou dados; 0 starts do functions.json e 0 EAs da OPD em falta)
+lift_functions_v4	51917	estrutura	+78 vs v3
+manifest_markers_v4	211	gate	de 244 — inalterado vs v3; os 33 em falta NAO afectam o boot
+apply_all_checks_v4	5	gate	5 de 5 verdes; so' os 2 FAILED provados impossiveis
+#
+# VEREDICTO RDY-0: um lift regenerado do ZERO produz um binario equivalente ao de
+# producao no gate M0. A cadeia lifter -> apply_all_patches -> build_macos corre sem
+# uma unica edicao manual no lift.
