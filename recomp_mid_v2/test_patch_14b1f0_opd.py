@@ -94,10 +94,24 @@ if _N_TOCFIX_SUBS != 12:
 # a funcao acaba).
 _NEXT_FUNC_STUB = "void func_0014BEAC(ppu_context* ctx) {\n}\n"
 
+# Preambulo sintetico minimo: o script CORRIGIDO (Task 2) chama ensure_decl(s)
+# antes de tudo, que exige a declaracao de ps3_indirect_call dentro de
+# s[:80000] (identico ao que o lift real ja tem, medido a offset 37408). Sem
+# isto as fixtures GREEN (que so' contem a regiao da funcao) fariam
+# ensure_decl() abortar com "no ps3_indirect_call decl in 000" -- nao e' o que
+# se quer testar aqui, por isso as duas declaracoes vao pre-inseridas, tal
+# como estao no chunk real, e ensure_decl() e' um no-op nestas fixtures.
+_PREAMBLE = (
+    '/* preambulo sintetico para as fixtures deste teste */\n'
+    'extern "C" void ps3_indirect_call(ppu_context* ctx);\n'
+    'extern "C" void ps3_call_opd(ppu_context* ctx, uint32_t opd_ea);\n'
+)
 
-def _write_fixture(tmpdir: str, region: str) -> Path:
+
+def _write_fixture(tmpdir: str, region: str, preamble: bool = True) -> Path:
     p = Path(tmpdir) / "ppu_recomp_000.cpp"
-    p.write_text(region + _NEXT_FUNC_STUB, encoding="utf-8", newline="\n")
+    content = (_PREAMBLE if preamble else "") + region + _NEXT_FUNC_STUB
+    p.write_text(content, encoding="utf-8", newline="\n")
     return p
 
 
@@ -224,8 +238,8 @@ def test_extraccao_fiel_da_regiao_real() -> None:
     with tempfile.TemporaryDirectory() as td:
         p = _write_fixture(td, REGION_NEW)
         roundtrip = p.read_text(encoding="utf-8")
-        check("roundtrip fixture == REGION_NEW + stub",
-              roundtrip, REGION_NEW + _NEXT_FUNC_STUB)
+        check("roundtrip fixture == preambulo + REGION_NEW + stub",
+              roundtrip, _PREAMBLE + REGION_NEW + _NEXT_FUNC_STUB)
 
     reextracted = _extract_region_from_real_lift()
     check("re-extraccao independente == REGION_NEW", reextracted, REGION_NEW)
@@ -251,6 +265,136 @@ def test_red_bug_medido_no_script_congelado() -> None:
               "remaining indirect in region: 12" in result.stdout, True)
         check("script congelado: sai OK (falso-verde)",
               "OK patch_14b1f0_opd" in result.stdout, True)
+
+
+def _count_replaced(stdout: str) -> int:
+    m = re.search(r"replaced pat1=(\d+) pat2=(\d+)", stdout)
+    if not m:
+        return -1
+    return int(m.group(1)) + int(m.group(2))
+
+
+def test_green1_convertido_regiao_nova() -> None:
+    """GREEN 1: contra REGION_NEW (TOCFIX, formato actual), converte os 12
+    sitios, remaining indirect fica 0, rc=0, veredicto CONVERTIDO."""
+    with tempfile.TemporaryDirectory() as td:
+        f = _write_fixture(td, REGION_NEW)
+        result = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN1 rc", result.returncode, 0)
+        check("GREEN1 pat1+pat2 == 12", _count_replaced(result.stdout), 12)
+        check("GREEN1 remaining indirect in region: 0",
+              "remaining indirect in region: 0" in result.stdout, True)
+        check("GREEN1 veredicto CONVERTIDO",
+              "OK patch_14b1f0_opd (CONVERTIDO)" in result.stdout, True)
+        after = f.read_text(encoding="utf-8")
+        check("GREEN1 ps3_call_opd(ctx, aparece 12x", after.count("ps3_call_opd(ctx,"), 12)
+
+
+def test_green2_compat_regiao_antiga() -> None:
+    """GREEN 2: contra REGION_OLD (vm_read64, formato antigo), converte
+    igualmente os 12 sitios, reemitindo o restauro do TOC VERBATIM na forma
+    antiga (nunca convertido para TOCFIX nem inventado)."""
+    with tempfile.TemporaryDirectory() as td:
+        f = _write_fixture(td, REGION_OLD)
+        result = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN2 rc", result.returncode, 0)
+        check("GREEN2 pat1+pat2 == 12", _count_replaced(result.stdout), 12)
+        after = f.read_text(encoding="utf-8")
+        check("GREEN2 ps3_call_opd(ctx, aparece 12x", after.count("ps3_call_opd(ctx,"), 12)
+        check("GREEN2 vm_read64 reemitido verbatim 12x",
+              after.count("vm_read64(ctx->gpr[1] + 0x28);"), 12)
+        check("GREEN2 zero TOCFIX inventado", "TOCFIX" in after, False)
+
+
+def test_green3_idempotencia_ate_terceira_corrida() -> None:
+    """GREEN 3: uma segunda corrida sobre o resultado da primeira converte 0
+    sitios NOVOS, reporta os 12 ja-aplicados, rc=0, veredicto JA-APLICADO --
+    e uma terceira corrida produz um ficheiro byte-identico a' segunda
+    (idempotencia real, nao so' 'nao piora')."""
+    with tempfile.TemporaryDirectory() as td:
+        f = _write_fixture(td, REGION_NEW)
+        r1 = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN3 1a corrida rc", r1.returncode, 0)
+
+        r2 = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN3 2a corrida rc", r2.returncode, 0)
+        check("GREEN3 2a corrida 0 conversoes novas", _count_replaced(r2.stdout), 0)
+        check("GREEN3 2a corrida veredicto JA-APLICADO",
+              "JA-APLICADO" in r2.stdout, True)
+        check("GREEN3 2a corrida reporta 12 sitios ja em ps3_call_opd",
+              "12 sitios ja em ps3_call_opd" in r2.stdout, True)
+        after2 = f.read_text(encoding="utf-8")
+
+        r3 = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        after3 = f.read_text(encoding="utf-8")
+        check("GREEN3 3a corrida rc", r3.returncode, 0)
+        check("GREEN3 3a corrida byte-identica a' 2a (idempotencia por hash/conteudo)",
+              after3, after2)
+
+
+def test_green4_sem_efeito_rc3() -> None:
+    """GREEN 4 (o coracao da correccao): fixture onde nem o formato antigo
+    nem o TOCFIX nem ps3_call_opd pre-existente aparecem -- 0 conversoes, 0
+    ja-aplicadas, tem de sair rc=3 (SEM-EFEITO), nunca rc=0."""
+    region_sem_match = REGION_NEW.replace(
+        "ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);",
+        "chamada_hipotetica_num_terceiro_formato(ctx);",
+    )
+    check("fixture SEM-EFEITO: zero indirect+drain restantes",
+          "ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);" in region_sem_match, False)
+    check("fixture SEM-EFEITO: zero ps3_call_opd pre-existente",
+          "ps3_call_opd(ctx," in region_sem_match, False)
+    with tempfile.TemporaryDirectory() as td:
+        f = _write_fixture(td, region_sem_match)
+        result = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN4 rc == RC_NO_EFFECT (3)", result.returncode, 3)
+        check("GREEN4 veredicto SEM-EFEITO", "SEM-EFEITO" in result.stdout, True)
+        after = f.read_text(encoding="utf-8")
+        check("GREEN4 nenhum ps3_call_opd foi criado", after.count("ps3_call_opd(ctx,"), 0)
+
+
+def test_green5_e2e_copia_scratch_do_chunk_real() -> None:
+    """GREEN 5 (prova mais forte que fixture): aplicado contra uma COPIA
+    scratch (nunca o original) do chunk 000 real, o total de
+    ps3_call_opd(ctx, nesse chunk sobe exactamente 12 -- e o ficheiro real
+    de producao fica byte-a-byte intacto (hash antes/depois)."""
+    import hashlib
+    import shutil
+
+    def sha256(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    hash_before = sha256(REAL_LIFT_000)
+    with tempfile.TemporaryDirectory() as td:
+        scratch = Path(td) / "ppu_recomp_000.cpp"
+        shutil.copyfile(REAL_LIFT_000, scratch)
+        before_count = scratch.read_text(encoding="utf-8", errors="replace").count(
+            "ps3_call_opd(ctx,"
+        )
+        result = subprocess.run(
+            [sys.executable, str(PATCH_PATH), td], capture_output=True, text=True,
+        )
+        check("GREEN5 rc", result.returncode, 0)
+        after_count = scratch.read_text(encoding="utf-8", errors="replace").count(
+            "ps3_call_opd(ctx,"
+        )
+        check("GREEN5 delta == 12 no chunk 000 (copia scratch)",
+              after_count - before_count, 12)
+    hash_after = sha256(REAL_LIFT_000)
+    check("GREEN5 lift real de producao permanece intacto (sha256)",
+          hash_after, hash_before)
 
 
 def main() -> int:
