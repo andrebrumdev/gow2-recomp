@@ -13,6 +13,10 @@
 #   HOST_OPT=-O0|-O1|-O2|-Os  host/runtime objects + link (default -O0; SPU stays -O1)
 #   OUT=/path/to/boot_gow2    binary path (default $HERE/boot_gow2)
 #   FORCE_REBUILD_LIFT=1      ignore stale .o and rebuild all lift chunks
+#   RELIFT=1  regenera o lift a partir do EBOOT.ELF/functions.json num
+#             directorio NOVO (default recomp_macos_v3) antes de compilar;
+#             NUNCA escreve em recomp_macos_v2 (aborta se o alvo resolver
+#             para la)
 #
 # Examples:
 #   ./build_macos.sh
@@ -35,6 +39,47 @@ OUT="${OUT:-$HERE/boot_gow2}"
 LIFT_OPT="${LIFT_OPT:--O0}"
 HOST_OPT="${HOST_OPT:--O0}"
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
+
+# RELIFT=1: regenera o lift a partir do EBOOT.ELF/functions.json num
+# directorio SEMPRE novo (nunca recomp_macos_v2, que e' produção) antes de
+# seguir para as seccoes normais de compilacao/link. Sob RELIFT=1 o
+# positional $1 passa a significar "directorio NOVO a criar" em vez de
+# "directorio existente a compilar" -- essa mudanca de significado so' se
+# aplica dentro deste ramo condicional (D-3.5, 03-CONTEXT.md).
+if [ "${RELIFT:-0}" = "1" ]; then
+    LIFT="${1:-$HERE/recomp_macos_v3}"
+
+    # Guarda anti-v2 (D-3.5): resolve o caminho absoluto canonico do alvo
+    # ANTES de qualquer mkdir/escrita e aborta se resolver para
+    # recomp_macos_v2. dirname existe sempre, mesmo que $LIFT ainda nao
+    # exista -- por isso o resolve funciona mesmo em directorio novo.
+    _lift_parent="$(cd "$(dirname "$LIFT")" 2>/dev/null && pwd)"
+    _lift_abs="$_lift_parent/$(basename "$LIFT")"
+    _v2_abs="$HERE/recomp_macos_v2"
+    if [ "$_lift_abs" = "$_v2_abs" ]; then
+        echo "RELIFT=1 nunca escreve em recomp_macos_v2 (produção) -- escolha outro directorio de saida" >&2
+        exit 1
+    fi
+
+    EBOOT="${PS3_EBOOT:-$HERE/EBOOT.ELF}"
+    FUNCS="${PS3_FUNCTIONS_JSON:-$HERE/functions.json}"
+    if [ ! -f "$EBOOT" ]; then
+        echo "RELIFT=1: EBOOT nao encontrado em $EBOOT (defina PS3_EBOOT)" >&2
+        exit 1
+    fi
+    if [ ! -f "$FUNCS" ]; then
+        echo "RELIFT=1: functions.json nao encontrado em $FUNCS (defina PS3_FUNCTIONS_JSON)" >&2
+        exit 1
+    fi
+
+    mkdir -p "$LIFT"
+    echo "=== 0. RELIFT=1: regenerando lift em $LIFT (a partir de $EBOOT) ==="
+    python3 "$PS3/tools/ppu_lifter.py" "$EBOOT" --functions "$FUNCS" -o "$LIFT" -j 4
+    _relift_rc=$?
+    if [ "$_relift_rc" != "0" ]; then
+        exit "$_relift_rc"
+    fi
+fi
 
 case "$LIFT_OPT" in -O0|-O1|-O2|-Os) ;; *)
     echo "LIFT_OPT must be -O0|-O1|-O2|-Os (got '$LIFT_OPT')" >&2; exit 1 ;;
