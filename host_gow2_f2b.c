@@ -74,10 +74,27 @@ extern void     vm_write32(uint64_t a, uint32_t v);
 extern uint8_t* vm_base;
 extern unsigned movie_io_pread(unsigned fd, void* dst, unsigned n, unsigned pos);
 extern int      movie_io_is(unsigned fd);
-/* Definicao (com inicializador) permanece no lift -- so' declarada aqui
- * porque f2b_stream_eof_try_complete lhe escreve (D-2.4: nao e' um dos 17
- * simbolos deste subsistema, e' do subsistema WAD-wait completion). */
-extern uint32_t g_wadld_eof_ea;
+/* g_wadld_eof_ea: DEFINIDO aqui, nao apenas declarado.
+ *
+ * A extraccao original deixou-o de fora dos 17 simbolos do F2B (era a linha 664
+ * do bloco no lift) e pos aqui um `extern`, assumindo que a definicao ficava no
+ * lift. Nao fica: no lift REGENERADO ninguem o define -- ele vinha do bloco
+ * [BA808] escrito a mao, que era orfao e desapareceu. Medido em 2026-07-26, no
+ * primeiro link real deste ficheiro:
+ *
+ *   Undefined symbols for architecture arm64:
+ *     "_g_wadld_eof_ea", referenced from:
+ *         _f2b_stream_eof_try_complete in host_gow2_f2b.o
+ *
+ * O harness sintetico que validou a extraccao nao apanhou isto porque fornecia
+ * um stub do simbolo; o link real nao tem stub. E' a diferenca entre provar o
+ * mecanismo e provar o facto.
+ *
+ * Fica aqui porque este ficheiro e' o seu unico ESCRITOR
+ * (f2b_stream_eof_try_complete). Os leitores sao os blocos WAD-wait no lift
+ * (func_002BA808/BA824), que o declaram `extern` no proprio sitio de uso.
+ * Um `patch_*.py` que reinstale esses blocos nao precisa de o definir. */
+uint32_t g_wadld_eof_ea = 0;
 
 /* F2B FO side-channel: real FO has +0x38=0; stashing mfd there may be read
  * as a guest pointer. Keep mfd in a host map keyed by FO EA. */
