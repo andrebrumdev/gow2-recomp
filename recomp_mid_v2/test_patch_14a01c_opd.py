@@ -253,10 +253,13 @@ def test_0_red_bug_medido_no_script_congelado() -> None:
 
 
 def _count_fixed(stdout: str) -> int:
-    m = re.search(r"OK total (\d+)", stdout)
-    if not m:
+    """Soma o 'fixed N' de cada linha por-funcao (o script corrigido ja nao
+    imprime 'OK total N' incondicional -- isso e' precisamente o defeito que
+    a Task 2 remove; o total agora so' aparece dentro do veredicto de 3 ramos)."""
+    ms = re.findall(r": fixed (\d+) already=\d+", stdout)
+    if not ms:
         return -1
-    return int(m.group(1))
+    return sum(int(x) for x in ms)
 
 
 def test_3_green1_convertido_tocfix() -> None:

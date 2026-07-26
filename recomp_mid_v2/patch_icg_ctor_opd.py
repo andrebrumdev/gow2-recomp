@@ -188,7 +188,14 @@ def main():
     p0 = ROOT / "ppu_recomp_000.cpp"
     p1 = ROOT / "ppu_recomp_001.cpp"
     print("=== 000 ctor/init ===")
-    n0, a0, r0 = patch_funcs(p0, ["func_0014A01C", "func_0014AD94", "func_00151248"], "ICG-VCALL")
+    # D-4.7 (Fase 4, 2026-07-26): func_0014A01C/func_0014AD94 saem desta lista.
+    # patch_14a01c_opd.py (corrigido nesta sessao, corre PRIMEIRO alfabeticamente
+    # no glob patch_*.py) volta a ser o dono unico dessas 2 funcoes -- antes desta
+    # correcao, as duas reivindicavam as mesmas 4 conversoes OPD, e assim que
+    # patch_14a01c_opd.py voltasse a converter, este script imprimiria SEM-EFEITO
+    # enganoso para elas (a probe [ICG-VCALL] deixaria de aparecer, convertida
+    # por outro script). Posse unica restaurada: aqui fica so' func_00151248.
+    n0, a0, r0 = patch_funcs(p0, ["func_00151248"], "ICG-VCALL")
     print("=== 001 path ===")
     n1, a1, r1 = patch_funcs(p1, ["func_00329490", "func_0032854C", "func_00328B18"], "ICG-PATH-OPD")
 
