@@ -122,9 +122,10 @@ done
 # ja' esta medido tres vezes e promovido a producao -- boot_gow2_v3/v4 linkaram
 # e o lift regenerado deu st620=11 em 6/6 (gow2-recomp commit 57b418f,
 # games/gow2/lift_baseline/counters_pre.tsv: boot_lifted_functions=56223,
-# lift_function_table_count=56072). Esta task (02-03) NAO re-prova o criterio
-# 4 (D-2.6, 02-CONTEXT.md) -- so' liga o mecanismo de compilacao condicional
-# que ja' funcionou a esse lift.
+# lift_function_table_count=56072, imp_modules=13, imp_imports=151,
+# orfaos_pos_run=0). Esta task (02-03) NAO re-prova o criterio 4 (D-2.6,
+# 02-CONTEXT.md) -- so' liga o mecanismo de compilacao condicional que ja'
+# funcionou a esse lift.
 # Compila-se SO' quando o lift NAO trouxer a definicao (corpo, chaveta) dentro
 # dele -- o lift antigo tem-na escrita a mao, e linkar as duas dava "duplicate
 # symbol". Um lift regenerado so' tem a declaracao (patch_zz_host_api_decls.py,
