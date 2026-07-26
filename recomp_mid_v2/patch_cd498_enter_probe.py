@@ -194,8 +194,12 @@ def patch_file(path: Path) -> bool:
             raise SystemExit(f"{path}: {fn} signature count={t.count(sig)}")
         idx = t.find(sig)
         region_start = idx + len(sig)
-        ahead = t[region_start:region_start + 120]
-        if f"ps3_cd498_on_enter({site_id}," in ahead:
+        # Idempotencia: procurar no FICHEIRO INTEIRO, nao numa janela a seguir
+        # a' assinatura. Outro patch pode injectar no topo da mesma funcao e
+        # empurrar a nossa chamada para fora da janela -- foi o que aconteceu
+        # com o id=5 (CC9D0), injectado DUAS vezes depois de um instalador de
+        # bloco entrar antes. O id e' unico, logo a procura global e' exacta.
+        if f"ps3_cd498_on_enter({site_id}," in t:
             print(f"  {fn} ({short}): ALREADY")
             continue
         call = (f"        /* {MARKER} id={site_id} */\n"

@@ -13,39 +13,38 @@ natural FO-DUMP. Freelist 0x840000xx after R_Perm DONE still blocks stream
 (see notes G4 §20–§21) — FO layout alone is not the remaining wall.
 
 Markers: F2B-FO-CTOR, hash=+34=
-Idempotent note: lift is gitignored; re-apply by re-running session edit or
-restoring recomp_macos_v2 after re-lift + this note.
 
 Usage: python3 recomp_mid_v2/patch_fios_f2b_fo_ctor.py [recomp_macos_v2]
 
-Estado 2026-07-25 (relift limpo) — VERIFICADOR PURO, CONTINUA A FALHAR
-----------------------------------------------------------------------
+Estado 2026-07-25 — VERIFICADOR PURO, agora com ESCRITOR
+---------------------------------------------------------
 Este ficheiro nao escreve nada (0 write_text/open('w')): so' confirma que o
-bloco F2B (edicao manual de sessao) esta' presente. Medido contra um lift
-limpo do ppu_lifter.py actual:
+bloco F2B esta' presente no lift (gitignored, regeneravel).
 
-  marcador       ocorrencias no repo             escritor
-  -------------  ------------------------------  ---------------------------
-  F2B-FO-CTOR    so' este ficheiro               NENHUM
-  F2B-MOVIEIO    docstrings de 2 patches + notes  NENHUM
+Historico: ate' esta leva o bloco era uma edicao MANUAL de sessao e NENHUM
+script versionado o repunha — nem este, nem o dono nominal do bloco maior
+(`patch_fios_f2a_f2b_wad.py`, que so' imprime a receita). Num lift limpo com
+todos os patches aplicados os marcadores ficavam a 0 e este verificador falhava
+para sempre, correctamente: o comportamento nao existia.
 
-Nenhum dos dois existe no lift de producao actual (recomp_macos_v3/*.cpp).
-O proprio docstring acima admite-o: "re-apply by re-running session edit".
-As funcoes guest do ctor natural (func_0031F1A4, func_00307774, func_0030D29C)
-existem no lift limpo (ppu_recomp_001.cpp), mas o BLOCO F2B que as encadeia
-depois do movie_io open e' codigo escrito a mao que nunca teve script.
+O escritor que faltava e' `patch_fios_f2b_fo_block.py` (criado 2026-07-25):
+extrai do lift de producao `recomp_macos_v2` o bloco FIOS-F2B-MOVIEIO inteiro
+— e' a caixa onde o F2B-FO-CTOR vive — e insere-o em `func_0030D5CC`, ancorado
+no trio gerado `0x8001<<16 / r31=r3 / r0|=0x70A`. Corre antes deste ficheiro na
+ordem alfabetica do apply_all_patches.sh, por isso o verde aqui e' legitimo e
+na mesma passagem.
 
-Portanto o veredicto negativo e' CORRECTO: o comportamento nao existe. O check
-NAO foi enfraquecido e o rc continua != 0. Reparar exige escrever o bloco F2B
-(trabalho de bring-up, nao de reparacao de agulha) — faze-lo passar sem esse
-bloco seria forjar resultado (regra 4 do CLAUDE.md).
+Dependencias do bloco que continuam orfas (ver o docstring do escritor):
+`g_f2b_natural_movie_fo`, `f2b_fo_mfd_put` e `movie_io_pread` sao injeccoes de
+preambulo (`lift_baseline/injected_001.cpp`) sem escritor proprio; sem elas o
+chunk nao compila. O escritor avisa quais faltam, nunca as esconde.
 
-Unica correccao aplicada em 2026-07-25 (mecanica, nao enfraquece nada):
-chunk-fixo. Abria sempre ROOT/"ppu_recomp_001.cpp"; o lifter passou de 31 para
-7 chunks e nada garante que o bloco caia nesse. Passa a procurar em todos os
-ppu_recomp_*.cpp do lift via resolve_lift_paths(). A logica de decisao e' a
-mesma, agora com parenteses explicitos (o `or`/`and` sem parenteses ja' se
-agrupava assim; so' estava ilegivel).
+Correccao 2026-07-25 (mecanica, nao enfraquece nada): chunk-fixo. Abria sempre
+ROOT/"ppu_recomp_001.cpp"; o lifter passou de 31 para 7 chunks e nada garante
+que o bloco caia nesse. Passa a procurar em todos os ppu_recomp_*.cpp do lift
+via resolve_lift_paths(). A logica de decisao e' a mesma, agora com parenteses
+explicitos (o `or`/`and` sem parenteses ja' se agrupava assim; so' estava
+ilegivel).
 """
 from __future__ import annotations
 

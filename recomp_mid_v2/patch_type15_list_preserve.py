@@ -50,6 +50,25 @@ script avaliava chunk-a-chunk e imprimia 7 linhas FAILED identicas para uma
 unica funcao que vive (quando existe) num unico chunk. Passa a procurar a funcao
 na UNIAO dos chunks e a dar um unico veredicto. Severidade inalterada: sem a
 funcao, rc=1.
+
+ADENDA 2026-07-26 -- o instalador ja' existe, e a escolha de chunk era por MENCAO
+--------------------------------------------------------------------------------
+O escritor que faltava passou a existir:
+`patch_type15_list_close_preserve_install.py` (funcao + declaracao + call site em
+func_000CB56C). Ao aplica-lo apareceu um falso FAILED aqui, com uma causa que ja'
+existia contra o proprio lift de PRODUCAO:
+
+  a escolha do chunk era `if FN_NAME in t` -- uma MENCAO. Na producao o nome
+  aparece primeiro no ppu_recomp_000.cpp (declaracao extern na linha 5 + call
+  site em func_000CB56C) e a DEFINICAO vive no ppu_recomp_001.cpp. Com um
+  directorio em argv, escolhia-se o 000, find_fn_span devolvia None e o script
+  morria com "not found (lift shape changed?)" -- mesmo com o comportamento
+  todo presente.
+
+Passa a escolher o chunk pela DEFINICAO ('...(uint32_t prod) {'). Isto NAO
+enfraquece o teste: sem definicao em chunk nenhum continua a ser FAILED rc=1
+(medido nos dois sentidos). So' deixa de confundir uma declaracao/chamada com a
+definicao -- e' a mesma classe de correccao do "chunk-fixo" acima.
 """
 from __future__ import annotations
 
@@ -60,6 +79,8 @@ from lift_paths import resolve_lift_paths
 
 MARKER = "CLOSE-PRESERVE"
 FN_NAME = "ps3_type15_product_list_reset"
+# Assinatura da DEFINICAO (o `{` distingue-a da declaracao extern e do call site).
+DEF_SIG = 'extern "C" void ' + FN_NAME + "(uint32_t prod) {"
 
 # Full replacement body of the helper (keeps same signature / linkage).
 NEW_FN = r'''/* product+0x70 is an intrusive circular list (sentinel = product+0x70).
@@ -260,16 +281,21 @@ def main() -> int:
 
     # A funcao vive (quando existe) num UNICO chunk -- procura-se na uniao e
     # da-se um unico veredicto, em vez de um FAILED por chunk (chunk-fixo).
+    # A busca e' pela DEFINICAO, nao pelo nome: uma declaracao extern ou um call
+    # site noutro chunk (e' o que a producao tem no ppu_recomp_000.cpp) nao e' o
+    # sitio para reescrever o corpo. Ver ADENDA 2026-07-26 no cabecalho.
     target = None
     for p in existing:
         t = p.read_text()
-        if FN_NAME in t:
+        if DEF_SIG in t:
             target = (p, t)
             break
     if target is None:
-        print(f"FAILED: {FN_NAME} nao existe em nenhum dos {len(existing)} chunks.")
-        print("  ORFAO SEM ESCRITOR: a funcao e' injeccao host manual; nenhum")
-        print("  patch_*.py a instala. Fonte versionada (nao ligada ao build):")
+        print(f"FAILED: {FN_NAME} nao esta' DEFINIDA em nenhum dos "
+              f"{len(existing)} chunks.")
+        print("  A injeccao host (funcao + call site) e' instalada por")
+        print("  patch_type15_list_close_preserve_install.py, que corre antes")
+        print("  deste no apply_all_patches.sh. Fonte versionada do bloco:")
         print("  ../host_gow2_factory.cpp e ../lift_baseline/injected_001.cpp.")
         print("  Nada foi injectado aqui: sem os call sites o APPLIED seria falso.")
         return 1
