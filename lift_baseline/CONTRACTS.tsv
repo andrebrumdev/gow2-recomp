@@ -8,5 +8,14 @@
 #   agulha: literal por omissao; prefixo "re:" activa re.findall (regex)
 # verificado por: check_contracts.py CONTRACTS.tsv LIFT_DIR --patch NOME
 # rc=0 (todos passam) / 1 (pelo menos um falha) / 2 (SEM-CONTRATO) / 3 (erro de uso)
+# opd-total (patch="-") e' um contrato de AUDITORIA GLOBAL sem dono unico -- soma
+# o efeito da familia OPD inteira no projecto. check_contracts.py so' o encontra
+# se alguem passar --patch - explicitamente; NAO e' consumido pela classificacao
+# por-patch do Plano 04-05 (ALREADY-APPLIED/NO-MATCH/UNVERIFIED e' sempre por patch).
 # id	patch	escopo	alvo	predicado	agulha	valor	razao
 opd-32e200	patch_32e200_opd.py	ea	0x0032E200	count_ge	ps3_call_opd(	7	EXPECTED_SITES do proprio patch_32e200_opd.py (linha 32); regressao motivadora da fase inteira (36 conversoes OPD desapareceram sem gate)
+opd-32e200-noindirect	patch_32e200_opd.py	ea	0x0032E200	count_eq	ps3_indirect_call	0	nenhum indirecto pode sobrar depois da conversao OPD
+opd-14b1f0	patch_14b1f0_opd.py	ea	0x0014B1F0	count_ge	ps3_call_opd(	12	EXPECTED_SITES de patch_14b1f0_opd.py (Fase 3, 03-02-SUMMARY.md)
+opd-14a01c-a	patch_14a01c_opd.py	ea	0x0014A01C	count_ge	ps3_call_opd(	2	medido no Plano 04-02: 2 sitios por funcao (corrige a leitura de "2 no total" de D-4.7)
+opd-14a01c-b	patch_14a01c_opd.py	ea	0x0014AD94	count_ge	ps3_call_opd(	2	idem, segunda funcao
+opd-total	-	global	-	count_ge	ps3_call_opd(ctx,	47	total agregado do projecto, medido nesta task contra recomp_macos_v3 pos-cadeia-completa: for f in ppu_recomp_*.cpp; do grep -c 'ps3_call_opd(ctx,' $f; done somado = 47 (NAO 52 -- 52 era a leitura da Fase 3 antes da correcao de posse do Plano 04-02; a correcao NAO muda o total global, so a posse por funcao; 47 e' o numero medido nesta sessao e tambem o citado no 04-CONTEXT.md "ESTADO MEDIDO"). Agulha 'ps3_call_opd(ctx,' (nao so 'ps3_call_opd(') deliberadamente: a agulha mais curta tambem casa as 3 declaracoes extern "C" (ps3_call_opd(ppu_context* ctx, ...);) e infla para 50 -- medido e corrigido nesta task (Rule 1).
