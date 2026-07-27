@@ -6,25 +6,38 @@
 # cada re-lift. Este script e o catalogo unico dessa reaplicacao.
 #
 # Uso:
-#   ./apply_all_patches.sh [DIR_DE_LIFT]     # aplica tudo (default: recomp_macos_v2)
-#   ./apply_all_patches.sh --check [DIR]     # so verifica os marcadores, nao escreve
+#   ./apply_all_patches.sh [DIR_DE_LIFT]                # aplica tudo (default: recomp_macos_v2)
+#   ./apply_all_patches.sh --check [DIR]                # so verifica os marcadores, nao escreve
+#   ./apply_all_patches.sh [DIR] --status ARQUIVO.tsv   # tambem escreve patch/status/classe em TSV
 #
 # Idempotente: a 2a corrida seguida deve deixar a arvore identica e reportar
 # tudo como ALREADY-APPLIED.
 #
-# Classificacao por patch (agnostica ao script: compara o CONTEUDO do lift):
+# Classificacao por patch em SEIS estados (D-4.1, 04-05-PLAN.md) -- a verdade
+# vem da POS-CONDICAO em CONTRACTS.tsv (D-4.2), nunca do rc autodeclarado
+# do patch quando ele nao escreve nada:
 #   APPLIED         -> rc=0 e o conteudo dos ppu_recomp_*.cpp mudou
-#   ALREADY-APPLIED -> rc=0 e o conteudo nao mudou (no-op)
+#   ALREADY-APPLIED -> rc=0, conteudo nao mudou, E a pos-condicao E VERDADE
+#   NO-MATCH        -> rc=0, conteudo nao mudou, mas a pos-condicao E FALSA
+#                       (nao casou nada -- NAO e verde, conta para o gate)
+#   UNVERIFIED      -> rc=0, conteudo nao mudou, SEM contrato declarado para
+#                       este patch (nao da para saber -- NAO e verde)
 #   FAILED          -> rc!=0 (needle nao encontrada / shape do lift mudou)
+#   SKIPPED         -> patch listado em SKIP_LIST (nao roda neste host)
+#
+# NO-MATCH e UNVERIFIED so contam para o rc final se o patch NAO for classe
+# PROBE em PATCH_CATALOG.tsv (D-4.4) -- PROBE fica fora do gate, mas dentro
+# do relatorio, com o sufixo "(PROBE, fora do gate)".
 #
 # Um FAILED nao e forcado: pode significar que o patch ficou obsoleto para o
 # novo shape do lift. Investigar, nunca forcar.
 # FAILED-PARTIAL = o script escreveu um chunk e so depois falhou noutro.
 #
-# Saida: 0 se nada falhou E os checks passaram; 1 caso contrario. Hoje o rc fica
-# permanentemente em 1 por causa dos 4 FAILED abaixo — o que gateia a correcao
-# de facto sao os CHECKS, todos verdes. Os 4 sao patches de PROBE (diagnostico
-# gated por env, OFF por default), nenhum altera o boot default:
+# No fim, chama verify_lift.sh (D-4.6) e incorpora o seu rc no calculo final.
+#
+# Saida: 0 se nada falhou (fora de PROBE) E os checks passaram E verify_lift.sh
+# passou; 1 caso contrario. Historicamente os FAILED abaixo eram todos PROBE
+# (diagnostico gated por env, OFF por default), nenhum altera o boot default:
 #
 #   patch_2b0fb4_trace.py    needle exige uma probe [WADLD-T1SZ] preexistente em
 #                            func_002B0FB4 que NENHUM script instala (0 no lift
@@ -55,14 +68,29 @@ PATCH_DIR="$REPO/recomp_mid_v2"
 
 MODE=apply
 LIFT_ARG=""
+STATUS_TSV=""
+_want_status_path=0
 for a in "$@"; do
+  if [ "$_want_status_path" -eq 1 ]; then
+    STATUS_TSV="$a"
+    _want_status_path=0
+    continue
+  fi
   case "$a" in
     --check) MODE=check ;;
+    --status) _want_status_path=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     -*) echo "opcao desconhecida: $a" >&2; exit 2 ;;
     *) LIFT_ARG="$a" ;;
   esac
 done
+if [ "$_want_status_path" -eq 1 ]; then
+  echo "ERRO: --status precisa de um caminho" >&2
+  exit 2
+fi
+if [ -n "$STATUS_TSV" ]; then
+  printf 'patch\tstatus\tclasse\n' > "$STATUS_TSV"
+fi
 
 LIFT_REL="${LIFT_ARG:-recomp_macos_v2}"
 LIFT="$REPO/${LIFT_REL#./}"
@@ -75,20 +103,29 @@ fi
 # apply_all_patches.sh e' um script do irmao gow2-recomp, mas PATCH_CATALOG.tsv,
 # CONTRACTS.tsv, check_contracts.py e verify_lift.sh (D-4.6) vivem no monorepo
 # do motor -- PS3_ENGINE_ROOT e' a ponte entre os dois repos.
+#
+# NUNCA usar `declare -A` aqui: o /bin/bash de fabrica do macOS (3.2.57, sem
+# homebrew bash em PATH) nao suporta array associativo -- `declare -A` falha
+# com "invalid option" e um subscrito de string num array indexado implicito
+# ($1 tratado como expressao aritmetica) explode com "invalid arithmetic
+# operator". classe_de() faz lookup por linha via awk, portavel ao bash 3.2.
 PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$REPO/../ps3recomp}"
 CATALOG="${PS3_PATCH_CATALOG:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/PATCH_CATALOG.tsv}"
-declare -A PATCH_CLASSE
-if [ -f "$CATALOG" ]; then
-  while IFS=$'\t' read -r c_patch c_escreve c_classe c_subclasse c_no_gate c_razao c_marcador c_chunk; do
-    [ -z "$c_patch" ] && continue
-    case "$c_patch" in \#*) continue ;; esac
-    PATCH_CLASSE["$c_patch"]="$c_classe"
-  done < "$CATALOG"
-else
+if [ ! -f "$CATALOG" ]; then
   echo "AVISO: PATCH_CATALOG.tsv nao encontrado ($CATALOG) -- todos os patches tratados como FUNCIONAL (nenhuma excecao PROBE)" >&2
 fi
 
-is_probe() { [ "${PATCH_CLASSE[$1]:-FUNCIONAL}" = "PROBE" ]; }
+classe_de() {
+  local name="$1" found
+  if [ ! -f "$CATALOG" ]; then
+    echo "FUNCIONAL"
+    return
+  fi
+  found="$(awk -F'\t' -v p="$name" '$1==p{print $3; exit}' "$CATALOG")"
+  if [ -n "$found" ]; then printf '%s\n' "$found"; else echo "FUNCIONAL"; fi
+}
+
+is_probe() { [ "$(classe_de "$1")" = "PROBE" ]; }
 
 CONTRACTS="${PS3_CONTRACTS:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/CONTRACTS.tsv}"
 CHECK_CONTRACTS="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/check_contracts.py"
@@ -280,7 +317,14 @@ n_applied=0
 n_already=0
 n_failed=0
 n_skipped=0
+n_nomatch=0
+n_unverified=0
+n_failed_gate=0
+n_nomatch_gate=0
+n_unverified_gate=0
 failed_list=""
+nomatch_list=""
+unverified_list=""
 
 for p in "$PATCH_DIR"/patch_*.py; do
   name="$(basename "$p")"
@@ -324,7 +368,21 @@ for p in "$PATCH_DIR"/patch_*.py; do
 $contract_out"
   fi
 
-  printf '%-16s %s\n' "$status" "$name"
+  probe_suffix=""
+  if is_probe "$name"; then
+    probe_suffix=" (PROBE, fora do gate)"
+  else
+    case "$status" in
+      FAILED|FAILED-PARTIAL) n_failed_gate=$((n_failed_gate + 1)) ;;
+      NO-MATCH) n_nomatch_gate=$((n_nomatch_gate + 1)); nomatch_list="$nomatch_list $name" ;;
+      UNVERIFIED) n_unverified_gate=$((n_unverified_gate + 1)); unverified_list="$unverified_list $name" ;;
+    esac
+  fi
+  if [ -n "$STATUS_TSV" ]; then
+    printf '%s\t%s\t%s\n' "$name" "$status" "$(classe_de "$name")" >> "$STATUS_TSV"
+  fi
+
+  printf '%-16s %s%s\n' "$status" "$name" "$probe_suffix"
   # Detalhe do script so quando interessa (falha) ou quando mudou algo.
   if [ "$rc" -ne 0 ] || [ "$status" = "APPLIED" ]; then
     printf '%s\n' "$out" | sed 's/^/                   | /'
@@ -333,12 +391,18 @@ done
 
 echo
 echo "--------------------------------------------------------------"
-printf 'TOTAL: %d patches | APPLIED=%d ALREADY-APPLIED=%d FAILED=%d SKIPPED=%d\n' \
-  "$((n_applied + n_already + n_failed + n_skipped))" \
-  "$n_applied" "$n_already" "$n_failed" "$n_skipped"
+printf 'TOTAL: %d patches | APPLIED=%d ALREADY-APPLIED=%d NO-MATCH=%d UNVERIFIED=%d FAILED=%d SKIPPED=%d\n' \
+  "$((n_applied + n_already + n_nomatch + n_unverified + n_failed + n_skipped))" \
+  "$n_applied" "$n_already" "$n_nomatch" "$n_unverified" "$n_failed" "$n_skipped"
 if [ -n "$failed_list" ]; then
   echo "FALHARAM:$failed_list"
   echo "(NAO forcar: pode ser patch obsoleto para o novo shape do lift)"
+fi
+if [ -n "$nomatch_list" ]; then
+  echo "NO-MATCH (pos-condicao falsa, D-4.2):$nomatch_list"
+fi
+if [ -n "$unverified_list" ]; then
+  echo "UNVERIFIED (sem contrato declarado):$unverified_list"
 fi
 echo "--------------------------------------------------------------"
 echo
@@ -346,7 +410,18 @@ echo "-- verificacao de marcadores --"
 run_checks
 checks_rc=$?
 
-if [ "$n_failed" -ne 0 ] || [ "$checks_rc" -ne 0 ]; then
+echo
+echo "-- verify_lift.sh (D-4.6) --"
+VERIFY_LIFT="$PS3_ENGINE_ROOT/games/gow2/verify_lift.sh"
+if [ -x "$VERIFY_LIFT" ]; then
+  "$VERIFY_LIFT" "$LIFT"
+  verify_lift_rc=$?
+else
+  echo "AVISO: verify_lift.sh nao encontrado ou nao executavel ($VERIFY_LIFT) -- gate D-4.6 nao verificado" >&2
+  verify_lift_rc=2
+fi
+
+if [ "$n_failed_gate" -ne 0 ] || [ "$n_nomatch_gate" -ne 0 ] || [ "$n_unverified_gate" -ne 0 ] || [ "$checks_rc" -ne 0 ] || [ "$verify_lift_rc" -ne 0 ]; then
   exit 1
 fi
 exit 0
