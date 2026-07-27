@@ -71,6 +71,28 @@ if [ ! -d "$LIFT" ]; then
   exit 2
 fi
 
+# ---- raiz do motor (ps3recomp) + catalogo de classes (D-4.1/D-4.4) -----------
+# apply_all_patches.sh e' um script do irmao gow2-recomp, mas PATCH_CATALOG.tsv,
+# CONTRACTS.tsv, check_contracts.py e verify_lift.sh (D-4.6) vivem no monorepo
+# do motor -- PS3_ENGINE_ROOT e' a ponte entre os dois repos.
+PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$REPO/../ps3recomp}"
+CATALOG="${PS3_PATCH_CATALOG:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/PATCH_CATALOG.tsv}"
+declare -A PATCH_CLASSE
+if [ -f "$CATALOG" ]; then
+  while IFS=$'\t' read -r c_patch c_escreve c_classe c_subclasse c_no_gate c_razao c_marcador c_chunk; do
+    [ -z "$c_patch" ] && continue
+    case "$c_patch" in \#*) continue ;; esac
+    PATCH_CLASSE["$c_patch"]="$c_classe"
+  done < "$CATALOG"
+else
+  echo "AVISO: PATCH_CATALOG.tsv nao encontrado ($CATALOG) -- todos os patches tratados como FUNCIONAL (nenhuma excecao PROBE)" >&2
+fi
+
+is_probe() { [ "${PATCH_CLASSE[$1]:-FUNCIONAL}" = "PROBE" ]; }
+
+CONTRACTS="${PS3_CONTRACTS:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/CONTRACTS.tsv}"
+CHECK_CONTRACTS="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/check_contracts.py"
+
 # ---- interprete python -------------------------------------------------------
 # Os patch_*.py usam Path.write_text(..., newline="\n") — kwarg que so existe a
 # partir do Python 3.10 (e que NAO deve ser removido: e ele que evita CRLF no
@@ -287,8 +309,19 @@ for p in "$PATCH_DIR"/patch_*.py; do
     status="APPLIED"
     n_applied=$((n_applied + 1))
   else
-    status="ALREADY-APPLIED"
-    n_already=$((n_already + 1))
+    # rc==0 e conteudo inalterado: DEIXA de ser automaticamente ALREADY-APPLIED
+    # (D-4.1/D-4.2) -- a verdade vem da POS-CONDICAO declarada em CONTRACTS.tsv,
+    # verificada de forma independente do que o patch imprimiu, nunca do rc dele.
+    contract_out="$("$PY" "$CHECK_CONTRACTS" "$CONTRACTS" "$LIFT" --patch "$name" 2>&1)"
+    contract_rc=$?
+    case "$contract_rc" in
+      0) status="ALREADY-APPLIED"; n_already=$((n_already + 1)) ;;
+      1) status="NO-MATCH"; n_nomatch=$((n_nomatch + 1)) ;;
+      2) status="UNVERIFIED"; n_unverified=$((n_unverified + 1)) ;;
+      *) status="UNVERIFIED"; n_unverified=$((n_unverified + 1)) ;;
+    esac
+    out="$out
+$contract_out"
   fi
 
   printf '%-16s %s\n' "$status" "$name"
