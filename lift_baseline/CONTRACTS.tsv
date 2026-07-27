@@ -1,0 +1,12 @@
+# CONTRACTS.tsv -- pos-condicoes declarativas por patch (D-4.2, 04-04-PLAN.md)
+# formato: id	patch	escopo	alvo	predicado	agulha	valor	razao
+#   escopo=ea:     alvo e' um endereco hex (0x0032E200); regiao = [inicio de
+#                  "void func_XXXXXXXX(", inicio da PROXIMA "void func_")
+#   escopo=global: alvo e' "-"; conta em TODOS os ppu_recomp_*.cpp do LIFT_DIR
+#   predicado=count_ge: conta(agulha) na regiao >= valor
+#   predicado=count_eq: conta(agulha) na regiao == valor
+#   agulha: literal por omissao; prefixo "re:" activa re.findall (regex)
+# verificado por: check_contracts.py CONTRACTS.tsv LIFT_DIR --patch NOME
+# rc=0 (todos passam) / 1 (pelo menos um falha) / 2 (SEM-CONTRATO) / 3 (erro de uso)
+# id	patch	escopo	alvo	predicado	agulha	valor	razao
+opd-32e200	patch_32e200_opd.py	ea	0x0032E200	count_ge	ps3_call_opd(	7	EXPECTED_SITES do proprio patch_32e200_opd.py (linha 32); regressao motivadora da fase inteira (36 conversoes OPD desapareceram sem gate)
