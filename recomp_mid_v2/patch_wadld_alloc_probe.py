@@ -100,7 +100,7 @@ PROBE = (
     '              b2=vm_read32(sbase+scu+8); b3=vm_read32(sbase+scu+12); }\n'
     '            fprintf(stderr,"[WADLD-ALLOC] BACE8 #%d arena=0x%08X head=0x%08X'
     ' need=0x%X pool_idx=%u count=%u stream_av=%u cur=%u peek=%08X %08X %08X %08X\\n",\n'
-    '              n, arena, head, need, idx, cnt, sav, scu, b0,b1,b2,b3); fflush(stderr);} }\n'
+    '              n, arena, head, need, idx, cnt, sav, scu, b0,b1,b2,b3); fflush(stderr);} } }\n'
 )
 
 
