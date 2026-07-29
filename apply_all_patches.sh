@@ -421,7 +421,45 @@ else
   verify_lift_rc=2
 fi
 
-if [ "$n_failed_gate" -ne 0 ] || [ "$n_nomatch_gate" -ne 0 ] || [ "$n_unverified_gate" -ne 0 ] || [ "$checks_rc" -ne 0 ] || [ "$verify_lift_rc" -ne 0 ]; then
+echo
+echo "-- UNVERIFIED por DELTA (nao por contagem absoluta) --"
+# Porque isto existe: o rc global somava n_unverified_gate por contagem ABSOLUTA,
+# ao contrario dos tres checks do verify_lift.sh, que usam delta (D-4.5). Logo o
+# exit code ficava 1 PARA SEMPRE ate' o CONTRACTS.tsv ter cobertura total, mesmo
+# com zero regressoes novas -- e um gate cronicamente vermelho e' um gate que
+# ninguem le'. Foi o mesmo defeito de limiar absoluto que este projecto ja'
+# corrigiu tres vezes: no PREAMBLE ps3_indirect_call (falhava quando o lift
+# MELHOROU), no grupo opd-dispatch (somava lixo do lift antigo com codigo
+# recuperado) e nos contadores 56072/56223 (do lift antigo).
+# Apontado pelo verificador da Fase 4 em 2026-07-29.
+#
+# Agora: um UNVERIFIED NOVO (patch novo sem contrato, ou patch que perdeu o
+# contrato) FALHA. Menos UNVERIFIED (contrato acrescentado) NUNCA falha.
+UNVER_BASELINE="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/UNVERIFIED_BASELINE.json"
+DELTA_TOOL="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/baseline_delta.py"
+unverified_rc=0
+if [ -f "$UNVER_BASELINE" ] && [ -f "$DELTA_TOOL" ]; then
+  _unv_cur="$(mktemp -t unver_cur)"
+  {
+    printf '{"ids": ['
+    _first=1
+    for _n in $unverified_list; do
+      [ "$_first" = 1 ] || printf ', '
+      printf '"%s"' "$_n"
+      _first=0
+    done
+    printf ']}\n'
+  } > "$_unv_cur"
+  "$PY" "$DELTA_TOOL" "$_unv_cur" "$UNVER_BASELINE" --label UNVERIFIED
+  unverified_rc=$?
+  rm -f "$_unv_cur"
+else
+  echo "AVISO: baseline de UNVERIFIED ausente ($UNVER_BASELINE) -- a cair para" >&2
+  echo "       contagem absoluta, que fica vermelha enquanto houver divida." >&2
+  unverified_rc=$([ "$n_unverified_gate" -ne 0 ] && echo 1 || echo 0)
+fi
+
+if [ "$n_failed_gate" -ne 0 ] || [ "$n_nomatch_gate" -ne 0 ] || [ "$unverified_rc" -ne 0 ] || [ "$checks_rc" -ne 0 ] || [ "$verify_lift_rc" -ne 0 ]; then
   exit 1
 fi
 exit 0
