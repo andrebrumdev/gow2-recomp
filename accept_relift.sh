@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# accept_relift.sh -- o aceite de promocao (D-5.1) num unico comando: TRES
-# pernas, nenhuma delas reimplementada aqui, cada uma ja existente noutro
-# script. rc final = AND das tres.
+# accept_relift.sh -- o aceite de promocao (D-5.1 + D-5.2) num unico comando:
+# TRES pernas, nenhuma delas reimplementada aqui, cada uma ja existente
+# noutro script, mais uma seccao de contadores por delta (D-5.2). rc final =
+# AND das tres pernas E dos contadores bloqueantes.
 #
 # A LICAO que criou este script (05-CONTEXT.md, 2026-07-26): o lift
 # regenerado passou o smoke M0 com st620=11 em 6/6 -- MELHOR do que o
@@ -63,7 +64,7 @@ if [ ! -x "$VERIFY_LIFT" ]; then
 fi
 
 echo "=============================================================="
-echo " accept_relift.sh -- aceite de tres pernas (D-5.1)"
+echo " accept_relift.sh -- aceite de tres pernas + contadores (D-5.1 + D-5.2)"
 echo " lift   : $LIFT"
 echo " runs   : $RUNS"
 echo " outdir : $OUTDIR"
@@ -111,20 +112,110 @@ echo "PERNA 3: NO-MATCH=$n_nomatch FAILED-fora-de-PROBE=$n_failed_nao_probe (UNV
 echo "PERNA 3: rc bruto (inclui UNVERIFIED, nao bloqueia D-5.1)=$leg3_rc_bruto | leg3_pass=$leg3_pass"
 echo
 
+# ---- CONTADORES (D-5.2): baseline REAL congelado vs candidato, por DELTA ---
+# 56072 (function_table_count) e 56223 (lifted functions registered), citados
+# em ROADMAP.md/REQUIREMENTS.md, sao do lift ANTIGO escrito a mao (31 chunks --
+# ver games/gow2/lift_baseline/counters_pre.tsv). O lift regenerado (producao
+# E candidato, medido nesta sessao) tem function_table_count=51917 nos DOIS --
+# gatear pelos absolutos antigos faria este gate falhar sempre contra
+# qualquer lift novo. Em vez disso: congela-se UMA VEZ um baseline real
+# contra a producao atual (recomp_macos_v2/boot_gow2), e mede-se o candidato
+# por delta. imp_modules/imp_imports/orfaos NAO dependem do lift -- ficam
+# absolutos e BLOQUEANTES. function_table_count/boot_lifted_functions ficam
+# INFORMATIVOS (delta reportado, nunca bloqueia este rc -- a justificacao por
+# escrito do delta fica no relatorio de aceite, Plano 05-05).
+BASELINE_TSV="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/COUNTERS_BASELINE.tsv"
+
+baseline_val() {
+  awk -F'\t' -v k="$1" '$1==k{print $2; exit}' "$BASELINE_TSV"
+}
+
+counters_baseline_freeze() {
+  if [ -f "$BASELINE_TSV" ]; then
+    return 0
+  fi
+  echo "AVISO: $BASELINE_TSV nao existe -- congelando baseline REAL contra a producao (recomp_macos_v2/boot_gow2)" >&2
+  local ftc_prod prod_tsv lifted_prod modules_prod imports_prod
+  # Rule 1 fix (encontrado nesta corrida real): "grep -oE '[0-9]+'" sozinho
+  # casa o "64" de "uint64_t" ANTES do valor real apos "= " -- extrair so o
+  # numero apos "= " evita esse falso-positivo.
+  ftc_prod=$(grep -h "function_table_count = " "$REPO"/recomp_macos_v2/ppu_recomp_*.cpp 2>/dev/null | grep -oE '= [0-9]+' | grep -oE '[0-9]+' | head -1)
+  prod_tsv="$OUTDIR/counters_baseline_prod.tsv"
+  "$REPO/smoke_relift_equiv.sh" --bin "$REPO/boot_gow2" 1 "$prod_tsv"
+  lifted_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $3}')
+  modules_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $4}')
+  imports_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $5}')
+  mkdir -p "$(dirname "$BASELINE_TSV")"
+  {
+    echo "# COUNTERS_BASELINE.tsv -- baseline REAL congelado (D-5.2), medido por"
+    echo "# accept_relift.sh contra a producao atual (recomp_macos_v2 / boot_gow2)"
+    echo "# na primeira corrida em que este ficheiro nao existia."
+    echo "#"
+    echo "# NOTA: 56072/56223 (ROADMAP.md/REQUIREMENTS.md) sao do lift ANTIGO"
+    echo "# escrito a mao (31 chunks -- ver games/gow2/lift_baseline/counters_pre.tsv)."
+    echo "# O lift regenerado (medido nesta sessao) tem function_table_count=51917"
+    echo "# tanto na producao como no candidato -- gatear pelos absolutos antigos"
+    echo "# faria este gate falhar sempre contra qualquer lift novo (D-5.2)."
+    printf 'contador\tvalor\n'
+    printf 'function_table_count\t%s\n' "$ftc_prod"
+    printf 'boot_lifted_functions\t%s\n' "$lifted_prod"
+    printf 'imp_modules\t%s\n' "$modules_prod"
+    printf 'imp_imports\t%s\n' "$imports_prod"
+    printf 'orfaos\t0\n'
+  } > "$BASELINE_TSV"
+  echo "COUNTERS_BASELINE.tsv congelado: $BASELINE_TSV"
+}
+
+counters_baseline_freeze
+
+# Rule 1 fix: mesmo cuidado que em counters_baseline_freeze() -- "64" de
+# "uint64_t" precede o valor real de function_table_count na mesma linha.
+ftc_cand=$(grep -h "function_table_count = " "$LIFT"/ppu_recomp_*.cpp 2>/dev/null | grep -oE '= [0-9]+' | grep -oE '[0-9]+' | head -1)
+lifted_cand=$(tail -1 "$TSV1" | awk -F'\t' '{print $3}')
+modules_cand=$(tail -1 "$TSV1" | awk -F'\t' '{print $4}')
+imports_cand=$(tail -1 "$TSV1" | awk -F'\t' '{print $5}')
+orfaos_cand=$(pgrep -f "$TAG" | wc -l | tr -d ' ')
+
+ftc_prod="$(baseline_val function_table_count)"
+lifted_prod="$(baseline_val boot_lifted_functions)"
+modules_prod="$(baseline_val imp_modules)"
+imports_prod="$(baseline_val imp_imports)"
+
+echo "---- CONTADORES (D-5.2) ----"
+printf '%-24s producao=%-8s candidato=%-8s delta=%-6s %s\n' \
+  "function_table_count" "$ftc_prod" "$ftc_cand" "$((ftc_cand - ftc_prod))" "[INFORMATIVO -- delta justificado no relatorio de aceite]"
+printf '%-24s producao=%-8s candidato=%-8s delta=%-6s %s\n' \
+  "boot_lifted_functions" "$lifted_prod" "$lifted_cand" "$((lifted_cand - lifted_prod))" "[INFORMATIVO -- delta justificado no relatorio de aceite]"
+printf '%-24s producao=%-8s candidato=%-8s delta=%-6s %s\n' \
+  "imp_modules" "$modules_prod" "$modules_cand" "$((modules_cand - modules_prod))" "[BLOQUEANTE]"
+printf '%-24s producao=%-8s candidato=%-8s delta=%-6s %s\n' \
+  "imp_imports" "$imports_prod" "$imports_cand" "$((imports_cand - imports_prod))" "[BLOQUEANTE]"
+printf '%-24s producao=%-8s candidato=%-8s delta=%-6s %s\n' \
+  "orfaos" "0" "$orfaos_cand" "$((orfaos_cand - 0))" "[BLOQUEANTE]"
+echo
+
+if [ "$modules_cand" = "$modules_prod" ] && [ "$imports_cand" = "$imports_prod" ] && [ "$orfaos_cand" -eq 0 ] 2>/dev/null; then
+  counters_pass=1
+else
+  counters_pass=0
+fi
+
 # ---- relatorio final --------------------------------------------------------
 echo "=============================================================="
-echo " RELATORIO DE ACEITE (D-5.1)"
+echo " RELATORIO DE ACEITE (D-5.1 + D-5.2)"
 echo "=============================================================="
 printf 'PERNA 1 (smoke)          %s   (OK=%s/%s)\n' "$([ "$leg1_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg1_ok" "$RUNS"
 printf 'PERNA 2 (verify_lift)    %s   (rc=%s)\n' "$([ "$leg2_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg2_rc"
 printf 'PERNA 3 (apply_patches)  %s   (NO-MATCH=%s FAILED-fora-PROBE=%s, UNVERIFIED=%s informativo)\n' \
   "$([ "$leg3_pass" -eq 1 ] && echo PASS || echo FAIL)" "$n_nomatch" "$n_failed_nao_probe" "$n_unverified"
+printf 'CONTADORES (D-5.2)       %s   (imp_modules/imp_imports/orfaos bloqueantes)\n' \
+  "$([ "$counters_pass" -eq 1 ] && echo PASS || echo FAIL)"
 echo
 
-if [ "$leg1_rc" -eq 0 ] && [ "$leg2_rc" -eq 0 ] && [ "$leg3_pass" -eq 1 ]; then
-  echo "ACEITE: rc=0 -- as tres pernas passaram."
+if [ "$leg1_rc" -eq 0 ] && [ "$leg2_rc" -eq 0 ] && [ "$leg3_pass" -eq 1 ] && [ "$counters_pass" -eq 1 ]; then
+  echo "ACEITE: rc=0 -- as tres pernas + contadores bloqueantes passaram."
   exit 0
 else
-  echo "REJEITADO: rc=1 -- pelo menos uma perna falhou (ver PASS/FAIL acima)."
+  echo "REJEITADO: rc=1 -- pelo menos uma perna ou os contadores bloqueantes falharam (ver PASS/FAIL acima)."
   exit 1
 fi
