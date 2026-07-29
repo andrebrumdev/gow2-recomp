@@ -95,58 +95,92 @@ if [ -n "$LIFT" ]; then
   fi
 fi
 
-# ---- UMA execucao (Task 1 -- o loop de N corridas e' a Task 2) --------------
-r=1
-LOG="/tmp/smoke_relift_${TAG}_run${r}.log"
-(
-  set -a; . "$HERE/env_gow2.sh"; set +a
-  unset $(env | awk -F= '/^PS3_TRACE_/ {print $1}') 2>/dev/null || true
-  # Protocolo G6 (D-5.5, criterio 3): PS3_NO_RSX=1, PS3_RSX_BACKEND=trace
-  # (inerte quando PS3_NO_RSX=1 -- pick_backend() em boot_macos.cpp:211-212
-  # retorna antes de ler esta variavel -- mas o ROADMAP exige-a literalmente),
-  # PS3_ENGINE_ROOT explicito.
-  export PS3_NO_RSX=1 PS3_RSX_BACKEND=trace PS3_PERF_FSM=1 PS3_MOVIE_EOS=0
-  export PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
-  unset PS3_MOVIE_DONE_MS PS3_VDEC_FORCE_SEQDONE_MS
-  exec "$BIN" EBOOT.ELF
-) > "$LOG" 2>&1 &
-BPID=$!
-sleep 25
-kill -TERM $BPID 2>/dev/null; sleep 1; kill -9 $BPID 2>/dev/null; wait $BPID 2>/dev/null
-
-# ---- extracao do log ----------------------------------------------------
-# Mesmo grep de smoke_m0_baseline.sh:27-28. Formato real:
-# "[MOVIEFSM] st620 <de> -> <para>". O estado e o lado DIREITO.
-# 4294967295 (0xFFFFFFFF) e o "sem estado" inicial do sampler, nao um valor.
-ST=$(grep -oE '\[MOVIEFSM\] st620 [0-9]+ -> [0-9]+' "$LOG" 2>/dev/null \
-      | awk '{print $NF}' | grep -v '^4294967295$' | sort -n | tail -1)
-ST=${ST:-0}
-LOGLINES=$(wc -l < "$LOG" | tr -d ' ')
-if grep -q 'allocate(0x7D00000)' "$LOG" 2>/dev/null; then HASALLOC=1; else HASALLOC=0; fi
-LIFTED=$(grep -oE '\[boot\] [0-9]+ lifted functions' "$LOG" 2>/dev/null | grep -oE '[0-9]+' | head -1)
-IMPLINE=$(grep -oE '\[imp\] [0-9]+ modules, [0-9]+ imports routed to HLE' "$LOG" 2>/dev/null | head -1)
-MODULES=$(printf '%s\n' "$IMPLINE" | grep -oE '[0-9]+' | sed -n '1p')
-IMPORTS=$(printf '%s\n' "$IMPLINE" | grep -oE '[0-9]+' | sed -n '2p')
-
-# ---- classificacao (T-05-03: distinguir, nao descartar) ---------------------
-# OK: st620_max>=3. Senao, FLAKE_SUSPEITA quando o log e "grande" (>=1000
-# linhas -- historico saudavel-mas-lento fica em ~3180-3236) E contem o
-# allocate(0x7D00000) (assinatura do heap de 125MB, sinal de que o boot
-# progrediu ate ao ponto de alocar mas ficou preso por timing). Caso
-# contrario REGRESSAO_SUSPEITA (assinatura medida do v3 original preso no
-# sampler, log com ~55 linhas -- morte estrutural precoce).
-if [ "$ST" -ge 3 ] 2>/dev/null; then
-  CLASS=OK
-elif [ "$LOGLINES" -ge 1000 ] && [ "$HASALLOC" = 1 ]; then
-  CLASS=FLAKE_SUSPEITA
-else
-  CLASS=REGRESSAO_SUSPEITA
+# ---- TSV: cabecalho (trunca se ja existir, mesmo padrao de
+# apply_all_patches.sh:91-93 / games/gow2/apply_all_patches.sh:91-93) --------
+if [ -n "$TSV" ]; then
+  printf 'run\tst620_max\tlifted_functions\tmodules\timports\tlog_lines\thas_alloc_7d00000\tclassification\n' > "$TSV"
 fi
 
-printf "run%d  st620_max=%s lifted=%s modules=%s imports=%s log_lines=%s alloc=%s class=%s\n" \
-  "$r" "$ST" "${LIFTED:-?}" "${MODULES:-?}" "${IMPORTS:-?}" "$LOGLINES" "$HASALLOC" "$CLASS"
+# ---- loop de N corridas (Task 2) --------------------------------------------
+OK_COUNT=0
+FLAKE_COUNT=0
+REGR_COUNT=0
+for r in $(seq 1 "$RUNS"); do
+  LOG="/tmp/smoke_relift_${TAG}_run${r}.log"
+  (
+    set -a; . "$HERE/env_gow2.sh"; set +a
+    unset $(env | awk -F= '/^PS3_TRACE_/ {print $1}') 2>/dev/null || true
+    # Protocolo G6 (D-5.5, criterio 3): PS3_NO_RSX=1, PS3_RSX_BACKEND=trace
+    # (inerte quando PS3_NO_RSX=1 -- pick_backend() em boot_macos.cpp:211-212
+    # retorna antes de ler esta variavel -- mas o ROADMAP exige-a literalmente),
+    # PS3_ENGINE_ROOT explicito.
+    export PS3_NO_RSX=1 PS3_RSX_BACKEND=trace PS3_PERF_FSM=1 PS3_MOVIE_EOS=0
+    export PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
+    unset PS3_MOVIE_DONE_MS PS3_VDEC_FORCE_SEQDONE_MS
+    exec "$BIN" EBOOT.ELF
+  ) > "$LOG" 2>&1 &
+  BPID=$!
+  sleep 25
+  kill -TERM $BPID 2>/dev/null; sleep 1; kill -9 $BPID 2>/dev/null; wait $BPID 2>/dev/null
 
-if [ "$CLASS" = "OK" ]; then
+  # ---- extracao do log -------------------------------------------------
+  # Mesmo grep de smoke_m0_baseline.sh:27-28. Formato real:
+  # "[MOVIEFSM] st620 <de> -> <para>". O estado e o lado DIREITO.
+  # 4294967295 (0xFFFFFFFF) e o "sem estado" inicial do sampler, nao um valor.
+  ST=$(grep -oE '\[MOVIEFSM\] st620 [0-9]+ -> [0-9]+' "$LOG" 2>/dev/null \
+        | awk '{print $NF}' | grep -v '^4294967295$' | sort -n | tail -1)
+  ST=${ST:-0}
+  LOGLINES=$(wc -l < "$LOG" | tr -d ' ')
+  if grep -q 'allocate(0x7D00000)' "$LOG" 2>/dev/null; then HASALLOC=1; else HASALLOC=0; fi
+  LIFTED=$(grep -oE '\[boot\] [0-9]+ lifted functions' "$LOG" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+  IMPLINE=$(grep -oE '\[imp\] [0-9]+ modules, [0-9]+ imports routed to HLE' "$LOG" 2>/dev/null | head -1)
+  MODULES=$(printf '%s\n' "$IMPLINE" | grep -oE '[0-9]+' | sed -n '1p')
+  IMPORTS=$(printf '%s\n' "$IMPLINE" | grep -oE '[0-9]+' | sed -n '2p')
+
+  # ---- classificacao (T-05-03: distinguir, nao descartar) ---------------
+  # OK: st620_max>=3. Senao, FLAKE_SUSPEITA quando o log e "grande" (>=1000
+  # linhas -- historico saudavel-mas-lento fica em ~3180-3236) E contem o
+  # allocate(0x7D00000) (assinatura do heap de 125MB, sinal de que o boot
+  # progrediu ate ao ponto de alocar mas ficou preso por timing). Caso
+  # contrario REGRESSAO_SUSPEITA (assinatura medida do v3 original preso no
+  # sampler, log com ~55 linhas -- morte estrutural precoce).
+  if [ "$ST" -ge 3 ] 2>/dev/null; then
+    CLASS=OK
+    OK_COUNT=$((OK_COUNT + 1))
+  elif [ "$LOGLINES" -ge 1000 ] && [ "$HASALLOC" = 1 ]; then
+    CLASS=FLAKE_SUSPEITA
+    FLAKE_COUNT=$((FLAKE_COUNT + 1))
+  else
+    CLASS=REGRESSAO_SUSPEITA
+    REGR_COUNT=$((REGR_COUNT + 1))
+  fi
+
+  printf "run%d  st620_max=%s lifted=%s modules=%s imports=%s log_lines=%s alloc=%s class=%s\n" \
+    "$r" "$ST" "${LIFTED:-?}" "${MODULES:-?}" "${IMPORTS:-?}" "$LOGLINES" "$HASALLOC" "$CLASS"
+
+  if [ -n "$TSV" ]; then
+    printf '%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$r" "$ST" "${LIFTED:-0}" "${MODULES:-0}" "${IMPORTS:-0}" "$LOGLINES" "$HASALLOC" "$CLASS" >> "$TSV"
+  fi
+done
+
+# THRESHOLD generaliza ">=4 de 6" para outros N ((RUNS*2+2)/3 aritmetica
+# inteira -- RUNS=6 -> (12+2)/3=4). O uso canonico desta fase e' sempre
+# RUNS=6/THRESHOLD=4; outros N sao suportados mas nao o caminho principal.
+THRESHOLD=$(( (RUNS * 2 + 2) / 3 ))
+
+echo "-----"
+printf "st620>=3 em %d de %d (limiar: %d)\n" "$OK_COUNT" "$RUNS" "$THRESHOLD"
+if [ "$FLAKE_COUNT" -gt 0 ] || [ "$REGR_COUNT" -gt 0 ]; then
+  printf "flake_suspeita=%d regressao_suspeita=%d\n" "$FLAKE_COUNT" "$REGR_COUNT"
+fi
+echo "orfaos_pos_run: $(pgrep -f "$TAG" | wc -l | tr -d ' ')"
+
+# rc final: 0 se OK_COUNT >= THRESHOLD. NUNCA reclassifica uma corrida
+# FLAKE_SUSPEITA/REGRESSAO_SUSPEITA como OK para este calculo -- a distincao
+# e' so' informativa/diagnostica (T-05-03); o portao continua literal sobre
+# st620>=3.
+if [ "$OK_COUNT" -ge "$THRESHOLD" ]; then
   exit 0
 else
   exit 1
