@@ -6,17 +6,21 @@
 #   2. games/gow2/verify_lift_baseline.sh  (MANIFEST.tsv, script INALTERADO)
 #   3. tools/audit_boundaries.py (I1/I3; I2 e' informativo, fora do gate)
 #
-# Os passos 1 e 3 falham por DELTA contra um baseline CONGELADO
-# (lift_baseline/PARITY_BASELINE.json e BOUNDS_BASELINE.json), nunca por
-# limiar absoluto -- ja provado duas vezes na Fase 4 que um limiar absoluto
-# pune melhorias (D-4.5, 04-CONTEXT.md). O passo 2 continua a ser
-# por-marcador, como sempre foi.
+# Os 3 passos falham por DELTA contra um baseline CONGELADO
+# (lift_baseline/PARITY_BASELINE.json, MANIFEST_DEBT_BASELINE.json,
+# BOUNDS_BASELINE.json), nunca por limiar absoluto -- ja provado na Fase 4
+# que um limiar absoluto pune melhorias (D-4.5, 04-CONTEXT.md), e estendido
+# ao passo 2 na Fase 5 (D-5.1, 05-CONTEXT.md): o passo 2 continua a imprimir
+# o detalhe por-marcador de verify_lift_baseline.sh (transparencia humana),
+# mas o rc autoritativo vem de lift_baseline/manifest_delta_gate.py --
+# so' falha por achado NOVO face a divida ja' declarada (grupo opd-dispatch,
+# Fase 3), nao pelo rc absoluto de gen_manifest.py --verify.
 #
 # O oraculo (I4/I5, item 3 do plano de adopcao) fica FORA -- corre-se
 # audit_boundaries.py SEM --oracle.
 #
 # Uso:  ./verify_lift.sh LIFT_DIR
-# rc=0  os 3 passos passam (delta limpo / MANIFEST 246/246)
+# rc=0  os 3 passos passam (delta limpo nos 3 -- lift_parity, MANIFEST, audit_boundaries)
 # rc=1  pelo menos um passo falhou
 # rc=2  erro de uso (LIFT_DIR ausente, ELF/functions.json/baseline em falta)
 #
@@ -105,7 +109,17 @@ PYEOF
 }
 
 manifest_step() {
+    # Detalhe por-marcador (transparencia humana) -- o rc deste sub-passo ja
+    # NAO e' autoritativo: um deficit ja' declarado (ex.: grupo opd-dispatch,
+    # Fase 3) faz verify_lift_baseline.sh sair rc=1 mesmo sem regressao nova.
     PS3_ENGINE_ROOT="$PS3_ROOT" "$HERE/verify_lift_baseline.sh" "$LIFT"
+    # Interpretacao por DELTA contra a divida congelada (D-5.1): so' falha
+    # por achado NOVO face a MANIFEST_DEBT_BASELINE.json, nunca por limiar
+    # absoluto -- fecha o gap deixado em aberto por 04-03-SUMMARY.md.
+    "$PY" "$BASE/manifest_delta_gate.py" "$LIFT" --manifest "$BASE/MANIFEST.tsv" \
+        --debt "$BASE/MANIFEST_DEBT_BASELINE.json"
+    local rc=$?
+    return $rc
 }
 
 bounds_step() {
