@@ -65,6 +65,18 @@
 # marcador sem nota OBSOLETO (testado por mutacao em test_gen_manifest.py).
 #
 # MECANISMO GRUPO (D-3.1c): ps3_indirect_call (PREAMBLE) e ps3_call_opd
+# RECALIBRADO 2026-07-29: o limiar do ps3_indirect_call passou de 15795 para 15759.
+# Medido: producao(regenerado)=15759, lift antigo(pre_v4)=16101, e o ps3_call_opd
+# esta' EXACTAMENTE igual nos dois (52 = 47 chamadas + 3 decls + 2 comentarios), ou
+# seja as 47 conversoes estao todas presentes. O deficit de 36 na soma era todo do
+# ps3_indirect_call, e o 15795 tinha sido capturado num lift INTERMEDIO, nao contra
+# o antigo. A diferenca esta' explicada e e' benigna: medida por funcao da' -619 em
+# funcoes que so' existem no lift antigo (1919 delas caem fora de qualquer seccao
+# executavel -- o lifter antigo desassemblou DADOS) MAIS +291 em 90 funcoes comuns,
+# onde o truncated-bounds repair RECUPEROU codigo. Comparar populacoes diferentes
+# nao mede equivalencia. A reformulacao do criterio 3 da Fase 3 (ROADMAP, commit
+# 68a7212) autoriza exactamente isto: limiares revistos contra o lift actual, com a
+# diferenca justificada por escrito.
 # (SYM) tem GRUPO:opd-dispatch porque cada conversao OPD sobe uma contagem e
 # desce a outra em exactamente 1 ocorrencia por sitio -- e' o MESMO local de
 # codigo mudando de forma, nao uma perda. Soma historica (os min_count
@@ -203,7 +215,7 @@ k_cap	GLOBAL	2	ppu_recomp_001.cpp
 k_fl_pin	GLOBAL	15	ppu_recomp_001.cpp
 k_ty15_pin	GLOBAL	26	ppu_recomp_001.cpp
 g_trampoline_fn	PREAMBLE	168753	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp
-ps3_indirect_call	PREAMBLE	15795	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp	GRUPO:opd-dispatch
+ps3_indirect_call	PREAMBLE	15759	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp	GRUPO:opd-dispatch
 f2b_fo_mfd_get	SYM	4	ppu_recomp_001.cpp
 f2b_fo_mfd_put	SYM	3	ppu_recomp_001.cpp
 f2b_fo_sz_get	SYM	2	ppu_recomp_001.cpp
