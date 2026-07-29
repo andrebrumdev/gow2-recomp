@@ -27,13 +27,38 @@
 #   5. REVERSAO AUTOMATICA se o rebuild OU a confirmacao pos-build falhar --
 #      a producao NUNCA fica sem um boot_gow2 executavel.
 #   6. Um modo --revert <SUFFIX> explicito, para desfazer uma promocao ja
-#      concluida, provado por HASH (nao por confianca) contra o que ficou
-#      registado em PROMOTION_LOG.tsv no momento da promocao.
+#      concluida (ou interrompida), provado por HASH (nao por confianca)
+#      contra o que ficou registado em PROMOTION_LOG.tsv.
 #   7. PROMOTION_LOG.tsv -- registo append-only (nunca sobrescrito) de cada
 #      promocao/reversao, para auditoria.
 #
 # Nunca e' um efeito colateral de um build normal -- so corre quando
 # invocado explicitamente, com o lift candidato como argumento.
+#
+# LICAO (encontrada durante a rehearsal real desta task, 2026-07-29): uma
+# promocao pode ser interrompida por algo externo ao script (kill -9,
+# falha de maquina, sessao fechada) a MEIO das operacoes -- depois do
+# backup por rename e da copia do candidato, mas antes de o script proprio
+# decidir se teve sucesso ou falhou. Na primeira versao deste script, a
+# linha em PROMOTION_LOG.tsv so era escrita no FIM (sucesso ou falha
+# interna) -- uma interrupcao externa nesse meio-termo deixava producao
+# potencialmente sem boot_gow2 executavel E sem NENHUM registo no log, o
+# que impedia o --revert de confirmar por hash (so' tinha o AVISO "sem
+# hash esperado para comparar"). Corrigido: a partir desta versao, o log
+# tem TRES estados por promocao, nunca dois:
+#   PROMOTE-BEGIN  -- escrito IMEDIATAMENTE apos o gate passar e os hashes
+#                     de origem serem capturados, ANTES de qualquer mv/cp
+#                     em producao. E' este registo que sobrevive a uma
+#                     interrupcao externa a meio.
+#   PROMOTE-OK     -- escrito so no fim, se TUDO (copia + rebuild +
+#                     confirmacao) tiver sucesso.
+#   PROMOTE-FAIL   -- escrito quando o proprio script deteta uma falha
+#                     interna (copia/rebuild/confirmacao) e aciona a
+#                     reversao automatica, ANTES de chamar do_revert().
+# hash_v2_antes/hash_boot_antes sao IDENTICOS nas tres linhas de uma mesma
+# promocao (capturados uma so vez, no PROMOTE-BEGIN) -- por isso o
+# --revert so precisa de encontrar QUALQUER uma das tres para ter o hash
+# esperado, mesmo que a promocao nunca tenha chegado a um estado final.
 #
 # Uso:
 #   ./promote_lift.sh NEW_LIFT_DIR [--yes]
@@ -43,9 +68,11 @@
 #
 #   ./promote_lift.sh --revert SUFFIX
 #     Desfaz a promocao identificada por SUFFIX (o mesmo que aparece nos
-#     nomes recomp_macos_v2.pre_<SUFFIX> / boot_gow2.pre_<SUFFIX> e na
-#     linha PROMOTE de PROMOTION_LOG.tsv). Confirma por hash que o estado
-#     restaurado bate com o que foi registado no momento da promocao.
+#     nomes recomp_macos_v2.pre_<SUFFIX> / boot_gow2.pre_<SUFFIX> e nas
+#     linhas PROMOTE-BEGIN/PROMOTE-OK/PROMOTE-FAIL de PROMOTION_LOG.tsv).
+#     Confirma por hash que o estado restaurado bate com o que foi
+#     registado no PROMOTE-BEGIN -- funciona mesmo que a promocao tenha
+#     sido interrompida antes de chegar a um PROMOTE-OK/PROMOTE-FAIL.
 #
 # Variaveis:
 #   PROMO_SUFFIX   override do sufixo (default: timestamp real) -- permite
@@ -68,8 +95,15 @@ hash_dir() {
     find "$1" -type f -print0 | sort -z | tar --null -T - -cf - 2>/dev/null | md5 -q
 }
 
-# ---- hash de um ficheiro unico (o binario boot_gow2) -----------------------
+# ---- hash de um ficheiro unico (o binario boot_gow2). Trata explicitamente
+#      o caso do ficheiro nao existir (ex.: uma promocao interrompida entre
+#      o backup-rename e o rebuild deixa boot_gow2 ausente por um instante)
+#      -- evita um erro cru do shasum e um campo vazio no log. -------------
 hash_file() {
+    if [ ! -f "$1" ]; then
+        echo "(ficheiro ausente)"
+        return 0
+    fi
     md5 -q "$1" 2>/dev/null || shasum -a 256 "$1" | cut -d' ' -f1
 }
 
@@ -194,6 +228,13 @@ cmd_promote() {
     H_BOOT_BEFORE=$(hash_file "$REPO/boot_gow2")
     echo "hash ANTES da promocao: recomp_macos_v2=$H_V2_BEFORE boot_gow2=$H_BOOT_BEFORE"
 
+    # ---- PROMOTE-BEGIN: escrito ANTES de qualquer mv/cp em producao. Se o
+    #      processo for interrompido a meio (kill externo, falha de
+    #      maquina), esta linha e' o que sobra para o --revert confirmar
+    #      por hash -- nunca deixa a auditoria vazia so porque a promocao
+    #      nao chegou a um estado final. --------------------------------
+    log_promotion "PROMOTE-BEGIN" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
+
     # ---- backup por RENAME (nunca rm, nunca cp destrutivo) ------------------
     echo "=== backup por rename (suffix=$SUFFIX) ==="
     if ! mv "$REPO/recomp_macos_v2" "$REPO/recomp_macos_v2.pre_${SUFFIX}"; then
@@ -211,6 +252,7 @@ cmd_promote() {
     echo "=== copia do candidato ($NEW_LIFT_REL) para recomp_macos_v2 ==="
     if ! cp -R "$NEW_LIFT" "$REPO/recomp_macos_v2"; then
         echo "FALHA NA COPIA -- a reverter automaticamente" >&2
+        log_promotion "PROMOTE-FAIL" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
         do_revert "$SUFFIX" "failed_${SUFFIX}" "$H_V2_BEFORE"
         exit 1
     fi
@@ -221,6 +263,7 @@ cmd_promote() {
     local build_rc=$?
     if [ "$build_rc" != "0" ]; then
         echo "FALHA NO REBUILD (rc=$build_rc) -- a reverter automaticamente" >&2
+        log_promotion "PROMOTE-FAIL" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
         do_revert "$SUFFIX" "failed_${SUFFIX}" "$H_V2_BEFORE"
         exit 1
     fi
@@ -232,11 +275,12 @@ cmd_promote() {
     local confirm_rc=$?
     if [ "$confirm_rc" != "0" ]; then
         echo "CONFIRMACAO POS-BUILD FALHOU (rc=$confirm_rc) -- a reverter automaticamente (o build pode ter introduzido uma regressao que o accept_relift.sh nao viu, porque esse testou o LIFT, nao o binario reconstruido)" >&2
+        log_promotion "PROMOTE-FAIL" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
         do_revert "$SUFFIX" "failed_${SUFFIX}" "$H_V2_BEFORE"
         exit 1
     fi
 
-    log_promotion "PROMOTE" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
+    log_promotion "PROMOTE-OK" "$NEW_LIFT_REL" "$SUFFIX" "$H_V2_BEFORE" "$H_BOOT_BEFORE"
 
     echo "=============================================================="
     echo " PROMOCAO CONCLUIDA"
@@ -267,14 +311,19 @@ cmd_revert() {
     local TS_NOW
     TS_NOW="$(date +%Y%m%d_%H%M%S)"
 
-    # ---- verificacao por hash: procura em PROMOTION_LOG.tsv a linha PROMOTE
-    #      com este sufixo, e usa o hash la registado como o "esperado" -----
+    # ---- verificacao por hash: procura em PROMOTION_LOG.tsv QUALQUER linha
+    #      PROMOTE-* (BEGIN/OK/FAIL) com este sufixo, e usa o hash la
+    #      registado como o "esperado". As tres variantes tem sempre o
+    #      MESMO hash_v2_antes/hash_boot_antes (capturados uma so vez, no
+    #      PROMOTE-BEGIN) -- por isso a primeira ocorrencia serve, mesmo
+    #      que a promocao tenha sido interrompida antes de chegar a
+    #      PROMOTE-OK/PROMOTE-FAIL. -------------------------------------
     local EXPECTED_V2="" EXPECTED_BOOT=""
     if [ -f "$LOG" ]; then
-        read -r EXPECTED_V2 EXPECTED_BOOT < <(awk -F'\t' -v s="$REVERT_SUFFIX" '$2=="PROMOTE" && $4==s {print $5, $6}' "$LOG")
+        read -r EXPECTED_V2 EXPECTED_BOOT < <(awk -F'\t' -v s="$REVERT_SUFFIX" '$2 ~ /^PROMOTE/ && $4==s {print $5, $6; exit}' "$LOG")
     fi
     if [ -z "$EXPECTED_V2" ]; then
-        echo "AVISO: nenhuma linha PROMOTE com sufixo=$REVERT_SUFFIX encontrada em $LOG -- revert prossegue mas sem confirmacao por hash contra o registo." >&2
+        echo "AVISO: nenhuma linha PROMOTE-* com sufixo=$REVERT_SUFFIX encontrada em $LOG -- revert prossegue mas sem confirmacao por hash contra o registo." >&2
     fi
 
     if ! do_revert "$REVERT_SUFFIX" "reverted_${TS_NOW}" "$EXPECTED_V2"; then
