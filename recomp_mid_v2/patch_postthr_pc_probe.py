@@ -93,10 +93,12 @@ static unsigned long long ps3_pt_now_ns(void) {
 }
 
 static int ps3_pt_gate_on(void) {
+    /* POSTTHR-R12-GATE: also accept PS3_TRACE_POSTTHR=1 */
     if (g_ps3_pt_gate < 0) {
         extern char* getenv(const char*);
-        const char* e = getenv("PS3_TRACE_POSTTHR_PC");
-        g_ps3_pt_gate = (e && *e == '1') ? 1 : 0;
+        const char* a = getenv("PS3_TRACE_POSTTHR");
+        const char* b = getenv("PS3_TRACE_POSTTHR_PC");
+        g_ps3_pt_gate = ((a && *a == '1') || (b && *b == '1')) ? 1 : 0;
     }
     return g_ps3_pt_gate;
 }
