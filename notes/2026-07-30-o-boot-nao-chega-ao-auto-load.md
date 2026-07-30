@@ -27,6 +27,25 @@ Todas com a recipe menu-fast (`FORCE_SEQDONE=1500`, `BOOT_LOGO_MS=300`,
 A referência que as notas de 22–25 Jul registam é `StartSeq=2`, `thr_end=1`,
 `R_Perm=1` (20169344), com `thr_auto_load end` aos ~34 s.
 
+### O veredicto é do próprio projeto, não meu
+
+O `rodar_gow2_menu_fast.sh` calcula e imprime os seus próprios contadores no fim.
+Corrido sem uma única alteração, contra o binário de produção:
+
+```
+thr_end 0            PARK 0                 FATAL 0
+attach_full 0        CLOSE_PRESERVE 0
+SetFlip_total 2021   SetFlip_after_R_Perm 0
+Pad_total 0          Pad_after_R_Perm 0
+CC9D0_SKIP 0         ICALL_BAD 0
+Gate_B RED
+Gate_A RED
+```
+
+**Os dois gates do projecto dão RED.** `FATAL 0` — não é crash; o boot fica
+simplesmente parado. `SetFlip_total 2021` com `SetFlip_after_R_Perm 0` confirma
+que a intro desenha e que nada acontece depois.
+
 ## Três discriminadores, todos negativos
 
 1. **Não são os probes.** O binário de produção, sem eles, dá o mesmo. Os probes
