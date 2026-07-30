@@ -196,6 +196,16 @@ done
 
 echo "-----"
 echo "tsv: $TSV"
-orfaos=$(pgrep -f boot_gow2 2>/dev/null | wc -l | tr -d ' ')
-echo "orfaos_pos_run (todos os boot_gow2*, inclui monitores de shell nao-relacionados): $orfaos"
+# pgrep -f boot_gow2 apanha FALSOS POSITIVOS: watchers de shell doutras
+# sessoes cujo COMANDO contem a substring "boot_gow2" (ex.: um loop "until
+# ! pgrep -f boot_gow2..."), sem ser eles proprios o binario. pgrep -x
+# compara o NOME do processo (argv[0] basename), nao a linha de comando
+# inteira -- um zsh/bash nunca casa "boot_gow2*" por -x. Medido: 5 falsos
+# positivos com -f contra 0 reais com -x, na mesma maquina, na mesma sessao.
+orfaos=0
+for bin_rel in "${DEFAULT_BINS[@]}"; do
+  n=$(pgrep -x "$bin_rel" 2>/dev/null | wc -l | tr -d ' ')
+  orfaos=$((orfaos + n))
+done
+echo "orfaos_pos_run (pgrep -x por nome exacto de cada binario, sem falsos positivos de watchers de shell): $orfaos"
 exit 0
