@@ -1,0 +1,21 @@
+# gow2_recomp.toml -- recomp config do GoW2 (schema Xenon-style, tools/recomp_config.py)
+#
+# Consumido por ../ps3recomp/tools/recomp_config.py (Task A1). Ainda NAO ligado
+# ao ppu_lifter.py (isso e a Task A2: --recomp-config). Por agora so declara
+# main/optimizations; midasm_hook entra na Task A3 (migracao do CE03C wait-idle).
+
+[main]
+elf_path = "../EBOOT.ELF"                     # local only; nunca commitar o ELF
+functions_json = "../functions.json"
+out_directory = "../recomp_macos_v2"
+switch_table_file = "gow2_switch_tables.toml" # ainda nao existe -- chega na Task B1
+
+[optimizations]
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
