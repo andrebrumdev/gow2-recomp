@@ -1,12 +1,14 @@
 # PATCH_CATALOG.tsv -- catalogo DERIVADO por gen_catalog.py, NUNCA editado a mao
 # regenerar: .venv/bin/python3 games/gow2/lift_baseline/gen_catalog.py ../gow2-recomp/recomp_mid_v2 games/gow2/lift_baseline/MANIFEST.tsv > games/gow2/lift_baseline/PATCH_CATALOG.tsv
 # fonte: ../gow2-recomp/recomp_mid_v2
-# 87 patches classificados nesta geracao (64 FUNCIONAL / 23 PROBE), zero indeterminados (D-4.3/D-4.4). Medido em 2026-07-26 contra o corpus real: 64 FUNCIONAL / 23 PROBE / 87 total -- corrige os 73/71 desactualizados do ROADMAP.
+# 89 patches classificados nesta geracao (64 FUNCIONAL / 25 PROBE), zero indeterminados (D-4.3/D-4.4).
+# Linha de base historica (2026-07-26, primeira medicao contra o corpus real): 64 FUNCIONAL / 23 PROBE / 87 total -- corrigiu os 73/71 desactualizados do ROADMAP. Os numeros da linha acima sao os DESTA geracao e sobrepoem-se a estes; qualquer divergencia e' crescimento do corpus, nao erro.
 # patch	escreve	classe	subclasse	no_gate	razao	marcador	chunk_alvo
 patch_14a01c_opd.py	ESCREVE	FUNCIONAL	opd	0	subclasse=opd		
 patch_14b1f0_opd.py	ESCREVE	FUNCIONAL	opd	0	subclasse=opd	[WADLD-BATCH]	
 patch_17acc_enter_probe.py	ESCREVE	PROBE	diagnostico	1	sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)	[PS3_17ACC_FN_N]	
 patch_1856a8_stream_opd.py	ESCREVE	FUNCIONAL	opd	0	subclasse=opd	[STREAM-OPD]	
+patch_29af0_switch_probe.py	ESCREVE	PROBE	diagnostico	1	sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)		
 patch_2a4fe4_trace.py	ESCREVE	PROBE	diagnostico	1	sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)		
 patch_2b0fb4_opd.py	ESCREVE	FUNCIONAL	opd	0	subclasse=opd		
 patch_2b0fb4_trace.py	ESCREVE	FUNCIONAL	dispatch-fix	0	subclasse=dispatch-fix	[WADLD-T1SZ],[WADLD-VT28R],[WADLD-VT28]	
@@ -20,6 +22,7 @@ patch_b71_cb56c_reuse_block.py	ESCREVE	FUNCIONAL	misc	0	subclasse=misc	[POSTINTR
 patch_b71_skip_icallb_reuse.py	VERIFICA	FUNCIONAL	misc	0	subclasse=misc		
 patch_ba808_wadld_eof.py	ESCREVE	FUNCIONAL	wadld	0	subclasse=wadld	[BA808]	
 patch_bctr_tail.py	ESCREVE	FUNCIONAL	dispatch	0	subclasse=dispatch		
+patch_cb56c_type_probe.py	ESCREVE	PROBE	diagnostico	1	sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)		
 patch_cbb2c_reentry_disc.py	ESCREVE	FUNCIONAL	misc	0	subclasse=misc	[CB56C-DISC],[CBB2C-DISC],[POSTINTRO]	
 patch_cc9d0_live_yield.py	ESCREVE	PROBE	diagnostico	1	instrumentacao diagnostica auto-declarada (Diagnostic only), gated por env, OFF por omissao	[TYPE15]	
 patch_cd498_enter_probe.py	ESCREVE	PROBE	diagnostico	1	sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)		

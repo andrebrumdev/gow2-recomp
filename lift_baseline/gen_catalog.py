@@ -245,9 +245,11 @@ def render_tsv(rows: list[dict], patch_dir: Path) -> str:
         "> games/gow2/lift_baseline/PATCH_CATALOG.tsv",
         f"# fonte: {patch_dir}",
         f"# {total} patches classificados nesta geracao "
-        f"({n_func} FUNCIONAL / {n_probe} PROBE), zero indeterminados (D-4.3/D-4.4). "
-        "Medido em 2026-07-26 contra o corpus real: 64 FUNCIONAL / 23 PROBE / 87 total "
-        "-- corrige os 73/71 desactualizados do ROADMAP.",
+        f"({n_func} FUNCIONAL / {n_probe} PROBE), zero indeterminados (D-4.3/D-4.4).",
+        "# Linha de base historica (2026-07-26, primeira medicao contra o corpus real):"
+        " 64 FUNCIONAL / 23 PROBE / 87 total -- corrigiu os 73/71 desactualizados do"
+        " ROADMAP. Os numeros da linha acima sao os DESTA geracao e sobrepoem-se a"
+        " estes; qualquer divergencia e' crescimento do corpus, nao erro.",
         "# " + "\t".join(COLUMNS),
     ]
     lines = list(header)
