@@ -64,7 +64,7 @@ set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 REPO="$PWD"
-PATCH_DIR="$REPO/recomp_mid_v2"
+PATCH_DIR="${PS3_PATCH_DIR:-$REPO/recomp_mid_v2}"
 
 MODE=apply
 LIFT_ARG=""
