@@ -18,10 +18,14 @@ extern void spu0_spu_func_00003070(spu_context* ctx);   /* spu0 e_entry 0x3070 *
 extern void spu1_spu_func_00003050(spu_context* ctx);   /* spu1 e_entry 0x3050 */
 extern void spu2_spu_func_00004080(spu_context* ctx);   /* spu2 e_entry 0x4080 */
 extern void spu3_spu_func_00004080(spu_context* ctx);   /* spu3 e_entry 0x4080 */
+extern void spu4_spu_func_00003050(spu_context* ctx);   /* spu4 e_entry 0x3050 (fp 0x9527C889B1945669) */
+extern void spu5_spu_func_00003070(spu_context* ctx);   /* spu5 e_entry 0x3070 (fp 0x3512A7E99D34E0FF) */
 extern void spu0_spu_recomp_register(void);
 extern void spu1_spu_recomp_register(void);
 extern void spu2_spu_recomp_register(void);
 extern void spu3_spu_recomp_register(void);
+extern void spu4_spu_recomp_register(void);
+extern void spu5_spu_recomp_register(void);
 
 void gow2_register_spu_workloads(void)
 {
@@ -29,6 +33,8 @@ void gow2_register_spu_workloads(void)
     spu1_spu_recomp_register();
     spu2_spu_recomp_register();
     spu3_spu_recomp_register();
+    spu4_spu_recomp_register();
+    spu5_spu_recomp_register();
     spu_workload_register(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0");
     /* spu1 (dearch / EDGE-zlib) VERIFICADO no caminho intro->WAD (Task 4 do
      * plano 2): sob PS3_SPU1=1 o dispatch vai de MISS constante (~332/120s) a
@@ -54,6 +60,15 @@ void gow2_register_spu_workloads(void)
         spu_workload_register(0xABCD0BA4D18DED49ull, spu2_spu_func_00004080, "gow2_spu2");
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU3"))
         spu_workload_register(0xED6A0C318DEB46C6ull, spu3_spu_func_00004080, "gow2_spu3");
+    /* spu4/spu5: SPURS-scheduler workloads the frontend dispatches post-AUTO_LOAD
+     * (dumped via PS3_SPU_DUMP, lifted 515/448 fns; needed spu_pref_u32 helper).
+     * Without them the `schedul` cond never signals and the frontend deadlocks at
+     * the Bluepoint logo before the menu. Gated PS3_SPU4/PS3_SPU5 (host is SEH/
+     * setjmp-isolated if a job faults). */
+    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU4"))
+        spu_workload_register(0x9527C889B1945669ull, spu4_spu_func_00003050, "gow2_spu4");
+    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
+        spu_workload_register(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5");
 }
 
 #if defined(__GNUC__)
