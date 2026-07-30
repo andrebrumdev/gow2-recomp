@@ -36,24 +36,32 @@ MARKER = "FIOS-CANCEL-YIELD"
 ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
         else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
 
-NEEDLE = (
-    "        func_0030AE58(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    "        /* nop */;\n"
-    "        ctx->gpr[0] = (int64_t)(int32_t)(0);\n"
-    "        vm_write32(ctx->gpr[31] + 0x8, ctx->gpr[0]);\n"
+# NOTA (2026-07-25): o lifter passou a prefixar as chamadas com o LR de
+# retorno -- "ctx->lr = 0x002B3FB0; func_0030AE58(ctx); ...". A agulha literal
+# deixou de bater em qualquer lift novo. Passa a regex com o prefixo OPCIONAL,
+# para casar com as duas formas; o grupo 1 devolve a linha da chamada tal e
+# qual, para a reinserir sem lhe tocar.
+import re
+
+NEEDLE_RE = re.compile(
+    r"( *(?:ctx->lr = 0x[0-9A-Fa-f]+; )?func_0030AE58\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n)"
+    r"( */\* nop \*/;\n)"
+    r"( *ctx->gpr\[0\] = \(int64_t\)\(int32_t\)\(0\);\n)"
+    r"( *vm_write32\(ctx->gpr\[31\] \+ 0x8, ctx->gpr\[0\]\);\n)"
 )
 
-INSERT = (
-    "        func_0030AE58(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    "        /* nop */;\n"
+YIELD = (
     "        /* " + MARKER + ": let FIOS scheduler free the cancelled op\n"
     "         * before we clear container+8 and the caller re-opens. */\n"
     "        { ppu_giant_lock_release();\n"
     "          ps3recomp_giant_lock_yield_sleep1();\n"
     "          ppu_giant_lock_acquire(); }\n"
-    "        ctx->gpr[0] = (int64_t)(int32_t)(0);\n"
-    "        vm_write32(ctx->gpr[31] + 0x8, ctx->gpr[0]);\n"
 )
+
+
+def _insert(m):
+    """Reinsere as linhas originais e mete o yield entre o nop e o clear."""
+    return m.group(1) + m.group(2) + YIELD + m.group(3) + m.group(4)
 
 DECL = (
     "/* " + MARKER + " decls (C linkage; must be namespace scope) */\n"
@@ -70,9 +78,9 @@ def patch_file(p: Path) -> str:
         return "ALREADY"
     if "void func_002B3F78" not in t:
         return "SKIP"
-    if NEEDLE not in t:
+    if not NEEDLE_RE.search(t):
         return "SKIP"
-    t = t.replace(NEEDLE, INSERT, 1)
+    t = NEEDLE_RE.sub(_insert, t, count=1)
     if MARKER + " decls" not in t:
         t = t.replace(
             "void func_002B3F78(ppu_context* ctx) {",

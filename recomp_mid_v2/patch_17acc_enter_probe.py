@@ -7,10 +7,8 @@ Only flip issuer pre-WAD is the func_00017ACC band (guest EA 0x17ADE/0x17ADF).
 Zero SetFlip after R_LglScA open. This probe answers: who calls 17ACC, and does
 any enter happen AFTER R_PermA full (g_ps3_rperma_full)?
 
-Targets (static direct callers in recomp_macos_v2):
-  000.cpp: func_0001E1A8, func_0001E34C, func_0001EAD8, func_00025064, func_00025614
-  001.cpp: func_0001E3DC, func_0001E3E8, func_0001E400, func_0001E4AC
-  + func_00017ACC itself
+Targets (static direct callers) — ver SITES abaixo; o chunk de cada uma e'
+DESCOBERTO, ja' nao esta' escrito no script.
 
 Gate (default OFF) — M1 disc contract:
   PS3_TRACE_17ACC=1  → ON only if first char is '1'
@@ -18,7 +16,7 @@ Gate (default OFF) — M1 disc contract:
 
 Telemetry
 ---------
-Shared counters (defined in 000, used by 001 via extern):
+Shared counters (defined in the helper chunk, used by the others via extern):
   g_ps3_17acc_tot[id]  — all enters
   g_ps3_17acc_post[id] — enters while g_ps3_rperma_full != 0
 post_rperm uses the existing movie_hle flag (set on R_PermA full) — no new
@@ -30,27 +28,50 @@ Log format (capped):
 
 Idempotent: MARKER present → ALREADY. Region-scoped: inject right after each
 `void func_... {` signature line. Does not alter guest control flow when OFF.
+
+CORRECCAO 2026-07-25 (chunk-fixo)
+---------------------------------
+O script tinha o chunk de cada funcao HARDCODED na tabela SITES ("000"/"001")
+e so' abria ppu_recomp_000.cpp e ppu_recomp_001.cpp por nome. O lifter passou
+de 31 para 7 chunks e as funcoes migraram: func_0001E34C, por exemplo, deixou
+de estar no chunk 000 e passou para o 001 — o que fazia o script abortar com
+"missing signature for func_0001E34C" (SystemExit) depois de ja' ter escrito
+metade das sondas.
+Agora:
+  - usa resolve_lift_paths() (aceita DIRECTORIO -> todos os chunks);
+  - descobre em que chunk vive cada funcao (passagem 1) e so' depois injecta
+    (passagem 2);
+  - o bloco de helpers vai para o chunk que define func_00017ACC e todos os
+    outros chunks tocados recebem o extern;
+  - agulha tolerante: se o lifter tiver fundido o fragmento e a funcao so'
+    existir como label "loc_XXXXXXXX:", injecta a seguir ao label;
+  - um site em falta deixa de abortar o resto (fica visivel no relatorio e no
+    codigo de saida), para nao deixar o lift meio-patchado.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
+
+from lift_paths import resolve_lift_paths
 
 MARKER = "17ACC-PROBE"
 LOG_TAG = "[17ACC] enter"
 
-# (short name, function symbol, cpp chunk key, log cap)
+# (short name, function symbol, log cap) — a ORDEM define o id usado nas
+# tabelas do HELPER_BLOCK; nao reordenar sem actualizar o bloco.
 SITES = [
-    ("17ACC", "func_00017ACC", "000", 8),
-    ("1E1A8", "func_0001E1A8", "000", 4),
-    ("1E34C", "func_0001E34C", "000", 4),
-    ("1EAD8", "func_0001EAD8", "000", 4),
-    ("25064", "func_00025064", "000", 4),
-    ("25614", "func_00025614", "000", 4),
-    ("1E3DC", "func_0001E3DC", "001", 4),
-    ("1E3E8", "func_0001E3E8", "001", 4),
-    ("1E400", "func_0001E400", "001", 4),
-    ("1E4AC", "func_0001E4AC", "001", 4),
+    ("17ACC", "func_00017ACC", 8),
+    ("1E1A8", "func_0001E1A8", 4),
+    ("1E34C", "func_0001E34C", 4),
+    ("1EAD8", "func_0001EAD8", 4),
+    ("25064", "func_00025064", 4),
+    ("25614", "func_00025614", 4),
+    ("1E3DC", "func_0001E3DC", 4),
+    ("1E3E8", "func_0001E3E8", 4),
+    ("1E400", "func_0001E400", 4),
+    ("1E4AC", "func_0001E4AC", 4),
 ]
 
 HELPER_BLOCK = r'''
@@ -148,133 +169,154 @@ void ps3_17acc_on_enter(int id, ppu_context* ctx) {
 '''
 
 EXTERN_DECL = (
-    "/* 17ACC-PROBE extern (defs in ppu_recomp_000.cpp) */\n"
+    "/* 17ACC-PROBE extern (defs no chunk que define func_00017ACC) */\n"
     "void ps3_17acc_on_enter(int id, ppu_context* ctx);\n"
 )
 
+HELPER_HEAD = "/* 17ACC-PROBE: R5 enter counters"
+EXTERN_HEAD = "/* 17ACC-PROBE extern"
 
-def inject_call(body_start: str, site_id: int) -> str:
-    """Insert probe call immediately after opening brace line of function."""
-    # body_start is "void func_...(ppu_context* ctx) {\n"
-    call = (
+
+def site_sig_re(fn: str) -> re.Pattern:
+    """Assinatura da funcao (ancora preferida: entrada real da funcao)."""
+    return re.compile(
+        r"(?:^|\n)void[ \t]+" + re.escape(fn)
+        + r"\(ppu_context\*[ \t]*ctx\)[ \t]*\{[ \t]*\n"
+    )
+
+
+def site_label_re(fn: str) -> re.Pattern:
+    """Fallback: o lifter fundiu o fragmento e o EA so' existe como label.
+
+    IMPORTANTE: e' so' fallback. O mesmo label pode aparecer noutro chunk como
+    alvo interno de outra funcao, por isso a assinatura tem SEMPRE prioridade
+    global (senao a sonda de entrada aterrava no meio de outra funcao).
+    """
+    ea = fn.replace("func_", "")
+    return re.compile(r"(?:^|\n)loc_" + re.escape(ea) + r":[ \t]*\n")
+
+
+def probe_call(site_id: int) -> str:
+    return (
         f"        /* {MARKER} id={site_id} */\n"
         f"        {{ ps3_17acc_on_enter({site_id}, ctx); }}\n"
     )
-    return body_start + call
 
 
-def patch_file(path: Path, chunk: str) -> str:
-    t = path.read_text(encoding="utf-8", errors="replace")
-    orig = t
-
-    if chunk == "000":
-        if "/* 17ACC-PROBE: R5 enter counters" not in t:
-            # After last early include / extern block near top: insert after
-            # the type15 disc counter if present, else after stdlib include.
-            anchor = "static int g_ps3_type15_disc_n = 0;\n"
-            if anchor in t:
-                t = t.replace(anchor, anchor + HELPER_BLOCK, 1)
-            else:
-                alt = "#include <stdlib.h>\n"
-                if alt not in t:
-                    raise SystemExit(f"{path}: no place for helper block")
-                t = t.replace(alt, alt + HELPER_BLOCK, 1)
-            print(f"  helpers: added to {path.name}")
-        else:
-            print(f"  helpers: already in {path.name}")
-    elif chunk == "001":
-        if "/* 17ACC-PROBE extern" not in t:
-            # After includes: first function-ish extern or after stdlib
-            alt = "#include <stdlib.h>\n"
-            if alt in t:
-                t = t.replace(alt, alt + EXTERN_DECL, 1)
-            else:
-                # fall back: after ppu_recomp.h
-                h = '#include "ppu_recomp.h"\n'
-                if h not in t:
-                    raise SystemExit(f"{path}: no place for extern decl")
-                t = t.replace(h, h + EXTERN_DECL, 1)
-            print(f"  extern: added to {path.name}")
-        else:
-            print(f"  extern: already in {path.name}")
-
-    for site_id, (short, fn, fn_chunk, _cap) in enumerate(SITES):
-        if fn_chunk != chunk:
-            continue
-        sig = f"void {fn}(ppu_context* ctx) {{\n"
-        if sig not in t:
-            raise SystemExit(f"{path}: missing signature for {fn}")
-        # Already injected?
-        probe_line = f"        /* {MARKER} id={site_id} */\n"
-        # Find function start and check region
-        idx = t.find(sig)
-        if idx < 0:
-            raise SystemExit(f"{path}: {fn} sig vanished")
-        # Only one definition expected
-        if t.count(sig) != 1:
-            raise SystemExit(f"{path}: {fn} signature count={t.count(sig)}")
-        region_start = idx + len(sig)
-        # peek ahead: already has probe?
-        ahead = t[region_start : region_start + 120]
-        if probe_line in ahead or f"ps3_17acc_on_enter({site_id}," in ahead:
-            print(f"  {fn} ({short}): ALREADY")
-            continue
-        t = t[:region_start] + inject_call("", site_id) + t[region_start:]
-        # inject_call with empty body_start just returns the call lines
-        print(f"  {fn} ({short}): APPLIED id={site_id}")
-
-    if t == orig:
+def add_helpers(t: str, path: Path) -> str:
+    if HELPER_HEAD in t:
+        print(f"  helpers: already in {path.name}")
         return t
-    # Prefer newline="\n" (Py>=3.10) to avoid CRLF on Windows hosts; fall back.
-    try:
-        path.write_text(t, encoding="utf-8", newline="\n")
-    except TypeError:
-        path.write_text(t, encoding="utf-8")
+    anchor = "static int g_ps3_type15_disc_n = 0;\n"
+    if anchor in t:
+        t = t.replace(anchor, anchor + HELPER_BLOCK, 1)
+    else:
+        alt = "#include <stdlib.h>\n"
+        if alt not in t:
+            h = '#include "ppu_recomp.h"\n'
+            if h not in t:
+                raise SystemExit(f"{path}: no place for helper block")
+            t = t.replace(h, h + HELPER_BLOCK, 1)
+        else:
+            t = t.replace(alt, alt + HELPER_BLOCK, 1)
+    print(f"  helpers: added to {path.name}")
+    return t
+
+
+def add_extern(t: str, path: Path) -> str:
+    if EXTERN_HEAD in t or HELPER_HEAD in t:
+        print(f"  extern: already in {path.name}")
+        return t
+    alt = "#include <stdlib.h>\n"
+    if alt in t:
+        t = t.replace(alt, alt + EXTERN_DECL, 1)
+    else:
+        h = '#include "ppu_recomp.h"\n'
+        if h not in t:
+            raise SystemExit(f"{path}: no place for extern decl")
+        t = t.replace(h, h + EXTERN_DECL, 1)
+    print(f"  extern: added to {path.name}")
     return t
 
 
 def main() -> int:
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-        Path(__file__).resolve().parent.parent / "recomp_macos_v2"
-    )
-    if not root.is_dir():
-        print(f"lift dir missing: {root}", file=sys.stderr)
+    paths = [p for p in resolve_lift_paths(
+        sys.argv[1:],
+        str(Path(__file__).resolve().parent.parent / "recomp_macos_v2"),
+    ) if p.is_file()]
+    if not paths:
+        print("lift dir/ficheiros em falta", file=sys.stderr)
         return 2
 
-    files = {
-        "000": root / "ppu_recomp_000.cpp",
-        "001": root / "ppu_recomp_001.cpp",
-    }
+    # --- passagem 1: descobrir em que chunk vive cada site ---
+    # assinatura tem prioridade GLOBAL sobre o label (ver site_label_re).
+    by_sig: dict[int, Path] = {}
+    by_label: dict[int, Path] = {}
+    for p in paths:
+        t = p.read_text(encoding="utf-8", errors="replace")
+        for site_id, (_short, fn, _cap) in enumerate(SITES):
+            if site_id not in by_sig and site_sig_re(fn).search(t):
+                by_sig[site_id] = p
+            if site_id not in by_label and site_label_re(fn).search(t):
+                by_label[site_id] = p
+        del t
+
+    where: dict[int, Path] = {}
+    kind: dict[int, str] = {}
+    for site_id in range(len(SITES)):
+        if site_id in by_sig:
+            where[site_id] = by_sig[site_id]
+            kind[site_id] = "sig"
+        elif site_id in by_label:
+            where[site_id] = by_label[site_id]
+            kind[site_id] = "label"
+
+    missing = [SITES[i][1] for i in range(len(SITES)) if i not in where]
+    helper_chunk = where.get(0) or (min(where.values()) if where else paths[0])
+
+    # --- passagem 2: injectar, um chunk de cada vez ---
     rc = 0
-    for chunk, path in files.items():
-        if not path.exists():
-            print(f"skip missing {path}")
+    touched = sorted(set(where.values()) | {helper_chunk})
+    for p in touched:
+        print(f"== {p.name} ==")
+        t = orig = p.read_text(encoding="utf-8", errors="replace")
+        try:
+            if p == helper_chunk:
+                t = add_helpers(t, p)
+            else:
+                t = add_extern(t, p)
+            for site_id, (short, fn, _cap) in enumerate(SITES):
+                if where.get(site_id) != p:
+                    continue
+                rx = site_sig_re(fn) if kind[site_id] == "sig" else site_label_re(fn)
+                m = rx.search(t)
+                if not m:
+                    print(f"  {fn} ({short}): ANCHOR PERDIDA")
+                    rc = 1
+                    continue
+                ahead = t[m.end(): m.end() + 160]
+                if f"ps3_17acc_on_enter({site_id}," in ahead:
+                    print(f"  {fn} ({short}): ALREADY")
+                    continue
+                t = t[: m.end()] + probe_call(site_id) + t[m.end():]
+                print(f"  {fn} ({short}): APPLIED id={site_id} [{kind[site_id]}]")
+        except SystemExit as e:
+            print(f"FAILED {p}: {e}")
             rc = 1
             continue
-        print(f"== {path.name} ==")
-        try:
-            before = path.read_text(encoding="utf-8", errors="replace")
-            after = patch_file(path, chunk)
-            if after == before and MARKER in before:
-                print(f"ALREADY-APPLIED {path}")
-            elif after != before or MARKER in after:
-                # re-read to detect write
-                now = path.read_text(encoding="utf-8", errors="replace")
-                if MARKER not in now and LOG_TAG.replace(" enter", "") not in now:
-                    # helpers use MARKER string
-                    if "17ACC-PROBE" not in now:
-                        print(f"FAILED {path}: marker missing after patch")
-                        rc = 1
-                    else:
-                        print(f"APPLIED {path}")
-                else:
-                    print(f"APPLIED/OK {path}")
-            else:
-                print(f"UNCHANGED {path} (unexpected)")
-                rc = 1
-        except SystemExit as e:
-            print(f"FAILED {path}: {e}")
-            rc = 1
+        if t != orig:
+            try:
+                p.write_text(t, encoding="utf-8", newline="\n")
+            except TypeError:
+                p.write_text(t, encoding="utf-8")
+            print(f"APPLIED {p}")
+        else:
+            print(f"ALREADY-APPLIED {p}")
+
+    if missing:
+        print(f"SITES EM FALTA (sem assinatura nem label): {', '.join(missing)}")
+        rc = 1
+    print(f"sites: {len(where)}/{len(SITES)}")
     return rc
 
 

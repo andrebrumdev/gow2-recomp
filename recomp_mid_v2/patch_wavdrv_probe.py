@@ -60,8 +60,11 @@ Reaplicado por ../apply_all_patches.sh apos cada re-lift. Idempotente.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
+
+from lift_paths import resolve_lift_paths
 
 MARKER = "WAVDRV-PROBE"
 ENV = "PS3_TRACE_WAVDRV"
@@ -157,31 +160,39 @@ POST_DEC = (
 
 SIG = "void " + FUNC + "(ppu_context* ctx) {\n"
 
-# Alvos de str.replace DENTRO da regiao de func_002B47D4 (a ordem/linhas do lift
-# podem mudar, por isso o replace e' textual sobre a regiao, nunca por numero de
-# linha; ver a armadilha do re.sub no docstring de patch_snd_open_probe.py).
-OPEN_NEEDLE = (
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[9] + 0x118);\n"
-    "        func_0030D578(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    "        /* nop */;\n"
-)
-OPEN_REPL = (
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[9] + 0x118);\n"
-    + PRE
-    + "        func_0030D578(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    + POST_OPEN
-    + "        /* nop */;\n"
+# Alvos DENTRO da regiao de func_002B47D4 (a ordem/linhas do lift podem mudar,
+# por isso o alvo e' textual sobre a regiao, nunca por numero de linha).
+#
+# REPARACAO 2026-07-25 (re-lift com lifter novo): shape-LR. O lifter passou a
+# emitir `ctx->lr = 0x002B4844; ` imediatamente antes de `func_0030D578(ctx);`
+# (e `ctx->lr = 0x002B4854; ` antes de `func_003067DC(ctx);`), o que partia as
+# agulhas literais. As agulhas passam a regex com o prefixo de LR OPCIONAL, para
+# casarem com o lift antigo (sem prefixo) E com o novo; a linha da chamada e'
+# reemitida tal e qual foi encontrada (grupo 1), sem inventar o valor de LR.
+_LR = r"(?:ctx->lr = 0x[0-9A-Fa-f]+; )?"
+
+OPEN_LOAD = "        ctx->gpr[3] = vm_read32(ctx->gpr[9] + 0x118);\n"
+NOP = "        /* nop */;\n"
+
+OPEN_RE = re.compile(
+    re.escape(OPEN_LOAD)
+    + r"(        " + _LR + r"func_0030D578\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n)"
+    + re.escape(NOP)
 )
 
-DEC_NEEDLE = (
-    "        func_003067DC(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    "        /* nop */;\n"
+
+def open_repl(m: "re.Match[str]") -> str:
+    return OPEN_LOAD + PRE + m.group(1) + POST_OPEN + NOP
+
+
+DEC_RE = re.compile(
+    r"(        " + _LR + r"func_003067DC\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n)"
+    + re.escape(NOP)
 )
-DEC_REPL = (
-    "        func_003067DC(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-    + POST_DEC
-    + "        /* nop */;\n"
-)
+
+
+def dec_repl(m: "re.Match[str]") -> str:
+    return m.group(1) + POST_DEC + NOP
 
 HELPER_NEEDLES = ("#include <stdlib.h>\n", "#include <math.h>\n")
 
@@ -212,19 +223,19 @@ def patch_file(path: Path) -> str:
         raise SystemExit(f"{path.name}: falhou insercao da entrada em {FUNC}")
     region = r
 
-    if OPEN_NEEDLE not in region:
+    region, n_open = OPEN_RE.subn(open_repl, region, count=1)
+    if not n_open:
         raise SystemExit(
             f"{path.name}: needle do open (func_0030D578) ausente em {FUNC} -- "
             "a cadeia mudou; reveja a probe"
         )
-    region = region.replace(OPEN_NEEDLE, OPEN_REPL, 1)
 
-    if DEC_NEEDLE not in region:
+    region, n_dec = DEC_RE.subn(dec_repl, region, count=1)
+    if not n_dec:
         raise SystemExit(
             f"{path.name}: needle do decode (func_003067DC) ausente em {FUNC} -- "
             "a cadeia mudou; reveja a probe"
         )
-    region = region.replace(DEC_NEEDLE, DEC_REPL, 1)
 
     src = src[:i] + region + (src[j:] if j > i else "")
     path.write_text(src, encoding="utf-8", newline="\n")
@@ -232,9 +243,12 @@ def patch_file(path: Path) -> str:
 
 
 def main() -> int:
+    # chunk-fixo: o numero de chunks deixou de ser estavel (31 -> 7 no lifter
+    # novo) e o argumento pode ser um DIRECTORIO ou um ficheiro; resolve_lift_paths
+    # trata os dois casos e expande o directorio para todos os ppu_recomp_*.cpp.
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else \
         Path(__file__).resolve().parent.parent / "recomp_macos_v2"
-    chunks = sorted(root.glob("ppu_recomp_*.cpp"))
+    chunks = [p for p in resolve_lift_paths(sys.argv[1:], str(root)) if p.exists()]
     if not chunks:
         print(f"FAIL: nenhum ppu_recomp_*.cpp em {root}", file=sys.stderr)
         return 1

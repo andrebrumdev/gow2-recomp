@@ -466,27 +466,37 @@ static long long movie_done_interval_ms(void)
  * intervalo real do filme tem de ter decorrido primeiro; e' so uma guarda para
  * nao injectar EOS enquanto o player ainda esta a abrir/bufferizar (st=1), o que
  * so o faz resetar antes de sequer parar em 3. 0 se desligado ou ainda nao. */
+static unsigned long long s_movie_done_start_ms = 0; /* 0 = playback ainda nao comecou */
+static int s_movie_done_fired = 0;
+
+/* Reset time-based done for a subsequent Play (2nd movie). Without this the
+ * first-movie timer stays sticky and immediately ends StartSeq#2. */
+void movie_done_timebased_reset(void)
+{
+    s_movie_done_start_ms = 0;
+    s_movie_done_fired = 0;
+    fprintf(stderr, "[MOVIEDONE] time-based timer reset (next Play can re-arm)\n");
+    fflush(stderr);
+}
+
 static long movie_done_timebased_poll(uint32_t st)
 {
-    static unsigned long long start_ms = 0;   /* 0 = playback ainda nao comecou */
-    static int fired = 0;
-
     long long ivl = movie_done_interval_ms();
     if (ivl <= 0) return 0;                    /* produtor desligado (M3) */
-    if (fired) return 1;
+    if (s_movie_done_fired) return 1;
 
     unsigned long long now = movie_now_ms();
-    if (start_ms == 0) {
-        if (st >= 1 && st != 0xFFFFFFFFu) start_ms = now;   /* filme abriu (playback comecou) */
+    if (s_movie_done_start_ms == 0) {
+        if (st >= 1 && st != 0xFFFFFFFFu) s_movie_done_start_ms = now;   /* filme abriu */
         return 0;
     }
-    if (now - start_ms < (unsigned long long)ivl) return 0;      /* filme ainda a "decorrer" */
-    if (st < MOVIE_STATE_WAIT_EOS || st == 0xFFFFFFFFu) return 0; /* espera o player parar em >=3 */
+    if (now - s_movie_done_start_ms < (unsigned long long)ivl) return 0; /* ainda a "decorrer" */
+    if (st < MOVIE_STATE_WAIT_EOS || st == 0xFFFFFFFFu) return 0; /* espera player em >=3 */
 
-    fired = 1;
+    s_movie_done_fired = 1;
     fprintf(stderr,
             "[MOVIEDONE] done time-based (NAO e' EOF real): %llu ms desde st620 activo >= %lld ms, player parado em st620=%u -> sinal \"filme acabou\"\n",
-            (unsigned long long)(now - start_ms), ivl, st);
+            (unsigned long long)(now - s_movie_done_start_ms), ivl, st);
     fflush(stderr);
     return 1;
 }
@@ -501,6 +511,11 @@ static void movie_sampler_loop(void)
         uint8_t  f744 = 0, f746 = 0;
 
         movie_sleep_tick();
+        /* Boot logo queue advances on Metal present; with PS3_NO_RSX the present
+         * path never runs. Tick here so scep_e→bluepoint→DONE completes and
+         * hold clears for guest/menu (same policy as rsx_metal_backend). */
+        { extern void rsx_host_boot_logo_tick(void);
+          rsx_host_boot_logo_tick(); }
 
         if (!vm_base) continue;
         if (!movie_eos_peek32(MOVIE_OBJ_SLOT_EA, &obj)) continue;
@@ -537,6 +552,31 @@ static void movie_sampler_loop(void)
                     "[MOVIEFSM] st620 %u -> %u  f744=%u f746=%u eos_ea=0x%08X overlay_done=%ld\n",
                     prev, st, f744, f746, g_movie_eos_ea, done);
             fflush(stderr);
+            /* Wall 2026-07-22: after intro, st620 returns to 0 but g_movie_eos_ea
+             * stayed armed (one-shot arm never cleared). A later Play on the same
+             * player object sees vm_read8(obj+0x744)=1 immediately and can skip
+             * state-4 Open/StartSeq → only one StartSeq ever, st620 parks at 0.
+             * Clear the hook when the FSM goes idle so the next sequence can
+             * re-arm after its own Open (st>=5) + done producer. */
+            if (st == 0u && g_movie_eos_ea != 0u) {
+                fprintf(stderr,
+                        "[MOVIEEOS] clear hook 0x%08X on st620→0 (re-arm allowed for next movie)\n",
+                        g_movie_eos_ea);
+                fflush(stderr);
+                g_movie_eos_ea = 0;
+            }
+            /* Post-intro park: dump who is blocked (schedul wait etc.). */
+            if (st == 0u && prev == 0u) {
+                static int s_bm = -1;
+                if (s_bm < 0) {
+                    const char* e = getenv("PS3_TRACE_BLOCKMARK");
+                    s_bm = (e && e[0] && e[0] != '0') ? 1 : 0;
+                }
+                if (s_bm) {
+                    extern void ppu_blockmark_dump(void);
+                    ppu_blockmark_dump();
+                }
+            }
             prev = st;
             since_log = 0;
         }

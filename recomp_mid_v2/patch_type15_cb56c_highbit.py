@@ -4,26 +4,63 @@
 2) if construct returns 0, reuse factory+0x48 linked product
 """
 from pathlib import Path
+import re
 import sys
 from lift_paths import resolve_lift_paths
+
+# CORRECCAO 2026-07-25 (re-lift). As duas agulhas literais estavam ancoradas em
+# blocos de probe "[POSTINTRO] ..." que eram edicao manual de sessao: nenhum
+# patch_*.py os escreve (grep POSTINTRO em patch_*.py -> so' aparecem como
+# agulha), logo nao existem num lift limpo. Alem disso o lift mudou de forma nos
+# mesmos sitios:
+#   - shape-LR   : "func_002A49BC(ctx); ..." passou a "ctx->lr = 0x000CB61C; func_002A49BC(ctx); ..."
+#   - shape-TOCFIX: apos o icall1, "ctx->gpr[2] = vm_read64(ctx->gpr[1] + 0x28);"
+#                   passou a "ctx->gpr[2] = 0x00541178ULL; /*TOCFIX ld r2,N(r1)*/"
+#   - o lifter passou a emitir "/* nop */;" a seguir as chamadas
+# Reancora-se em codigo REAL emitido pelo lifter (a chamada a func_002A49BC e o
+# par rldicl/or que recebe o produto do icall1), dentro do corpo de
+# func_000CB56C -- o comportamento inserido e a sua posicao sao os mesmos.
+FUNC_SIG = "void func_000CB56C(ppu_context* ctx) {"
+
+# Chamada a func_002A49BC, com ou sem o prefixo de LR do lifter actual.
+CALL_2A49BC_RE = re.compile(
+    r"(?:ctx->lr = 0x000CB61C; )?func_002A49BC\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n")
+# Primeira leitura do tipo na stack apos essa chamada (existe no lift antigo e
+# no novo; no antigo vinha depois do bloco POSTINTRO, que assim fica preservado
+# antes da nossa insercao -- mesma posicao semantica).
+READ_TYPE_LINE = "        ctx->gpr[9] = vm_read16(ctx->gpr[1] + 0x72);\n"
+# Par que recolhe o produto devolvido pelo icall1 (unico no corpo da funcao).
+PRODUCT_RE = re.compile(
+    r"        ctx->gpr\[29\] = ppc_rldicl\(ctx->gpr\[3\], 0, 32\);\n"
+    r"        ctx->gpr\[28\] = ctx->gpr\[3\] \| ctx->gpr\[3\];\n")
+
+
+def func_span(t: str):
+    """(inicio, fim) do corpo de func_000CB56C, ou None se nao estiver aqui."""
+    i = t.find(FUNC_SIG)
+    if i < 0:
+        return None
+    j = t.find("\nvoid func_", i + len(FUNC_SIG))
+    return (i, len(t) if j < 0 else j)
+
 
 def patch_highbit(t: str) -> str:
     marker = "[TYPE15] CB56C type high-bit"
     if marker in t:
         return t
-    needle = '''        { static int _n=0; if(_n++<8)
-            fprintf(stderr,"[POSTINTRO] CB56C after 2A49BC r3obj=0x%08X stack+0=0x%08X +2=0x%04X\\n",
-              (unsigned)(uint32_t)ctx->gpr[31],
-              (unsigned)vm_read32((uint32_t)ctx->gpr[1]+0x70),
-              (unsigned)vm_read16((uint32_t)ctx->gpr[1]+0x72)); }
-        ctx->gpr[9] = vm_read16(ctx->gpr[1] + 0x72);
-'''
-    insert = '''        { static int _n=0; if(_n++<8)
-            fprintf(stderr,"[POSTINTRO] CB56C after 2A49BC r3obj=0x%08X stack+0=0x%08X +2=0x%04X\\n",
-              (unsigned)(uint32_t)ctx->gpr[31],
-              (unsigned)vm_read32((uint32_t)ctx->gpr[1]+0x70),
-              (unsigned)vm_read16((uint32_t)ctx->gpr[1]+0x72)); }
-        /* TYPE15: match WAD path encoding 0x80000015. */
+    span = func_span(t)
+    if span is None:
+        return t
+    b0, b1 = span
+    m = CALL_2A49BC_RE.search(t, b0, b1)
+    if m is None:
+        raise SystemExit("highbit needle missing: chamada a func_002A49BC nao "
+                         "encontrada em func_000CB56C")
+    at = t.find(READ_TYPE_LINE, m.end(), b1)
+    if at < 0:
+        raise SystemExit("highbit needle missing: leitura vm_read16(r1+0x72) nao "
+                         "encontrada apos a chamada a func_002A49BC")
+    insert = '''        /* TYPE15: match WAD path encoding 0x80000015. */
         { uint32_t _d = (uint32_t)ctx->gpr[1] + 0x70u;
           uint32_t _t = vm_read32(_d);
           if (_t == 0x15u) {
@@ -33,25 +70,24 @@ def patch_highbit(t: str) -> str:
                   vm_read32(_d)); }
           }
         }
-        ctx->gpr[9] = vm_read16(ctx->gpr[1] + 0x72);
 '''
-    if needle not in t:
-        raise SystemExit("highbit needle missing")
-    return t.replace(needle, insert, 1)
+    # Insere ANTES da leitura do tipo (que ja' esta' no texto), i.e. logo apos o
+    # retorno de func_002A49BC -- exactamente onde a agulha antiga punha o bloco.
+    return t[:at] + insert + t[at:]
 
 def patch_reuse(t: str) -> str:
     marker = "[TYPE15] CB56C reuse product"
     if marker in t:
         return t
-    needle = '''        { static int _n=0; if(_n++<8)
-            fprintf(stderr,"[POSTINTRO] CB56C after icall1 r3=0x%08X\\n", (unsigned)(uint32_t)ctx->gpr[3]); }
-        ctx->gpr[29] = ppc_rldicl(ctx->gpr[3], 0, 32);
-        ctx->gpr[28] = ctx->gpr[3] | ctx->gpr[3];
-        /* Product must be a plausible guest heap/data ptr (not 0x27xxxxxx junk). */
-'''
-    insert = '''        { static int _n=0; if(_n++<8)
-            fprintf(stderr,"[POSTINTRO] CB56C after icall1 r3=0x%08X\\n", (unsigned)(uint32_t)ctx->gpr[3]); }
-        /* TYPE15: reuse existing product at factory+0x48 when construct returns 0. */
+    span = func_span(t)
+    if span is None:
+        return t
+    b0, b1 = span
+    m = PRODUCT_RE.search(t, b0, b1)
+    if m is None:
+        raise SystemExit("reuse needle missing: par rldicl/or do produto do "
+                         "icall1 nao encontrado em func_000CB56C")
+    insert = '''        /* TYPE15: reuse existing product at factory+0x48 when construct returns 0. */
         if ((uint32_t)ctx->gpr[3] == 0u) {
           uint32_t _ent = 0x47D00000u;
           uint32_t _vt = vm_read32(_ent);
@@ -68,26 +104,37 @@ def patch_reuse(t: str) -> str:
             }
           }
         }
-        ctx->gpr[29] = ppc_rldicl(ctx->gpr[3], 0, 32);
-        ctx->gpr[28] = ctx->gpr[3] | ctx->gpr[3];
-        /* Product must be a plausible guest heap/data ptr (not 0x27xxxxxx junk). */
 '''
-    if needle not in t:
-        raise SystemExit("reuse needle missing")
-    return t.replace(needle, insert, 1)
+    # Insere ANTES do par rldicl/or, i.e. com r3 ainda a ser o valor devolvido
+    # pelo icall1 -- mesma posicao que a agulha antiga tinha.
+    return t[:m.start()] + insert + t[m.start():]
 
-def main():
+# CORRECCAO 2026-07-25 (chunk-fixo): com um DIRECTORIO em argv varrem-se os 7
+# chunks e func_000CB56C so' vive num deles; antes escrevia-se sempre o ficheiro
+# (mesmo sem alteracao) e imprimia-se "ok" para todos. Agora e' SKIP para os
+# chunks sem a funcao, APPLIED/ALREADY para o que a tem, e rc=1 se nenhum tiver.
+def main() -> int:
     paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_000.cpp")
+    hit = False
     for ps in paths:
         p = Path(ps)
         if not p.exists():
             print(f"skip {p}")
             continue
         t = p.read_text()
-        t = patch_highbit(t)
-        t = patch_reuse(t)
-        p.write_text(t)
-        print(f"ok {p}")
+        if func_span(t) is None:
+            continue
+        hit = True
+        t2 = patch_reuse(patch_highbit(t))
+        if t2 != t:
+            p.write_text(t2)
+            print(f"APPLIED {p}")
+        else:
+            print(f"ALREADY-APPLIED {p}")
+    if not hit:
+        print("FAILED: func_000CB56C nao encontrada em nenhum chunk")
+        return 1
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

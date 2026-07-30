@@ -39,6 +39,7 @@ Ficheiro alvo tipico: ppu_recomp_001.cpp (localizado por nome, nao fixo).
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -75,8 +76,18 @@ PROBE = r'''        /* AREAD-PROBE: dump gated do op de async-read FIOS (PS3_TRA
             fflush(stderr); } } }
 '''
 
-NEEDLE = SIG + FIRST
-REPLACEMENT = SIG + PROBE + FIRST
+# CORRECCAO 2026-07-25 (shape-callee-save): o lifter passou a emitir, logo a
+# seguir a assinatura, uma sombra dos registos nao-volateis --
+#     uint64_t _cs_30 = ctx->gpr[30];
+#     uint64_t _cs_31 = ctx->gpr[31];
+# -- antes do 1o statement do jogo. A needle literal `SIG + FIRST` deixou de
+# casar por causa dessas linhas (medido: "prologo nao bate com a needle").
+# Passa a casar-se SIG + (bloco opcional de _cs_NN) + FIRST por regex, e a
+# probe e' inserida ENTRE o bloco de callee-save e o FIRST -- assim continua a
+# casar com o lift antigo (bloco vazio) e com o novo, e nao se mete codigo
+# entre a assinatura e a captura dos nao-volateis.
+CS_BLOCK_RE = r"(?:[ \t]*uint64_t _cs_\d+ = ctx->gpr\[\d+\];\n)*"
+NEEDLE_RE = re.compile(re.escape(SIG) + "(" + CS_BLOCK_RE + ")" + re.escape(FIRST))
 
 
 def main() -> int:
@@ -102,7 +113,8 @@ def main() -> int:
         print(f"{target.name}: 002B3D1C probe ja aplicada")
         return 0
 
-    if NEEDLE not in region:
+    m = NEEDLE_RE.search(region)
+    if m is None:
         raise SystemExit(
             f"{target.name}: prologo de func_002B3D1C nao bate com a needle "
             "-- o shape do lift mudou; reveja a probe antes de forcar"
@@ -122,7 +134,12 @@ def main() -> int:
     ]
     print(f"{target.name}: layout estatico visivel -> {', '.join(seen) or '(nenhum)'}")
 
-    src = src[:i] + region.replace(NEEDLE, REPLACEMENT, 1) + src[j:]
+    # Insercao textual no ponto medido pela regex (fim do bloco de callee-save,
+    # imediatamente antes do FIRST) -- nunca re.sub, que interpretaria os
+    # escapes do literal C da probe (ver nota de implementacao no docstring).
+    cut = m.end(1)
+    region = region[:cut] + PROBE + region[cut:]
+    src = src[:i] + region + src[j:]
     target.write_text(src, encoding="utf-8", newline="\n")
     print(f"{target.name}: probe AREAD-PROBE inserida em func_002B3D1C")
     return 0

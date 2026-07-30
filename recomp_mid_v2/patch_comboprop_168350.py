@@ -68,14 +68,32 @@ ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
 # The tail of the TEXTURE-slot bit computation immediately followed by the
 # sprintf-alike call. Verified unique to genuine loc_00168440 combination
 # epilogues (6 occurrences file-wide across all chunks; see module docstring).
-PREFIX = (
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[2] + -0x3ACC);\n"
-    "        ctx->gpr[4] = ctx->gpr[9] - ctx->gpr[4];\n"
-    "        ctx->gpr[4] = (uint32_t)ppc_rlwinm((uint32_t)ctx->gpr[4], 1, 31, 31);\n"
-    "        ctx->gpr[4] = (int64_t)(int32_t)ctx->gpr[4];\n"
+#
+# CORRECCAO 2026-07-25 (shape-LR + shape-outro): a agulha era literal e o
+# lifter mudou DUAS coisas nestas 5 linhas --
+#   shape-outro: o cast do rlwinm passou de "(uint32_t)ppc_rlwinm(" para
+#                "(uint64_t)ppc_rlwinm(" (o valor de 32 bits passa a ser
+#                promovido em 64 bits antes de ir para o gpr);
+#   shape-LR   : as chamadas passaram a ter prefixo de link register --
+#                "ctx->lr = 0x00168468; func_001F2AD4(ctx); DRAIN..." em vez de
+#                "func_001F2AD4(ctx); DRAIN...", e ganharam um "/* nop */;" a
+#                seguir (delay-slot do bl).
+# Passa a regex tolerante: aceita os dois casts e o prefixo ctx->lr opcional,
+# por isso casa com o lift antigo E com o novo. O ponto de insercao continua a
+# ser exactamente entre o bloco de 4 linhas e a linha de chamada, e a chamada e'
+# re-emitida tal e qual foi encontrada (o ctx->lr do lift novo e' preservado).
+PREFIX_RE = (
+    r"        ctx->gpr\[3\] = vm_read32\(ctx->gpr\[2\] \+ -0x3ACC\);\n"
+    r"        ctx->gpr\[4\] = ctx->gpr\[9\] - ctx->gpr\[4\];\n"
+    r"        ctx->gpr\[4\] = \((?:uint32_t|uint64_t)\)ppc_rlwinm"
+    r"\(\(uint32_t\)ctx->gpr\[4\], 1, 31, 31\);\n"
+    r"        ctx->gpr\[4\] = \(int64_t\)\(int32_t\)ctx->gpr\[4\];\n"
 )
-CALL_LINE = "        func_001F2AD4(ctx); DRAIN_TRAMPOLINE(ctx);\n"
-NEEDLE = PREFIX + CALL_LINE
+CALL_RE = (
+    r"(        (?:ctx->lr = 0x[0-9A-Fa-f]+; )?"
+    r"func_001F2AD4\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n)"
+)
+NEEDLE_RE = re.compile(PREFIX_RE + CALL_RE)
 
 FUNC_RE = re.compile(r"^void (func_[0-9A-Fa-f]+)\(ppu_context\* ctx\) \{", re.MULTILINE)
 
@@ -121,22 +139,20 @@ def patch_file(p: Path):
     t = p.read_text(encoding="utf-8", errors="replace")
     if MARKER in t:
         return "ALREADY", 0
-    if NEEDLE not in t:
+    if not NEEDLE_RE.search(t):
         return "SKIP", 0
     out = []
     pos = 0
     n_sites = 0
-    while True:
-        idx = t.find(NEEDLE, pos)
-        if idx < 0:
-            out.append(t[pos:])
-            break
-        site = enclosing_func(t, idx)
-        out.append(t[pos:idx + len(PREFIX)])
+    for m in NEEDLE_RE.finditer(t):
+        site = enclosing_func(t, m.start())
+        # tudo ate' ao fim do bloco de 4 linhas (= inicio da linha de chamada)
+        out.append(t[pos:m.start(1)])
         out.append(probe_for(site))
-        out.append(CALL_LINE)
-        pos = idx + len(NEEDLE)
+        out.append(m.group(1))  # linha de chamada como o lift a escreveu
+        pos = m.end()
         n_sites += 1
+    out.append(t[pos:])
     p.write_text("".join(out), encoding="utf-8")
     return "APPLIED", n_sites
 

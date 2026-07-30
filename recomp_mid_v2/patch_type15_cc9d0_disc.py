@@ -19,6 +19,38 @@ Hard cap: ≤20 total [CC9D0-DISC]+[CB56C-DISC] lines per process (shared
 file-scope counter g_ps3_type15_disc_n). Safe VM reads only (EA bounds).
 
 Does not change guest behaviour when gate is OFF.
+
+Estado 2026-07-25 (relift limpo) — NAO APLICAVEL: pre-condicoes orfas
+---------------------------------------------------------------------
+Este patch escreve, mas so' sabe injectar POR CIMA de blocos que sao edicoes
+manuais do lift antigo. Medido contra um lift limpo do ppu_lifter.py actual:
+
+  ancora exigida                                         existe?  escritor
+  -----------------------------------------------------  -------  ----------
+  extern "C" void ppu_giant_lock_acquire(void);           nao      patch_fios_stop_yield.py /
+                                                                   patch_fios_cancel_yield.py
+                                                                   (mas escrevem noutro chunk)
+  bloco CB56C attach: "[POSTINTRO] CB56C after 2A4FE4"     nao      NENHUM
+    + "[TYPE15] CB56C SKIP_ATTACH" + variavel ty15_reused
+  bloco logger "[CC9D0] iter=..." em func_000CC9D0         nao      NENHUM
+
+Nenhum dos tres blocos existe tao-pouco no lift de producao actual
+(recomp_macos_v3/*.cpp: 0 ocorrencias de "[POSTINTRO] CB56C after 2A4FE4",
+"ty15_reused", "[TYPE15] CB56C SKIP_ATTACH", "[CC9D0] iter="). Em todo o repo
+esses textos so' aparecem neste script e em notes/*.md.
+
+No lift limpo o CB56C chama func_002A4FE4 de forma INCONDICIONAL
+(ppu_recomp_000.cpp: "ctx->lr = 0x000CB6AC; func_002A4FE4(ctx);
+DRAIN_TRAMPOLINE(ctx);") — nao ha' if/else de REUSE nem variavel ty15_reused
+para o [CB56C-DISC] imprimir. Logo isto NAO e' drift de agulha reparavel por
+regex: e' comportamento ausente. Reconstruir os blocos (inventar ty15_reused,
+inventar o ramo SKIP_ATTACH) seria forjar resultado (regra 4 do CLAUDE.md);
+o caminho legitimo e' escrever primeiro os escritores desses blocos.
+
+Alteracao de 2026-07-25: apenas diagnostico. Chunks que nao contem as funcoes
+alvo passam a ser skip (o lifter foi de 31 para 7 chunks e o script varria os
+7, imprimindo 7x o mesmo FAILED), e a mensagem de falha nomeia a pre-condicao
+em falta. O rc continua != 0 e nenhuma agulha foi relaxada.
 """
 from pathlib import Path
 import re
@@ -28,6 +60,9 @@ from lift_paths import resolve_lift_paths
 
 MARKER = "[CC9D0-DISC]"
 COUNTER_MARKER = "g_ps3_type15_disc_n"
+
+# Funcoes alvo: se nenhuma vive no chunk, o chunk nao interessa (skip, nao falha).
+TARGET_FNS_RE = re.compile(r"void\s+func_000C(?:B56C|C9D0)\s*\(\s*ppu_context\s*\*\s*ctx\s*\)")
 
 # C snippet shared by all DISC inject sites (must match env_on).
 # ON iff first char is '1' (unset/empty/0/false all OFF).
@@ -97,7 +132,10 @@ def patch(t: str) -> str:
     counter_anchor = 'extern "C" void ppu_giant_lock_acquire(void);\n'
     if COUNTER_MARKER not in t:
         if counter_anchor not in t:
-            raise SystemExit("giant-lock anchor missing (lift shape changed?)")
+            raise SystemExit(
+                "PRE-CONDICAO AUSENTE: declaracao 'extern \"C\" void "
+                "ppu_giant_lock_acquire(void);' nao esta neste chunk "
+                "(escrita por patch_fios_stop_yield.py / patch_fios_cancel_yield.py)")
         t = t.replace(
             counter_anchor,
             counter_anchor
@@ -176,7 +214,10 @@ def patch(t: str) -> str:
           }}'''
 
     if cb56c_full_needle not in t:
-        raise SystemExit("CB56C after_attach needle missing (lift shape changed?)")
+        raise SystemExit(
+            "PRE-CONDICAO AUSENTE: bloco de attach CB56C ([POSTINTRO] CB56C after "
+            "2A4FE4 / [TYPE15] CB56C SKIP_ATTACH / ty15_reused) nao existe no lift "
+            "-- edicao manual sem escritor no repo, nao e' drift de agulha")
     t = t.replace(cb56c_full_needle, cb56c_full_insert, 1)
 
     # --- CC9D0: after existing TRACE_CC9D0 block, before f54 branch ---
@@ -249,7 +290,9 @@ def patch(t: str) -> str:
         if ((!((ctx->cr >> 0) & 2))) {{ g_trampoline_fn = (void(*)(void*))func_000CCBF0; return; }}'''
 
     if cc9d0_needle not in t:
-        raise SystemExit("CC9D0 TRACE needle missing (lift shape changed?)")
+        raise SystemExit(
+            "PRE-CONDICAO AUSENTE: logger [CC9D0] iter= em func_000CC9D0 nao existe "
+            "no lift -- edicao manual sem escritor no repo, nao e' drift de agulha")
     t = t.replace(cc9d0_needle, cc9d0_insert, 1)
 
     if MARKER not in t:
@@ -266,6 +309,11 @@ def main() -> int:
             rc = 1
             continue
         t = p.read_text()
+        # func_000CB56C / func_000CC9D0 vivem num so' chunk: nos outros isto e'
+        # skip, nao falha (o lifter passou de 31 para 7 chunks).
+        if MARKER not in t and not TARGET_FNS_RE.search(t):
+            print(f"skip {p} (func_000CB56C/func_000CC9D0 nao estao neste chunk)")
+            continue
         had = MARKER in t
         if had:
             t = strip_disc(t)

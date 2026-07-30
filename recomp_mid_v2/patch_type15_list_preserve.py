@@ -22,6 +22,53 @@ Targets local lift (gitignored):
 Usage:
   python3 recomp_mid_v2/patch_type15_list_preserve.py
   python3 recomp_mid_v2/patch_type15_list_preserve.py recomp_macos_v2/ppu_recomp_001.cpp
+
+ESTADO 2026-07-25 -- ENHANCEMENT DE 2a GERACAO SOBRE UM ORFAO SEM ESCRITOR
+--------------------------------------------------------------------------
+Este script REESCREVE o corpo de ps3_type15_product_list_reset. Essa funcao NAO
+e' produzida pelo lifter: e' codigo host injectado a mao no lift durante uma
+sessao, e nenhum patch_*.py a instala.
+
+  grep -l 'ps3_type15_product_list_reset' recomp_mid_v2/*.py -> so' este ficheiro
+  lift limpo (7 chunks)                                      -> ausente
+  recomp_macos_v2 (lift de producao, 31 chunks)              -> presente (manual)
+  copias versionadas do comportamento, NAO ligadas ao build:
+      ../host_gow2_factory.cpp        (ja' com o corpo CLOSE-PRESERVE)
+      ../lift_baseline/injected_001.cpp
+
+Consequencia: a partir de um lift limpo nao ha' nada para reescrever, e o patch
+NAO PODE aplicar. Injectar aqui a definicao "so' para dar APPLIED" seria falso:
+os call sites (ps3_type15_product_list_reset(shell) dentro da factory) tambem
+sao edicao manual sem escritor, logo a funcao ficaria definida e nunca chamada
+-- comportamento zero com relatorio verde. Nao se faz (regra 4 do CLAUDE.md).
+Para isto passar a aplicar e' preciso primeiro um patch que instale a injeccao
+(funcao + call sites), a partir de host_gow2_factory.cpp / injected_001.cpp.
+
+O que se corrigiu aqui foi so' o efeito de "chunk-fixo": o lifter passou de 31
+para 7 chunks, e como resolve_lift_paths expande o DIRECTORIO para todos eles, o
+script avaliava chunk-a-chunk e imprimia 7 linhas FAILED identicas para uma
+unica funcao que vive (quando existe) num unico chunk. Passa a procurar a funcao
+na UNIAO dos chunks e a dar um unico veredicto. Severidade inalterada: sem a
+funcao, rc=1.
+
+ADENDA 2026-07-26 -- o instalador ja' existe, e a escolha de chunk era por MENCAO
+--------------------------------------------------------------------------------
+O escritor que faltava passou a existir:
+`patch_type15_list_close_preserve_install.py` (funcao + declaracao + call site em
+func_000CB56C). Ao aplica-lo apareceu um falso FAILED aqui, com uma causa que ja'
+existia contra o proprio lift de PRODUCAO:
+
+  a escolha do chunk era `if FN_NAME in t` -- uma MENCAO. Na producao o nome
+  aparece primeiro no ppu_recomp_000.cpp (declaracao extern na linha 5 + call
+  site em func_000CB56C) e a DEFINICAO vive no ppu_recomp_001.cpp. Com um
+  directorio em argv, escolhia-se o 000, find_fn_span devolvia None e o script
+  morria com "not found (lift shape changed?)" -- mesmo com o comportamento
+  todo presente.
+
+Passa a escolher o chunk pela DEFINICAO ('...(uint32_t prod) {'). Isto NAO
+enfraquece o teste: sem definicao em chunk nenhum continua a ser FAILED rc=1
+(medido nos dois sentidos). So' deixa de confundir uma declaracao/chamada com a
+definicao -- e' a mesma classe de correccao do "chunk-fixo" acima.
 """
 from __future__ import annotations
 
@@ -32,6 +79,8 @@ from lift_paths import resolve_lift_paths
 
 MARKER = "CLOSE-PRESERVE"
 FN_NAME = "ps3_type15_product_list_reset"
+# Assinatura da DEFINICAO (o `{` distingue-a da declaracao extern e do call site).
+DEF_SIG = 'extern "C" void ' + FN_NAME + "(uint32_t prod) {"
 
 # Full replacement body of the helper (keeps same signature / linkage).
 NEW_FN = r'''/* product+0x70 is an intrusive circular list (sentinel = product+0x70).
@@ -222,25 +271,47 @@ def patch(t: str) -> str:
 
 def main() -> int:
     paths = resolve_lift_paths(sys.argv[1:], "recomp_macos_v2/ppu_recomp_001.cpp")
-    rc = 0
+    existing = [p for p in paths if p.exists()]
     for p in paths:
         if not p.exists():
             print(f"skip {p} (missing)")
-            rc = 1
-            continue
+    if not existing:
+        print("FAILED: nenhum chunk de lift encontrado")
+        return 1
+
+    # A funcao vive (quando existe) num UNICO chunk -- procura-se na uniao e
+    # da-se um unico veredicto, em vez de um FAILED por chunk (chunk-fixo).
+    # A busca e' pela DEFINICAO, nao pelo nome: uma declaracao extern ou um call
+    # site noutro chunk (e' o que a producao tem no ppu_recomp_000.cpp) nao e' o
+    # sitio para reescrever o corpo. Ver ADENDA 2026-07-26 no cabecalho.
+    target = None
+    for p in existing:
         t = p.read_text()
-        try:
-            t2 = patch(t)
-        except SystemExit as e:
-            print(f"FAILED {p}: {e}")
-            rc = 1
-            continue
-        if t2 != t:
-            p.write_text(t2)
-            print(f"APPLIED {p}")
-        else:
-            print(f"ALREADY-APPLIED {p}")
-    return rc
+        if DEF_SIG in t:
+            target = (p, t)
+            break
+    if target is None:
+        print(f"FAILED: {FN_NAME} nao esta' DEFINIDA em nenhum dos "
+              f"{len(existing)} chunks.")
+        print("  A injeccao host (funcao + call site) e' instalada por")
+        print("  patch_type15_list_close_preserve_install.py, que corre antes")
+        print("  deste no apply_all_patches.sh. Fonte versionada do bloco:")
+        print("  ../host_gow2_factory.cpp e ../lift_baseline/injected_001.cpp.")
+        print("  Nada foi injectado aqui: sem os call sites o APPLIED seria falso.")
+        return 1
+
+    p, t = target
+    try:
+        t2 = patch(t)
+    except SystemExit as e:
+        print(f"FAILED {p}: {e}")
+        return 1
+    if t2 != t:
+        p.write_text(t2)
+        print(f"APPLIED {p}")
+    else:
+        print(f"ALREADY-APPLIED {p}")
+    return 0
 
 
 if __name__ == "__main__":

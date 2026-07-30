@@ -32,6 +32,18 @@ recomp_macos/
 # com ppu_lifter.py; nunca versionar.
 recomp_macos_v2/
 boot_gow2
+# Cobertura por padrao (Plano 05-05, D-5.4 criterio 4): recomp_macos_v3, futuras
+# v4/v5/..., e variantes com sufixo (ex.: recomp_macos_v2.pre_<data>,
+# recomp_macos_v3_scratch_*) -- todas regeneraveis a partir do
+# EBOOT+functions.json+lifter, mesma justificacao ja usada para recomp_macos_v2/
+# acima. Sem isto, o criterio 4 (git status limpo) era estruturalmente
+# inatingivel: os nomes com sufixo de versao introduzidos pela convencao da
+# Fase 3 (boot_gow2_v3, boot_gow2.pre_v3/v4, etc.) nunca estiveram cobertos.
+recomp_macos_v*/
+# Cobre boot_gow2_v3, boot_gow2.pre_v3, boot_gow2.pre_v4, boot_gow2.wip,
+# boot_gow2_O1, boot_gow2_pre, boot_gow2_relift_test e todas as variantes com
+# sufixo -- mesma justificacao ja usada para o boot_gow2 exato acima.
+boot_gow2*
 recomp_full/
 recomp_mid/
 recomp_compile/
@@ -77,3 +89,13 @@ recomp_macos_v3/
 boot_gow2.rdy0_ref
 ghidra_out/
 ghidra_analysis/
+
+# Texturas extraidas do WAD do jogo pelo dump de bind_texture -- ARTE DO JOGO,
+# copyright. O frame_*.png acima ja cobria os dumps de frame; estes escapavam.
+wad_tex__*.png
+
+# Lixo de ferramentas
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.py[cod]

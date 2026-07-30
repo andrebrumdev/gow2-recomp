@@ -53,26 +53,32 @@ vm_write, nenhum forge de st620/+0x744/+0x720/+0x1B8). Idempotente (marker
 AUDGATE-PROBE). Fprintf verbatim conforme o brief da Task 3b Step 1.
 """
 from pathlib import Path
+import re
 import sys
+from lift_paths import resolve_lift_paths
 
 MARKER = "AUDGATE-PROBE"
 
-ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
-        else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
-
-# Assinatura + as duas linhas que levam ao gate -- ancorar na assinatura evita
-# as 14 copias mortas de "func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);" (ver
-# docstring). So' existe UM "void func_002C0FA0(...) {" em todo o lift.
-NEEDLE = (
-    "void func_002C0FA0(ppu_context* ctx) {\n"
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[30] + 0x720);\n"
-    "        func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);\n"
+# CORRECCAO 2026-07-25 (re-lift): duas mudancas de FORMA partiram a agulha
+# literal, ambas confirmadas no lift limpo (ppu_recomp_001.cpp):
+#  1) 0x2C0FA0 deixou de ser funcao propria -- o lifter actual absorveu-a em
+#     func_002C0508 e o sitio e' agora a etiqueta local "loc_002C0FA0:"
+#     (grep "void func_002C0FA0" = 0 em todos os chunks; "loc_002C0FA0:" = 1).
+#  2) shape-LR: as chamadas ganharam o prefixo do LR guest, isto e'
+#     "ctx->lr = 0x002C0FA8; func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);".
+# A agulha passa a regex que casa com AS DUAS formas (antiga e nova). O sitio
+# continua a ser o mesmo do ponto de vista do comportamento: logo a seguir ao
+# retorno de func_0045B2A8, com obj ainda em ctx->gpr[30].
+# A armadilha de codigo morto descrita acima continua coberta -- e no lift
+# actual nem existe: "func_0045B2A8(ctx); DRAIN_TRAMPOLINE" aparece 1 vez em
+# todo o lift (era 15), e ancoramos na etiqueta/assinatura, nao na linha nua.
+NEEDLE_RE = re.compile(
+    r"(?:void func_002C0FA0\(ppu_context\* ctx\) \{|loc_002C0FA0:)\n"
+    r"        ctx->gpr\[3\] = vm_read32\(ctx->gpr\[30\] \+ 0x720\);\n"
+    r"        (?:ctx->lr = 0x002C0FA8; )?func_0045B2A8\(ctx\); DRAIN_TRAMPOLINE\(ctx\);\n"
 )
 
-INSERT = (
-    "void func_002C0FA0(ppu_context* ctx) {\n"
-    "        ctx->gpr[3] = vm_read32(ctx->gpr[30] + 0x720);\n"
-    "        func_0045B2A8(ctx); DRAIN_TRAMPOLINE(ctx);\n"
+PROBE = (
     "        /* " + MARKER + ": Task 3b -- classifica A3/A3b/A3c (obj=ctx->gpr[30]) */\n"
     "        { static int _on=-1; if(_on<0){extern char* getenv(const char*);\n"
     "            const char* _e=getenv(\"PS3_TRACE_AUDGATE\"); _on=(_e&&*_e&&*_e!='0')?1:0;}\n"
@@ -86,19 +92,25 @@ INSERT = (
 
 def patch_file(p: Path) -> str:
     t = p.read_text(encoding="utf-8", errors="replace")
+    m = NEEDLE_RE.search(t)
+    if m is None:
+        return "ALREADY" if MARKER in t else "SKIP"
     if MARKER in t:
         return "ALREADY"
-    if NEEDLE not in t:
-        return "SKIP"
-    t = t.replace(NEEDLE, INSERT, 1)
+    t = t[:m.end()] + PROBE + t[m.end():]
     p.write_text(t, encoding="utf-8")
     return "APPLIED"
 
 
 def main() -> int:
-    files = sorted(ROOT.glob("ppu_recomp_*.cpp"))
+    # CORRECCAO 2026-07-25 (chunk-fixo): usa resolve_lift_paths para aceitar
+    # tanto um DIRECTORIO de lift (contrato do apply_all_patches.sh) como um
+    # ficheiro solto, em vez de assumir um glob sobre recomp_macos_v2.
+    files = [p for p in resolve_lift_paths(
+        sys.argv[1:],
+        str(Path(__file__).resolve().parent.parent / "recomp_macos_v2")) if p.exists()]
     if not files:
-        print("nenhum ppu_recomp_*.cpp em %s" % ROOT)
+        print("nenhum ppu_recomp_*.cpp encontrado")
         return 1
     any_hit = False
     for p in files:
