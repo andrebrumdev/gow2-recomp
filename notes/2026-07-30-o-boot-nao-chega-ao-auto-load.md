@@ -101,6 +101,63 @@ assim é sobre um boot que parou antes.
 As notas de 22–25 Jul foram medidas quando o boot chegava ao `R_PermA`. Se hoje
 não chega, **os zeros de então e os zeros de agora não são o mesmo zero.**
 
+---
+
+# ADENDA: o bissect fechou — e elimina o ambiente
+
+Corrido no mesmo dia, mesma recipe Metal, mesmo `TIMEOUT`, **sem compilar nada**.
+
+| binário | data | StartSeq | thr_end | R_Perm | NOPIC | linhas | veredicto |
+|---|---|---:|---:|---:|---:|---:|---|
+| `boot_gow2.pre_v3` | 25 Jul 18:23 | **2** | **1** | **199** | **4** | 4135 | ✅ **funciona** |
+| `boot_gow2_v3fix` | 26 Jul 02:23 | 0 | 0 | 0 | 0 | **101** | ⚠️ falha estrutural |
+| `boot_gow2_v4` | 26 Jul 02:35 | 1 | 0 | 0 | 0 | ~3200 | ❌ falha como produção |
+| `boot_gow2` | 29 Jul 15:07 | 1 | 0 | 0 | 0 | 3161 | ❌ falha |
+
+## O que isto estabelece
+
+**O ambiente está bom.** Um binário de 25 de Julho, corrido **hoje**, com os dados
+extraídos de hoje, o `movie_cache` de hoje e o disco de hoje, chega ao `thr_auto_load`,
+lê os 20 MB do `R_PermA` e dispara o `REPLAY-NOPIC` quatro vezes. A hipótese "não é o
+binário, é o ambiente" — que era o desfecho alternativo previsto na secção anterior —
+**está refutada**.
+
+**A janela é de cerca de oito horas:** 25 Jul 18:23 → 26 Jul 02:35.
+
+O `v3fix` morrer a 101 linhas não delimita nada: o CLAUDE.md regista que um boot que
+morre em ~55 linhas é falha estrutural, e 101 está nessa família. Esse binário estava
+partido de outra maneira. É o `v4` (02:35) que fecha a janela pelo lado de baixo.
+
+## O que caiu nessa janela
+
+Duas notas, ambas datadas de 26 de Julho:
+
+- `2026-07-26-tocfix-matou-36-conversoes-opd.md` — o lifter trocou o restauro **dinâmico**
+  do TOC (`ctx->gpr[2] = vm_read64(ctx->gpr[1] + 0x28)`, 17 602 sítios) por um valor
+  **estático** (`ctx->gpr[2] = 0x00541178ULL /*TOCFIX*/`, 17 268 sítios). A própria nota
+  usa `.pre_v4` como referência do "lift antigo" — o binário que acabei de provar que
+  funciona.
+- `2026-07-26-strip-block-comeu-o-lift.md` — truncagem de chunks.
+
+## Mas o TOCFIX NÃO está confirmado — e a medição enfraquece-o
+
+Tentador ligar os pontos. Medi antes de o fazer, e o resultado não ajuda a hipótese:
+
+```
+OPDs cujo `code` é início de função declarada : 16 278
+  com TOC == 0x00541178 (o que o TOCFIX estampa) : 16 259
+  com TOC diferente                              :     19
+```
+
+Os 19 divergentes usam todos `0x00572610`, e vários apontam para `func_004C0F00`,
+`func_004C2538`, `func_004C2900` — que o `lift_todo_audit.py` **já classifica como
+tabelas de strings declaradas como funções**, e que o `lift_parity.py` já acusa como
+espúrias.
+
+Ou seja: 99,9% do executável usa um único TOC, e a fracção que não usa é dominada por
+regiões que já sabemos não serem código. **Isto não prova que o TOCFIX quebra o caminho
+do AUTO_LOAD.** Fica como pista ordenada, não como causa.
+
 ## Próximo passo
 
 Descobrir o que mudou entre 25 e 30 de Julho no caminho intro→2º movie. Os
