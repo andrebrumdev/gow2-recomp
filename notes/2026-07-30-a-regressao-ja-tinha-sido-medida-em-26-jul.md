@@ -62,6 +62,37 @@ O lifter descobre muito mais do que o `functions.json` declara — 20 750 declar
 50–56 mil emitidas. **A regressão está na descoberta**, e o que se perdeu são funções que,
 por construção, só são alcançáveis por despacho indirecto.
 
+## CORRECÇÃO ao número acima — 2 855, não 4 155
+
+O `4 155` da tabela é a diferença bruta de contagens e **está enganado por lixo**. O diff
+nominal, feito a seguir:
+
+```
+lift ANTIGO (funciona)   total= 56 072   em .text= 54 674   FORA do .text=  1 398
+lift NOVO   (falha)      total= 51 917   em .text= 51 917   FORA do .text=      0
+PERDIDAS                 total=  4 253   em .text=  2 855   FORA do .text=  1 398
+NOVAS                    total=     98   em .text=     98   FORA do .text=      0
+```
+
+(O segmento executável do `EBOOT.ELF` é `0x00010000–0x0050C7E0`; tudo fora disso não é
+código.)
+
+As primeiras "perdidas" são `func_00000000`, `func_00000004`, `func_00000008`… —
+endereços sequenciais a partir de zero. **Não são funções**, são artefactos.
+
+Portanto o quadro honesto é **dos dois lados**:
+
+- **O lift novo MELHOROU numa coisa:** deixou de emitir 1 398 funções em endereços que não
+  existem no binário. O antigo tinha-as; o novo tem zero.
+- **E PIOROU noutra:** perdeu **2 855 funções em endereços reais do `.text`**, e ganhou 98.
+
+O número que interessa à regressão é **2 855**, não 4 155. Escrevi 4 155 no commit
+`eedea6b` antes de separar o lixo; fica corrigido aqui.
+
+Verificação adicional: o `thr_auto_load` (`func_00147038`) chama 6 funções directamente no
+lift antigo e **nenhuma delas está entre as perdidas**. Logo a perda não está no corpo
+directo do `thr_auto_load` — se contribui, é mais abaixo na cadeia, por despacho indirecto.
+
 ## Porque isto liga ao diagnóstico do ponto 1
 
 A nota `2026-07-30-ponto1-despacho-vtable-o-lift-esta-fiel.md` estabeleceu, por medição
