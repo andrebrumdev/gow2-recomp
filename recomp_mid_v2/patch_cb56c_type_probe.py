@@ -171,14 +171,27 @@ static void ps3_cbty_dump_summary(void) {
     fflush(stderr);
 }
 
-static void ps3_cbty_on_sigterm(int sig) { (void)sig; ps3_cbty_dump_summary(); }
+/* ENCADEAMENTO -- ver a nota longa no probe 29AF0. `signal()` substitui em vez
+ * de acumular; sem isto o ultimo probe a armar rouba o SIGTERM aos outros e o
+ * SUMMARY deles nunca sai. Medido a serio em 2026-07-30. */
+typedef void (*ps3_cbty_sigh_t)(int);
+static ps3_cbty_sigh_t g_ps3_cbty_prev_sigterm = 0;
+
+static void ps3_cbty_on_sigterm(int sig) {
+    ps3_cbty_dump_summary();
+    if (g_ps3_cbty_prev_sigterm
+        && g_ps3_cbty_prev_sigterm != SIG_DFL
+        && g_ps3_cbty_prev_sigterm != SIG_IGN) {
+        g_ps3_cbty_prev_sigterm(sig);
+    }
+}
 
 static void ps3_cbty_arm(void) {
     if (g_ps3_cbty_reg) return;
     g_ps3_cbty_reg = 1;
     atexit(ps3_cbty_dump_summary);
 #ifndef _WIN32
-    signal(SIGTERM, ps3_cbty_on_sigterm);
+    g_ps3_cbty_prev_sigterm = signal(SIGTERM, ps3_cbty_on_sigterm);
 #endif
 }
 
@@ -311,14 +324,19 @@ def patch(path: Path) -> int:
             + f"        /* {MARKER} */\n        {{ ps3_cbty_pre(ctx); }}\n"
             + body[pre_at + len(PRE_NEEDLE):])
 
-    anchor = "#include <stdlib.h>\n"
-    if anchor not in t:
-        print(f"ERRO: {path.name} nao tem '{anchor.strip()}' onde ancorar o preambulo",
+    t = t[:body_start] + body + t[body_end:]
+
+    # Ancora no FIM da zona de preambulos (mesmo antes da 1a funcao lifted), nao
+    # a seguir ao #include. Razao medida em 2026-07-30: no clang/Mach-O os
+    # constructors correm por ORDEM DE DEFINICAO no ficheiro, e quem arma por
+    # ULTIMO fica com o SIGTERM. Ancorado no include, este probe armava antes do
+    # CD498-PROBE e perdia-lhe o sinal; o SUMMARY nunca saia.
+    anchor_at = t.find("\nvoid func_")
+    if anchor_at < 0:
+        print(f"ERRO: {path.name} nao tem nenhuma funcao lifted onde ancorar",
               file=sys.stderr)
         return 3
-
-    t = t[:body_start] + body + t[body_end:]
-    t = t.replace(anchor, anchor + HELPER, 1)
+    t = t[:anchor_at + 1] + HELPER + t[anchor_at + 1:]
 
     try:
         path.write_text(t, encoding="utf-8", newline="\n")

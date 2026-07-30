@@ -145,14 +145,31 @@ static void ps3_29af0_dump_summary(void) {
     fflush(stderr);
 }
 
-static void ps3_29af0_on_sigterm(int sig) { (void)sig; ps3_29af0_dump_summary(); }
+/* ENCADEAMENTO (defeito medido em 2026-07-30, na primeira corrida real):
+ * `signal()` SUBSTITUI o handler, nao o acumula. Com tres probes armados no
+ * mesmo binario, o ultimo constructor a correr ficava com o SIGTERM e os outros
+ * dois nunca imprimiam o SUMMARY -- e o SUMMARY e' precisamente o resultado. Foi
+ * o que aconteceu: o [CD498] imprimiu, estes dois nao.
+ * Guardar o handler anterior e chama-lo no fim mantem a cadeia inteira viva,
+ * seja qual for a ordem de arranque. */
+typedef void (*ps3_29af0_sigh_t)(int);
+static ps3_29af0_sigh_t g_ps3_29af0_prev_sigterm = 0;
+
+static void ps3_29af0_on_sigterm(int sig) {
+    ps3_29af0_dump_summary();
+    if (g_ps3_29af0_prev_sigterm
+        && g_ps3_29af0_prev_sigterm != SIG_DFL
+        && g_ps3_29af0_prev_sigterm != SIG_IGN) {
+        g_ps3_29af0_prev_sigterm(sig);
+    }
+}
 
 static void ps3_29af0_arm(void) {
     if (g_ps3_29af0_reg) return;
     g_ps3_29af0_reg = 1;
     atexit(ps3_29af0_dump_summary);
 #ifndef _WIN32
-    signal(SIGTERM, ps3_29af0_on_sigterm);
+    g_ps3_29af0_prev_sigterm = signal(SIGTERM, ps3_29af0_on_sigterm);
 #endif
 }
 
@@ -218,13 +235,19 @@ def patch(path: Path) -> int:
         return 0
 
     # --- 1. preambulo -------------------------------------------------------
-    helper = HELPER
-    anchor = "#include <stdlib.h>\n"
-    if anchor not in t:
-        print(f"ERRO: {path.name} nao tem '{anchor.strip()}' onde ancorar o preambulo",
+    # Ancora no FIM da zona de preambulos (mesmo antes da 1a funcao lifted), nao
+    # a seguir ao #include. Razao medida em 2026-07-30: no clang/Mach-O os
+    # constructors correm por ORDEM DE DEFINICAO no ficheiro (prioridade nao
+    # reordena de forma util -- testado), e quem arma por ULTIMO fica com o
+    # SIGTERM. Ancorado no include, este probe armava ANTES do CD498-PROBE e
+    # perdia o sinal para ele; o SUMMARY nunca saia. Aqui fica sempre depois de
+    # qualquer preambulo existente, arma por ultimo, e encadeia para tras.
+    anchor_at = t.find("\nvoid func_")
+    if anchor_at < 0:
+        print(f"ERRO: {path.name} nao tem nenhuma funcao lifted onde ancorar",
               file=sys.stderr)
         return 3
-    t = t.replace(anchor, anchor + helper, 1)
+    t = t[:anchor_at + 1] + HELPER + t[anchor_at + 1:]
 
     # --- 2. contador de entrada na funcao -----------------------------------
     if FN_SIG not in t:
