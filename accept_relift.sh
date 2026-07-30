@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# accept_relift.sh -- o aceite de promocao (D-5.1 + D-5.2) num unico comando:
-# TRES pernas, nenhuma delas reimplementada aqui, cada uma ja existente
-# noutro script, mais uma seccao de contadores por delta (D-5.2). rc final =
-# AND das tres pernas E dos contadores bloqueantes.
+# accept_relift.sh -- o aceite de promocao (D-5.1 + D-5.2 + GATE-03) num
+# unico comando: QUATRO pernas, nenhuma delas reimplementada aqui, cada uma
+# ja existente noutro script, mais uma seccao de contadores por delta
+# (D-5.2). rc final = AND das quatro pernas E dos contadores bloqueantes.
 #
 # A LICAO que criou este script (05-CONTEXT.md, 2026-07-26): o lift
 # regenerado passou o smoke M0 com st620=11 em 6/6 -- MELHOR do que o
@@ -13,7 +13,12 @@
 # (games/gow2/verify_lift.sh) e a que teria apanhado essa perda -- e' por
 # isso que o smoke sozinho e necessario mas NUNCA suficiente.
 #
-# AS TRES PERNAS:
+# A LICAO que acrescentou a PERNA 4 (07-CONTEXT.md, 2026-07-30, Fase 7): as
+# tres pernas acima medem lift/patches, mas NENHUMA delas mede se a cadeia
+# de boot chega ao thr_auto_load. Foi exactamente esse buraco que promoveu,
+# em 29 Jul, um binario que nao chega ao AUTO_LOAD (StartSeq=1, thr_end=0).
+#
+# AS QUATRO PERNAS:
 #   perna 1 -- smoke_relift_equiv.sh [LIFT] [RUNS] [TSV]
 #              rc=0 se st620>=3 em >=4 de 6 execucoes reais.
 #   perna 2 -- games/gow2/verify_lift.sh LIFT_DIR (via PS3_ENGINE_ROOT)
@@ -27,18 +32,26 @@
 #              deve bloquear esta fase. Em vez disso le-se o `--status`
 #              TSV directamente e exige-se so zero NO-MATCH e zero FAILED
 #              fora de classe PROBE -- exactamente o que D-5.1 especifica.
+#   perna 4 -- smoke_chain_gate.sh --bin BIN RUNS TSV (GATE-03, Fase 7)
+#              rc=0 se a cadeia de 5 elos bloqueantes (intro/2o movie/
+#              re-Play/AUTO_LOAD/WAD) chega ao fim em >=THRESHOLD de RUNS
+#              execucoes. Reutiliza o MESMO binario que a PERNA 1 acabou de
+#              construir -- nunca dispara um segundo build a partir do
+#              mesmo LIFT_REL. Le o TSV produzido (nunca o rc bruto de
+#              forma opaca) e nomeia o elo_stopped mais frequente entre as
+#              corridas que falharam.
 #
-# rc final = 0 SO se as tres pernas passarem. As tres correm sempre, mesmo
-# que a 1a falhe (nao aborta cedo) -- o relatorio final mostra sempre o
-# estado das tres, nunca so da primeira que falhou.
+# rc final = 0 SO se as quatro pernas passarem. As quatro correm sempre,
+# mesmo que uma ja tenha falhado (nao aborta cedo) -- o relatorio final
+# mostra sempre o estado das quatro, nunca so da primeira que falhou.
 #
 # Uso:
 #   ./accept_relift.sh LIFT_DIR [RUNS] [OUTDIR]
 #     LIFT_DIR default nenhum (obrigatorio); RUNS default 6; OUTDIR default /tmp.
 #
 # Protocolo G6 (D-5.5): logs em /tmp (fora dos dois repositorios), kill
-# sempre por PID dentro de smoke_relift_equiv.sh (TERM depois -9), nunca
-# pkill -f boot_gow2.
+# sempre por PID dentro de smoke_relift_equiv.sh/smoke_chain_gate.sh (TERM
+# depois -9), nunca pkill -f boot_gow2.
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
@@ -79,6 +92,35 @@ leg1_rc=$?
 leg1_ok=$(awk -F'\t' 'NR>1 && $8=="OK"{n++} END{print n+0}' "$TSV1" 2>/dev/null)
 leg1_ok=${leg1_ok:-0}
 echo "PERNA 1: OK=$leg1_ok de $RUNS, rc=$leg1_rc"
+echo
+
+# ---- PERNA 4: smoke_chain_gate.sh (cadeia, GATE-03) ------------------------
+# Reutiliza o MESMO binario que a PERNA 1 acabou de construir -- mesma
+# convencao de nomes de smoke_relift_equiv.sh:84 (BIN="$HERE/boot_gow2_${TAG#recomp_macos_}").
+# NUNCA dispara um segundo build a partir do mesmo LIFT_REL (~1.5min
+# desperdicados e um segundo binario que podia divergir do primeiro por
+# timing de compilacao).
+BIN4="$REPO/boot_gow2_${TAG#recomp_macos_}"
+TSV4="$OUTDIR/accept_${TAG}_chain.tsv"
+echo "---- PERNA 4: smoke_chain_gate.sh (cadeia) ----"
+if [ -x "$BIN4" ]; then
+  "$REPO/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4"
+  leg4_rc=$?
+  leg4_ok=$(awk -F'\t' 'NR>1 && $10=="OK"{n++} END{print n+0}' "$TSV4" 2>/dev/null)
+  leg4_ok=${leg4_ok:-0}
+  leg4_elo="$(awk -F'\t' 'NR>1 && $10=="REGRESSAO"{print $9}' "$TSV4" 2>/dev/null \
+    | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //')"
+else
+  echo "ERRO: binario da PERNA 1 nao encontrado ($BIN4) -- PERNA 1 deve ter falhado antes de construir" >&2
+  leg4_rc=2
+  leg4_ok=0
+  leg4_elo="binario nao construido"
+fi
+if [ "$leg4_rc" -eq 0 ]; then
+  echo "PERNA 4: OK=$leg4_ok de $RUNS, rc=$leg4_rc"
+else
+  echo "PERNA 4: OK=$leg4_ok de $RUNS, rc=$leg4_rc, elo_stopped mais frequente: ${leg4_elo:-desconhecido}"
+fi
 echo
 
 # ---- PERNA 2: games/gow2/verify_lift.sh ------------------------------------
@@ -202,18 +244,23 @@ fi
 
 # ---- relatorio final --------------------------------------------------------
 echo "=============================================================="
-echo " RELATORIO DE ACEITE (D-5.1 + D-5.2)"
+echo " RELATORIO DE ACEITE (D-5.1 + D-5.2 + GATE-03)"
 echo "=============================================================="
 printf 'PERNA 1 (smoke)          %s   (OK=%s/%s)\n' "$([ "$leg1_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg1_ok" "$RUNS"
 printf 'PERNA 2 (verify_lift)    %s   (rc=%s)\n' "$([ "$leg2_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg2_rc"
 printf 'PERNA 3 (apply_patches)  %s   (NO-MATCH=%s FAILED-fora-PROBE=%s, UNVERIFIED=%s informativo)\n' \
   "$([ "$leg3_pass" -eq 1 ] && echo PASS || echo FAIL)" "$n_nomatch" "$n_failed_nao_probe" "$n_unverified"
+if [ "$leg4_rc" -eq 0 ]; then
+  printf 'PERNA 4 (chain gate)     %s   (OK=%s/%s)\n' "PASS" "$leg4_ok" "$RUNS"
+else
+  printf 'PERNA 4 (chain gate)     %s   (OK=%s/%s, elo_stopped mais frequente: %s)\n' "FAIL" "$leg4_ok" "$RUNS" "${leg4_elo:-desconhecido}"
+fi
 printf 'CONTADORES (D-5.2)       %s   (imp_modules/imp_imports/orfaos bloqueantes)\n' \
   "$([ "$counters_pass" -eq 1 ] && echo PASS || echo FAIL)"
 echo
 
-if [ "$leg1_rc" -eq 0 ] && [ "$leg2_rc" -eq 0 ] && [ "$leg3_pass" -eq 1 ] && [ "$counters_pass" -eq 1 ]; then
-  echo "ACEITE: rc=0 -- as tres pernas + contadores bloqueantes passaram."
+if [ "$leg1_rc" -eq 0 ] && [ "$leg2_rc" -eq 0 ] && [ "$leg3_pass" -eq 1 ] && [ "$leg4_rc" -eq 0 ] && [ "$counters_pass" -eq 1 ]; then
+  echo "ACEITE: rc=0 -- as quatro pernas + contadores bloqueantes passaram."
   exit 0
 else
   echo "REJEITADO: rc=1 -- pelo menos uma perna ou os contadores bloqueantes falharam (ver PASS/FAIL acima)."
