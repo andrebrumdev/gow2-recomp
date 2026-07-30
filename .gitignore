@@ -89,3 +89,13 @@ recomp_macos_v3/
 boot_gow2.rdy0_ref
 ghidra_out/
 ghidra_analysis/
+
+# Texturas extraidas do WAD do jogo pelo dump de bind_texture -- ARTE DO JOGO,
+# copyright. O frame_*.png acima ja cobria os dumps de frame; estes escapavam.
+wad_tex__*.png
+
+# Lixo de ferramentas
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.py[cod]
