@@ -1,4 +1,4 @@
-# Veredito Gate A — Track M (M0–M5) + M3+ residual (R1–R11) — 2026-07-23
+# Veredito Gate A — Track M (M0–M5) + M3+ residual (R1–R12) — 2026-07-23
 
 **Fecho honesto:** Gate **B GREEN**, Gate **A RED**. Menu UI **NO**. Playable **NO**.
 
@@ -6,10 +6,11 @@ Track M (TYPE15 / CC9D0 / frame loop pós-B71) **fecha o diagnóstico** com
 medição e um fix estrutural (M2 CLOSE-PRESERVE). **Não** fecha o wall de menu:
 o guest ainda não reentra em present/pad após open de WAD.
 
-**M3+ residual (R1–R3)** afiou a root class: ICALL-BAD freelist-as-code **não**
-é a causa do corte de flip; HEAP40 skip H3 **DEAD**; único emissor de flip medido
-é a banda intro `func_00017ACC` — **sem re-arm** pós open WAD (TIMEOUT=120
-ainda `SetFlip_after_R_Perm=0`). Wall activo = **present re-arm** pós-load.
+**M3+ residual (R1–R12)** afiou a root class: ICALL-BAD freelist-as-code **não**
+é a causa do corte de flip; HEAP40 skip H3 **DEAD**; issuer reclass=`2EFD60`;
+main pós thr preso no triângulo **`2B2DD0→B951C→CC9D0` (f4=0)** — **sem re-arm**
+(TIMEOUT=90/120 `SetFlip_after_R_Perm=0`). Wall activo = **TYPE15 f4 / product
+work incompleto** dentro do parent tick (present re-arm dependente).
 
 Índices:
 - `ps3recomp/docs/superpowers/plans/2026-07-23-00-gow2-playable-master-INDEX.md`
@@ -178,33 +179,42 @@ Plano: `ps3recomp/docs/superpowers/plans/2026-07-23-m3plus-postwad-present.md`.
 
 ---
 
-## Wall seguinte (pós M3+ R1–R11)
+## Wall seguinte (pós M3+ R1–R12) — síntese honesta Gate A **RED**
 
-**Wall activo = present re-arm pós-load** — main pós thr preso em
-**`2B2DD0→B951C` + `CC9D0` (f4=0)**; menu arm **sem** OPD/schedule vivo.
-R5–R8 issuer+hot intro; R9–R10 schedule/arm tot=0; **R11** fecha OPD:
-`B94EC`/`B61F4` **sem OPD**; `B6150` OPD `0x51D7A0` **0 refs estáticas**;
-post-thr sample 100% em {CC9D0,2B2DD0,B951C}; `SCHEDARM-ICALL` 0.
+**Wall activo = TYPE15 product/tick incompleteness (f4=0) dentro do parent
+`2B2DD0→B951C→CC9D0`** — present re-arm **bloqueado** por este spin (ratio 2:1:1
+confirmado R12). Menu arm **sem** OPD/schedule vivo (R11). Issuer intro morto
+pós WAD (R5–R8).
 
-**Não** é: empty-list, pad HLE, HEAP40 default, content-hold, ICALL-BAD sole cause,
-nem circuit-breaker nosso em 2EFD60/14FE18/CDBA4/menu path (R7–R9), nem CE03C
-wait-idle cosmético (R10 H3 DEAD as sole), nem “falta OPD estático de B94EC”
-(R11: B94EC não é entry).
+### Síntese R5–R12 (cadeia de refutações → wall residual)
+
+| Bloco | Tasks | O que morreu | O que ficou |
+|-------|-------|--------------|-------------|
+| Issuer flip | R5–R7 | 17ACC DEAD; path real `2EFD60`/`14FE18` **post=0** | re-arm ausente |
+| Hot intro loop | R8 | `CDBA4…CDD88` ~41k **post=0**; exit CE0A0 | não reentra |
+| Menu schedule | R9–R10 | parents/arm B6150/B94* **tot=0**; CE03C wait not sole | arm never |
+| OPD | R11 | B94EC/B61F4 no OPD; B6150 OPD orphan; POSTTHR only triangle | schedule DEAD |
+| Outer tick | **R12** | 2B2DD0/B951C **não** são bug de gate; B951C **não** chama present; ICALL ctr=`0x27182800` (freelist co-sinal) | **f4=0 residual M2** |
+
+**Não** é: empty-list (M2 nodes=12), pad HLE, HEAP40 default, content-hold,
+ICALL-BAD sole cause, circuit-breaker nosso em 2EFD60/CDBA4/menu path (R7–R9),
+CE03C wait cosmético (R10), OPD estático B94EC (R11), early-return em 2B2DD0/B951C (R12).
 
 Prioridade de RE/fix:
 
-1. **Re-arm (R12):** sair do spin TYPE15/`2B2DD0→B951C` (f4 writers / product
-   attach / vtable icall em B951C que agende present). Critério Gate A:
-   SetFlip_after_R_Perm≥1.
-2. **f4 writers** TYPE15: quem escreve f4 ∈ {1,5,6,7,8,9} no fluxo natural (não UNSTICK).
-3. ICALL freelist writer em `0x400C3D88` — **co-sinal** (stream/typemap); não gate único.
-4. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
+1. **f4 writers TYPE15** no fluxo natural (enum ∈ {1,5,6,…}; **não** UNSTICK) e/ou
+   install de trabalho real nos 12 nodes CLOSE-PRESERVE (M2 residual — freelist
+   product, não UI). Critério Gate A: SetFlip_after_R_Perm≥1.
+2. Discriminar o que B951C `vt+0x40/+0x44` **deveria** despachar (hoje ctr lixo /
+   r3 freelist `0x400C3D88` — co-sinal R1).
+3. Só depois: pad poll / menu FSM (M4: autostart inútil sem GetData).
 
 **Não** promover a default: `PS3_CC9D0_LIVE_SKIP`, YIELD, `PS3_ICALL_HEAP40`,
 `PS3_TRACE_MAINLOOP`, `PS3_TRACE_FLIPPATH`, `PS3_TRACE_PRESENTLOOP`,
-`PS3_TRACE_MENUPRESENT`, `PS3_TRACE_SCHEDARM`, `PS3_TRACE_POSTTHR_PC` — probes opt-in only.
+`PS3_TRACE_MENUPRESENT`, `PS3_TRACE_SCHEDARM`, `PS3_TRACE_POSTTHR` /
+`PS3_TRACE_POSTTHR_PC` — probes opt-in only.
 
-### R5–R11 (issuer + present-loop + menu schedule + arm + OPD)
+### R5–R12 (issuer + present-loop + menu schedule + arm + OPD + spin)
 
 | Task | Outcome |
 |------|---------|
@@ -215,10 +225,12 @@ Prioridade de RE/fix:
 | **R9** | MENUPRESENT: H1 **confirmada** — schedule parents todos post=0; menu path tot=0; 2C0508=6147 pre-only; H4 DEAD; **sem fix** |
 | **R10** | SCHEDARM: arm `B6150/B94*` tot=0; `25C838=1` `36A598=0`; BB414→BB37C 1×; CDFDC 11k pre-only; CE03C wait H3 DEAD sole; **sem fix** |
 | **R11** | OPD: B94EC/B61F4 **no OPD**; B6150 OPD orphan; POSTTHR 100% {CC9D0,2B2DD0,B951C}; ICALL menu 0; **sem fix** |
+| **R12** | RE: 2B2DD0 outer tick → B951C scene half → CC9D0×2; ratio 2:1:1; B951C ICALL ctr=`0x27182800` ≠ present; f4=0; **sem fix** (wall = TYPE15 f4 residual M2) |
 
 Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 `r7-flip-path-rearm.md`, `r8-present-loop-parents.md`,
-`r9-menu-present-schedule.md`, `r10-sched-arm.md`, `r11-opd-sched.md`.
+`r9-menu-present-schedule.md`, `r10-sched-arm.md`, `r11-opd-sched.md`,
+`r12-postthr-spin.md`.
 
 ---
 
@@ -237,18 +249,19 @@ Notas: `notes/2026-07-23-r5-17acc-callers.md`, `r6-real-flip-issuer.md`,
 - Metal stack M0/M1 overlay+draw path já GREEN no eixo GPU.
 - M2+ MSL/tex/state não contam como menu; pixels de jogo exigem draws guest (S/M).
 
-### Track M residual / M3+ — R1–R11 **diag closed** no issuer/loop/schedule/arm/OPD; fix de re-arm **aberto**
+### Track M residual / M3+ — R1–R12 **diag closed** no issuer/loop/schedule/arm/OPD/spin; fix de re-arm **aberto**
 
 | Item | Status | Acção |
 |------|--------|--------|
-| Present re-arm pós thr | ⬜ wall | R12: leave `2B2DD0→B951C`+CC9D0 f4=0; SetFlip_after≥1 |
+| Present re-arm pós thr | ⬜ wall | depende de TYPE15 f4/work (R12 parent mapeado; sem fix no gate 2B2DD0/B951C) |
+| Post-thr spin triangle | ✅ R12 | `2B2DD0→B951C→CC9D0` ratio 2:1:1; B951C ≠ present; f4=0 residual M2 |
 | Menu OPD schedule | ✅ R11 | B94EC/B61F4 no OPD; B6150 OPD 0 refs; POSTTHR only CC9D0/2B2DD0/B951C |
 | Menu schedule arm | ✅ R10 | B6150/B94* tot=0; 25C838 oneshot 36A598=0; CE03C wait not sole |
 | Menu schedule parents | ✅ R9 | H1: 194FFC/2B21*/B61* tot=0; 2C0508/2C07F8 pre-only; H4 DEAD |
 | Hot intro loop | ✅ R8 | `CDBA4→…→CDD88→156680` ~41k post=0; CE0A0 exit guards |
 | Issuer flip intro | ✅ R6–R7 | `2EFD60`/`14FE18`; 17ACC DEAD (R5) |
 | ICALL-BAD 0x40637488 | ✅ classificado | freelist-as-code; H3 DEAD como sole flip cause; writer exacto opcional |
-| f4 writers | ⬜ aberto | RE estática + store probe se necessário |
+| f4 writers | ⬜ **wall next** | RE estática + store probe; nodes=12 ≠ UI work (M2 residual) |
 | Pad/menu | ⬜ blocked | re-smoke só **depois** de flip≥1 pós-R_Perm |
 
 ### Theater blacklist (ainda em vigor)
