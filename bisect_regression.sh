@@ -29,18 +29,12 @@ cd "$HERE" || exit 1
 
 set -a; . "$HERE/env_gow2.sh"; set +a
 
-export PS3_VDEC_ASYNC=1
-export PS3_VDEC_FORCE_SEQDONE_MS=1500
-export PS3_MOVIE_EOS=1 PS3_MOVIE_HLE=1 PS3_MOVIE_IO=1
-export PS3_BOOT_LOGO_MS=300
-export PS3_AUTO_LOAD_RUN=1
-export PS3_PAD_AUTOSTART=1
-export PS3_TYPE15_UNSTICK=1
-export PS3_SPU1=1 PS3_SPU4=1 PS3_SPU5=1
-export PS3_RSX_BACKEND=metal
-export PS3_RSX_FIFO=1
-export PS3_FULLSCREEN=0
-export PS3_PERF_FSM=1
+# Nucleo partilhado com smoke_chain_gate.sh (Fase 7, GATE-01/GATE-02):
+# arm_menu_fast_recipe/measure_one/extract_counts/classify saem daqui, nao
+# duplicados -- ver lib_boot_chain_metrics.sh.
+# shellcheck source=lib_boot_chain_metrics.sh
+source "$HERE/lib_boot_chain_metrics.sh"
+arm_menu_fast_recipe
 
 # ---- lista fixa dos 9 binarios conhecidos desta sessao (modo lista) -------
 DEFAULT_BINS=(
@@ -54,64 +48,6 @@ DEFAULT_BINS=(
   boot_gow2_relift_test
   boot_gow2
 )
-
-# ---- measure_one BIN_PATH LOG_PATH TIMEOUT --------------------------------
-# Lanca BIN_PATH EBOOT.ELF em fundo, guarda o PID, poll a cada segundo com
-# kill -0 ate TIMEOUT (default 90s, o mesmo do run_probes_metal.sh), e no
-# fim manda kill -TERM, espera 1s, kill -9, e wait. Nunca pkill -f.
-measure_one() {
-  local bin_path="$1" log_path="$2" timeout="${3:-90}"
-
-  "$bin_path" EBOOT.ELF > "$log_path" 2>&1 &
-  local bpid=$!
-
-  local i
-  for ((i = 0; i < timeout; i++)); do
-    kill -0 "$bpid" 2>/dev/null || break
-    sleep 1
-  done
-
-  if kill -0 "$bpid" 2>/dev/null; then
-    kill -TERM "$bpid" 2>/dev/null
-    sleep 1
-    kill -0 "$bpid" 2>/dev/null && kill -9 "$bpid" 2>/dev/null
-  fi
-  wait "$bpid" 2>/dev/null
-}
-
-# ---- extract_counts LOG_PATH -> imprime 5 numeros separados por espaco ----
-# grep -c ja imprime 0 quando nao ha match (exit 1, stdout "0"); capturar
-# so' com VAR=$(grep -c ...), sem encadear "|| echo 0" a seguir (isso
-# duplicaria o 0).
-extract_counts() {
-  local log_path="$1"
-  local log_lines startseq thr_end r_perma nopic
-
-  log_lines=$(wc -l < "$log_path" 2>/dev/null | tr -d ' ')
-  log_lines=${log_lines:-0}
-  startseq=$(grep -c 'StartSeq(handle=' "$log_path" 2>/dev/null)
-  thr_end=$(grep -c 'thr_auto_load() end' "$log_path" 2>/dev/null)
-  r_perma=$(grep -c 'R_PermA full flagged' "$log_path" 2>/dev/null)
-  nopic=$(grep -c 'REPLAY-NOPIC' "$log_path" 2>/dev/null)
-
-  echo "$log_lines $startseq $thr_end $r_perma $nopic"
-}
-
-# ---- classify LOG_LINES THR_END -> imprime a classe -----------------------
-# log_lines < 200 -> STRUCTURAL_FAIL (a familia dos ~55-101 linhas que o
-# CLAUDE.md documenta como falha estrutural -- nunca um binario que correu
-# a recipe ate ao fim; todas as corridas saudaveis desta sessao tem
-# >=3161 linhas). Senao thr_end>=1 -> OK; senao REGRESSAO.
-classify() {
-  local log_lines="$1" thr_end="$2"
-  if [ "$log_lines" -lt 200 ]; then
-    echo "STRUCTURAL_FAIL"
-  elif [ "$thr_end" -ge 1 ]; then
-    echo "OK"
-  else
-    echo "REGRESSAO"
-  fi
-}
 
 # ---- linha da tabela (mesma ordem nos dois modos) --------------------------
 # bin build_date log_lines startseq thr_auto_load_end r_perma_full replay_nopic class
