@@ -119,9 +119,20 @@ static void ps3_17acc_dump_summary(void) {
     fflush(stderr);
 }
 
+/* ENCADEAMENTO (defeito medido em 2026-07-30): signal() SUBSTITUI o handler,
+ * nao o acumula -- ver a nota longa em patch_29af0_switch_probe.py (commit
+ * 09c3850). Guardar o handler anterior e chama-lo no fim mantem a cadeia
+ * inteira viva, seja qual for a ordem de arranque. */
+typedef void (*ps3_17acc_sigh_t)(int);
+static ps3_17acc_sigh_t g_ps3_17acc_prev_sigterm = 0;
+
 static void ps3_17acc_on_sigterm(int sig) {
-    (void)sig;
     ps3_17acc_dump_summary();
+    if (g_ps3_17acc_prev_sigterm
+        && g_ps3_17acc_prev_sigterm != SIG_DFL
+        && g_ps3_17acc_prev_sigterm != SIG_IGN) {
+        g_ps3_17acc_prev_sigterm(sig);
+    }
 }
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -135,7 +146,7 @@ static void ps3_17acc_ctor(void) {
         g_ps3_17acc_atexit_reg = 1;
         atexit(ps3_17acc_dump_summary);
 #ifndef _WIN32
-        signal(SIGTERM, ps3_17acc_on_sigterm);
+        g_ps3_17acc_prev_sigterm = signal(SIGTERM, ps3_17acc_on_sigterm);
 #endif
     }
 }
@@ -203,10 +214,53 @@ def probe_call(site_id: int) -> str:
     )
 
 
-def add_helpers(t: str, path: Path) -> str:
-    if HELPER_HEAD in t:
+# ---- upgrade-in-place: encadear o SIGTERM num bloco JA baked (codigo antigo) --
+OLD_SIGTERM_HANDLER = (
+    "static void ps3_17acc_on_sigterm(int sig) {\n"
+    "    (void)sig;\n"
+    "    ps3_17acc_dump_summary();\n"
+    "}"
+)
+NEW_SIGTERM_HANDLER = (
+    "typedef void (*ps3_17acc_sigh_t)(int);\n"
+    "static ps3_17acc_sigh_t g_ps3_17acc_prev_sigterm = 0;\n"
+    "\n"
+    "static void ps3_17acc_on_sigterm(int sig) {\n"
+    "    ps3_17acc_dump_summary();\n"
+    "    if (g_ps3_17acc_prev_sigterm\n"
+    "        && g_ps3_17acc_prev_sigterm != SIG_DFL\n"
+    "        && g_ps3_17acc_prev_sigterm != SIG_IGN) {\n"
+    "        g_ps3_17acc_prev_sigterm(sig);\n"
+    "    }\n"
+    "}"
+)
+OLD_SIGNAL_CALL = "        signal(SIGTERM, ps3_17acc_on_sigterm);\n"
+NEW_SIGNAL_CALL = "        g_ps3_17acc_prev_sigterm = signal(SIGTERM, ps3_17acc_on_sigterm);\n"
+
+
+def upgrade_sigterm_chain(t: str, path: Path) -> str:
+    if "g_ps3_17acc_prev_sigterm" in t:
         print(f"  helpers: already in {path.name}")
         return t
+    n1 = t.count(OLD_SIGTERM_HANDLER)
+    if n1 != 1:
+        raise SystemExit(
+            f"{path}: OLD_SIGTERM_HANDLER aparece {n1}x (esperado 1) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGTERM_HANDLER, NEW_SIGTERM_HANDLER, 1)
+    n2 = t.count(OLD_SIGNAL_CALL)
+    if n2 != 1:
+        raise SystemExit(
+            f"{path}: OLD_SIGNAL_CALL aparece {n2}x (esperado 1) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGNAL_CALL, NEW_SIGNAL_CALL, 1)
+    print(f"  helpers: UPGRADED in {path.name}")
+    return t
+
+
+def add_helpers(t: str, path: Path) -> str:
+    if HELPER_HEAD in t:
+        return upgrade_sigterm_chain(t, path)
     anchor = "static int g_ps3_type15_disc_n = 0;\n"
     if anchor in t:
         t = t.replace(anchor, anchor + HELPER_BLOCK, 1)
