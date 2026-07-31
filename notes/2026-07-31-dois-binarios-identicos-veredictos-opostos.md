@@ -70,8 +70,59 @@ decide o rumo:
 | mistura `OK`/`REGRESSAO` | **a falha é não-determinista** | o bisect não se aplica; o problema é uma race |
 | 5/5 `REGRESSAO` | o `pre_v3` nunca foi bom | a janela inteira está mal posta |
 
+---
+
+# RESULTADO: a falha NÃO é não-determinista. O registo é que estava errado.
+
+Cinco corridas do mesmo `boot_gow2.pre_v3`, mesma recipe, mesmo ambiente:
+
+```
+corrida 1: linhas=11073  StartSeq=2  thr_end=1  R_Perm=199
+corrida 2: linhas=11428  StartSeq=2  thr_end=1  R_Perm=199
+corrida 3: linhas=11616  StartSeq=2  thr_end=1  R_Perm=199
+corrida 4: linhas=11861  StartSeq=2  thr_end=1  R_Perm=199
+corrida 5: linhas=11054  StartSeq=2  thr_end=1  R_Perm=199
+```
+
+**5/5 OK.** O binário é deterministicamente bom. A hipótese do não-determinismo está
+**refutada** — e ainda bem, porque a alternativa tornaria o problema muito pior.
+
+## Então o que aconteceu ao `pre_v4`?
+
+A entrada `pre_v4 → 813 linhas → REGRESSAO` na tabela do bisect é um **artefacto de
+medição**, não um resultado. O binário é o mesmo do `pre_v3`, que dá 11 000+ linhas de
+forma consistente. 813 linhas é uma corrida **cortada**, não uma corrida que falhou.
+
+Causa provável: o sweep dos nove correu enquanto a máquina tinha outras coisas em curso
+(esta sessão teve, mais cedo, uma corrida morta por `SIGKILL` externo, provavelmente por
+pressão de memória). Uma corrida cortada a meio produz exactamente esta assinatura —
+poucas linhas, todos os contadores a zero.
+
+## O que isto corrige, e o que não corrige
+
+**Corrige:** a tabela dos nove binários tem pelo menos uma entrada inválida. Qualquer
+conclusão que dependa da linha do `pre_v4` — em particular a delimitação da janela pelo
+lado bom — tem de ser refeita. O `boot_gow2_relift_test` (`StartSeq=0`, 3176 linhas) é o
+próximo suspeito de ser o mesmo artefacto.
+
+**Não corrige:** a regressão **é real**. O `pre_v3` é bom (5/5) e a produção falha. Há um
+ponto de viragem entre eles e o bisect continua a fazer sentido.
+
+## A lição, que continua a ser minha
+
+O erro de método mantém-se, e agora com prova de que produz resultados errados: **corri
+o bissect dos nove binários com uma corrida cada**, e uma dessas corridas mentiu. O
+projecto tinha o portão de 4-em-6 escrito no marco anterior, e o `smoke_relift_equiv.sh`
+tem até um discriminador FLAKE/REGRESSAO com uma assinatura para isto — corrida curta
+demais **é** o critério de FLAKE que ele usa.
+
+E eu escrevi no contexto da Fase 9 que "uma corrida por passo do bisect chega". Está
+errado e tem de ser corrigido antes de a fase arrancar: **cada passo do bisect precisa de
+repetição**, e uma corrida anormalmente curta tem de ser re-corrida, nunca aceite como
+veredicto.
+
 ## Ressalva
 
-Neste momento só está **confirmada a identidade dos ficheiros**. A conclusão sobre
-não-determinismo é hipótese até as cinco corridas terminarem. Não alterar planos nem
-retirar conclusões antes disso.
+Confirmado: identidade dos ficheiros, e `pre_v3` bom em 5/5. A validação do lado mau
+(produção, 3 corridas) está a correr — só com ela é que os dois extremos do bisect ficam
+firmes.
