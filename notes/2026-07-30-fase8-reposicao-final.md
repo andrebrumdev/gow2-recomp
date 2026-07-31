@@ -57,7 +57,26 @@ com a regressão do `2o movie/StartSeq`.
 
 ## REG-04: não aplicável — nenhuma causa foi corrigida nesta fase
 
-Ver a secção dedicada mais abaixo (Tarefa 2).
+**REG-04 não aplicável — nenhuma causa foi corrigida nesta fase.** O Plano
+08-02 refutou os dois candidatos testados (patches, runtime `f6708cb`); esta
+tarefa não teve nenhuma causa nova para corrigir, logo não há re-lift a
+provar sobrevivência de correcção nenhuma. O estado fica para retomar na
+próxima sessão, com o próximo passo já escrito acima (bissecção automatizada
+de `runtime/`+`libs/` na janela `8648805..4e815cf`).
+
+Como nenhuma correcção foi aplicada, `accept_relift.sh` **não muda de
+veredicto** — é a MESMA ferramenta, o MESMO resultado, ANTES e DEPOIS desta
+fase:
+
+| Momento | `accept_relift.sh recomp_macos_v3 6` | PERNA 4 (GATE-03) |
+|---|---|---|
+| Antes da Fase 8 (07-02-SUMMARY.md, 2026-07-30) | REJEITADO, rc=1 | elo_stopped="2o movie (StartSeq)" |
+| Depois da Fase 8 (esta nota, 2026-07-31) | REJEITADO, rc=1 | elo_stopped="2o movie (StartSeq)" |
+
+Isto é o comportamento CORRECTO e esperado quando `REFUTADA-AMBAS`: o gate da
+Fase 7 continua a fazer exactamente o que foi desenhado para fazer — rejeitar
+um binário que não chega ao `thr_auto_load`/`R_PermA` — porque a causa real
+ainda não foi corrigida, não porque o gate tenha regredido.
 
 ## Próximo passo recomendado (herdado do Plano 08-02, reconfirmado aqui)
 
