@@ -5,20 +5,12 @@
 ==============================================================================
 
 -- varredura 1: marcadores presentes em pre_v4, ausentes em v2 --
-  AREAD-HLE                        chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_2b3d1c_movie_io.py
-  CC9D0-LIVE-SKIP                  chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_cc9d0_live_yield.py
-  CC9D0-SKIP                       chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_cc9d0_live_yield.py
+  CC9D0-LIVE-SKIP                  chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_cc9d0_live_yield.py, patch_type15_unstick_skip.py
+  CC9D0-SKIP                       chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_cc9d0_live_yield.py, patch_type15_unstick_skip.py
   CC9D0-YIELD                      chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_cc9d0_live_yield.py
-  DESYNC-STOP                      chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py
   DONE-HEX                         chunks(ref)=ppu_recomp_001.cpp   SEM patch_*.py candidato -- buraco novo
-  EOF-DONE                         chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py, patch_f2b_multimb_stream.py
   F2B-42A118-PROBE                 chunks(ref)=ppu_recomp_005.cpp   SEM patch_*.py candidato -- buraco novo
-  F2B-BODY-CLAMP                   chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py
-  F2B-STREAM-ALIGN                 chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py
-  F2B-STREAM-DESYNC-STOP           chunks(ref)=ppu_recomp_001.cpp   SEM patch_*.py candidato -- buraco novo
-  F2B-STREAM-EOF-QUIET             chunks(ref)=ppu_recomp_001.cpp   SEM patch_*.py candidato -- buraco novo
-  F2B-STREAM-RESYNC                chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py
-  F2B-STREAM-SEED                  chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_2b3d1c_movie_io.py, patch_f2b_multimb_install.py, patch_fios_f2b_open_block_install.py
+  F2B-STREAM-SEED                  chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_f2b_multimb_install.py, patch_fios_f2b_open_block_install.py
   FIOS-CLEAR-PROBE                 chunks(ref)=ppu_recomp_001.cpp, ppu_recomp_002.cpp SEM patch_*.py candidato -- buraco novo
   FIOS-FO-DUMP                     chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_fios_f2b_fo_block.py
   FIOS-FREELIST-PROBE              chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_fios_f2b_fo_block.py
@@ -27,8 +19,8 @@
   FIOS-SHUTDOWN-ENTER-0030E018     chunks(ref)=ppu_recomp_001.cpp   SEM patch_*.py candidato -- buraco novo
   FIOS-SHUTDOWN-ENTER-0030E878     chunks(ref)=ppu_recomp_001.cpp   SEM patch_*.py candidato -- buraco novo
   FO-DUMP                          chunks(ref)=ppu_recomp_001.cpp   candidato(s): patch_fios_f2b_fo_block.py, patch_fios_f2b_fo_ctor.py, patch_fios_f2b_open_block_install.py
-  TYPE15-UNSTICK-SKIP              chunks(ref)=ppu_recomp_000.cpp   SEM patch_*.py candidato -- buraco novo
-  total ausentes: 23
+  TYPE15-UNSTICK-SKIP              chunks(ref)=ppu_recomp_000.cpp   candidato(s): patch_type15_unstick_skip.py
+  total ausentes: 15
 
 -- varredura 2: patches NO-MATCH/UNVERIFIED (excl. PROBE) --
   UNVERIFIED  patch_2b0fb4_opd.py                          classe=FUNCIONAL
@@ -42,6 +34,7 @@
   UNVERIFIED  patch_ce03c_movie_done_reset.py              classe=FUNCIONAL
   UNVERIFIED  patch_f2b_multimb_install.py                 classe=FUNCIONAL
   UNVERIFIED  patch_f2b_multimb_stream.py                  classe=FUNCIONAL
+  UNVERIFIED  patch_f2ba9bc_stream_align_install.py        classe=FUNCIONAL
   UNVERIFIED  patch_factory_opd_gate.py                    classe=FUNCIONAL
   UNVERIFIED  patch_factory_snap_ty15_pin.py               classe=FUNCIONAL
   UNVERIFIED  patch_fallthrough_2550c8.py                  classe=FUNCIONAL
@@ -77,34 +70,24 @@
   UNVERIFIED  patch_type15_list_close_preserve_install.py  classe=FUNCIONAL
   UNVERIFIED  patch_type15_list_preserve.py                classe=FUNCIONAL
   UNVERIFIED  patch_wad_tex_capture.py                     classe=FUNCIONAL
-  UNVERIFIED  patch_zz_host_api_decls.py                   classe=FUNCIONAL
   total: 47
 
 -- varredura 3: patch_*.py sem write_text()/.write()/open(...'w') --
-  patch_2b3d1c_movie_io.py
   patch_b71_skip_icallb_reuse.py
   patch_ce03c_pre_play_stop.py
   patch_factory_snap_ty15_pin.py
   patch_fios_f2a_f2b_wad.py
   patch_type15_cb56c_product.py
-  total: 6
+  total: 5
 
 -- cruzamento: marcador ausente x patch candidato x estado --
-  AREAD-HLE                        -> patch_2b3d1c_movie_io.py [SEM ESCRITOR, NO-MATCH/UNVERIFIED no gate]
   CC9D0-LIVE-SKIP                  -> patch_cc9d0_live_yield.py [aparenta ok -- revalidar]
+  CC9D0-LIVE-SKIP                  -> patch_type15_unstick_skip.py [aparenta ok -- revalidar]
   CC9D0-SKIP                       -> patch_cc9d0_live_yield.py [aparenta ok -- revalidar]
+  CC9D0-SKIP                       -> patch_type15_unstick_skip.py [aparenta ok -- revalidar]
   CC9D0-YIELD                      -> patch_cc9d0_live_yield.py [aparenta ok -- revalidar]
-  DESYNC-STOP                      -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
   DONE-HEX                         -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
-  EOF-DONE                         -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
-  EOF-DONE                         -> patch_f2b_multimb_stream.py [NO-MATCH/UNVERIFIED no gate]
   F2B-42A118-PROBE                 -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
-  F2B-BODY-CLAMP                   -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
-  F2B-STREAM-ALIGN                 -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
-  F2B-STREAM-DESYNC-STOP           -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
-  F2B-STREAM-EOF-QUIET             -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
-  F2B-STREAM-RESYNC                -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
-  F2B-STREAM-SEED                  -> patch_2b3d1c_movie_io.py [SEM ESCRITOR, NO-MATCH/UNVERIFIED no gate]
   F2B-STREAM-SEED                  -> patch_f2b_multimb_install.py [NO-MATCH/UNVERIFIED no gate]
   F2B-STREAM-SEED                  -> patch_fios_f2b_open_block_install.py [NO-MATCH/UNVERIFIED no gate]
   FIOS-CLEAR-PROBE                 -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
@@ -117,7 +100,7 @@
   FO-DUMP                          -> patch_fios_f2b_fo_block.py [NO-MATCH/UNVERIFIED no gate]
   FO-DUMP                          -> patch_fios_f2b_fo_ctor.py [NO-MATCH/UNVERIFIED no gate]
   FO-DUMP                          -> patch_fios_f2b_open_block_install.py [NO-MATCH/UNVERIFIED no gate]
-  TYPE15-UNSTICK-SKIP              -> SEM candidato (buraco novo, precisa de patch_*.py de raiz)
+  TYPE15-UNSTICK-SKIP              -> patch_type15_unstick_skip.py [aparenta ok -- revalidar]
 
 ==============================================================================
 FIM DO INVENTARIO
