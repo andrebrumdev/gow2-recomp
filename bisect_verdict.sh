@@ -35,6 +35,22 @@
 #   ./bisect_verdict.sh <sha>                 -- classifica+constroi+mede,
 #                                                 devolve 0/1/125 (contrato
 #                                                 do git bisect run)
+#   ./bisect_verdict.sh                        -- SEM argumento: e' o modo
+#                                                 que o `git bisect run`
+#                                                 realmente usa. `git bisect`
+#                                                 ja fez `git checkout
+#                                                 <candidato>` no worktree
+#                                                 onde foi invocado ANTES de
+#                                                 chamar este script -- o sha
+#                                                 sob teste e' resolvido por
+#                                                 `git rev-parse HEAD` NESSE
+#                                                 worktree (capturado como cwd
+#                                                 ANTES deste script mudar de
+#                                                 directorio para $HERE).
+#                                                 NUNCA passar um sha nem
+#                                                 confiar em $1 quando chamado
+#                                                 assim -- git bisect run nao
+#                                                 injecta argumentos.
 #   ./bisect_verdict.sh --classify-only <sha>  -- so' imprime o nivel
 #                                                 (HERDA/RELINK/
 #                                                 RECONSTRUCAO-COMPLETA), sem
@@ -51,6 +67,13 @@
 # Guarda anti-producao (T-09-01): todo o build/relift corre dentro de
 # /tmp/ps3recomp_bisect09_* -- o script aborta se resolver caminho fora dai.
 set -uo pipefail
+
+# CAPTURAR o cwd de invocacao ANTES de qualquer `cd` -- e' o worktree onde o
+# `git bisect run` fez checkout do candidato (achado desta execucao: um bug
+# anterior desta mesma tarefa fazia TODO passo do bisect devolver "ERRO:
+# precisa de um sha" -- exit 2, que o git bisect trata como "bad" -- porque o
+# script exigia um argumento que o `git bisect run` nunca fornece).
+INVOKED_CWD="$(pwd)"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE" || exit 1
@@ -322,7 +345,18 @@ if [ "${1:-}" = "--classify-only" ]; then
 fi
 
 SHA="${1:-}"
-[ -z "$SHA" ] && { echo "ERRO: precisa de um sha (ou --classify-only <sha>)" >&2; exit 2; }
+if [ -z "$SHA" ]; then
+  # Modo git-bisect-run: nenhum argumento -- resolver HEAD do worktree onde
+  # fomos invocados (INVOKED_CWD, capturado ANTES do `cd "$HERE"` no topo do
+  # script). E' assim que o `git bisect run` realmente chama o oraculo: ja fez
+  # checkout do candidato nesse worktree antes de nos invocar.
+  SHA="$(git -C "$INVOKED_CWD" rev-parse HEAD 2>/dev/null)"
+  if [ -z "$SHA" ]; then
+    echo "ERRO: sem argumento e nao foi possivel resolver HEAD de $INVOKED_CWD -- nao e' um worktree git valido?" >&2
+    exit 2
+  fi
+  echo "bisect_verdict: modo git-bisect-run, HEAD de $INVOKED_CWD = $SHA" >&2
+fi
 
 VERDICT="$(resolve_verdict_cached "$SHA")"
 echo "bisect_verdict: $SHA -> $VERDICT" >&2
