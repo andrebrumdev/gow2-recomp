@@ -101,3 +101,46 @@ ser "quem chamou `func_00220F88` com um objecto nulo", não "quem escolheu o alv
 **Próxima medição para o #4:** sonda na entrada da função de que
 `func_00220F88`/`func_002210BC` são fragmentos, registando `r3` — o mesmo padrão do
 `[E545B0]` e do `[CPY284]`, que foi o método fiável o dia inteiro.
+
+---
+
+## A cadeia fechada: dois resultados não verificados, na mesma função
+
+Seguindo o `this=0` para trás, verificando **cada passo contra o PPC original**, chega-se a
+`func_002182A4`, e os dois sintomas nascem lá, a poucas instruções um do outro:
+
+```c
+r9 = (r28 * r9) / r0;  r9 = (r9 << 2) + r11;   // aritmética de índice numa tabela
+r3 = *(r9 + 0);                                 // slot
+func_00263554(r3);                              // <- SINTOMA #3: aqui r3 chega a valer 5
+r28 = r3;                                       // resultado do pop, não verificado
+r3  = r26;
+func_00227788(r3);
+r29 = r3;                                       // <- resultado, NÃO VERIFICADO
+r3  = r29;
+func_002210BC(r3, ...);                         // <- SINTOMA #4: this = 0 se devolveu 0
+```
+
+`func_002210BC` é entrada legítima (prólogo próprio, `rldicl r26,r3` a pôr `r26 = r3`), o
+`bl` em `0x00218394` é real (`mr r3, r29` imediatamente antes), e o lift está fiel em todos
+os passos — verifiquei um a um no `EBOOT.ELF`. **Nada disto é bug do lifter.**
+
+O que há é um `func_00227788` que devolve `0` e um valor de índice que faz o `pool` valer
+`5`. Num PS3 real ambos rebentariam na página nula; aqui propagam-se em silêncio e produzem
+tudo o que persegui hoje.
+
+**Próximo actor, sem ambiguidade:** `func_00227788` — porque devolve 0 — e a aritmética
+`(r28*r9)/r0` que alimenta o slot do `func_00263554`. Ambos dentro de `func_002182A4`, e
+ambos mediveis com uma sonda na entrada, que foi o único método fiável o dia inteiro.
+
+## Um quarto aviso sobre ferramentas de atribuição
+
+O `PS3_TRACE_ICALL_TO` deu **zero** para `func_00220F88` e eu quase escrevi que a função
+"não é alcançada por chamada indirecta". Estava errado por omissão: há **dois**
+despachantes com o seu próprio `ppu_lookup` — `ps3_indirect_call` (`bctrl`) e
+`ps3_indirect_tail` (`bctr`) — e o tracer só estava no primeiro. Corrigido (o campo `via=`
+diz agora por qual passou).
+
+É a terceira ferramenta de atribuição que me engana hoje, depois do `lr` do guest e do rbp
+frame walk. **Um instrumento que cobre metade dos caminhos mente por omissão, e a omissão
+parece prova.**
