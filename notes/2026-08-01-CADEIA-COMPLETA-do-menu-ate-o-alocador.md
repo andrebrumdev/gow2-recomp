@@ -1230,3 +1230,35 @@ tipo, e os campos vêm texto ou zero.** `func_002545D4`, `func_002545B0`, `func_
 Sete sítios, uma doença. A pergunta que interessa não é qual deles corrigir — é **porque é
 que os objectos chegam com o tipo errado**, que é a Parede D do `CLAUDE.md` e o que o
 trabalho de TYPE15/`CB56C` já persegue.
+
+---
+
+# A Parede D não se moveu — medido, e é o que decide a próxima frente
+
+Sinais do registo de shaders, comparados entre o binário de antes das correcções de hoje,
+o baseline actual, e a corrida com os dois gates ligados:
+
+| | `LDRSH` | `SHADERSRC` | `ICGLdr` | `set_shader` | `draw_*` | `bind_texture` |
+|---|---:|---:|---:|---:|---:|---:|
+| antes das correcções | 0 | 0 | 0 | 23 | 20 | 8 |
+| baseline actual | 0 | 0 | 0 | 23 | 20 | 8 |
+| com ambos os gates | 0 | 0 | 0 | 23 | 20 | 8 |
+
+**Idênticos nas três.** Os 23 `set_shader`, 20 draws e 8 `bind_texture` são todos do
+caminho da intro/filme — não mudaram nada. E o registo de shaders continua com **zero**
+entradas.
+
+## O que isto estabelece, e é o resultado mais accionável do dia
+
+Tudo o que corrigi e diagnostiquei hoje — o stomp do pump, a cadeia de quinze elos, os dois
+gates — **não moveu a Parede D um único ponto**. Ela está exactamente onde estava.
+
+Isso não invalida o trabalho: o stomp era real e destruía memória do jogo, e a cadeia
+explica o `FATAL`. Mas diz, com números, que **continuar a escavar esta cadeia não vai
+chegar ao menu**. Os sete sintomas medidos são todos a jusante de objectos com o tipo
+errado, e o registo que devia dar-lhes o tipo certo está vazio.
+
+**A próxima frente é a Parede D**, atacada de frente: o nested walk do typemap pós-R_PermA
+até o `ICGLdrShader` ser invocado pelo caminho real, com `SHADERSRC` a passar de 0 para
+N>0. É o item 1 dos "Próximos passos" do `CLAUDE.md`, e continua a ser o que bloqueia
+pixels de jogo.
