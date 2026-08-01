@@ -1121,3 +1121,40 @@ resposta decide o fix:
 A (2) é consistente com tudo o que se mediu hoje (cinco sítios a receber contexto errado).
 A (1) verifica-se num minuto: procurar no PPC original um `bl` para a fábrica dentro do
 corpo do walker.
+
+---
+
+# E o último dado: `func_0024F028` é genérica, usada em dois contextos
+
+```
+chamadores estáticos de func_0024F028: >10 sítios distintos
+  0x00021468  0x00026478  0x000C7378  0x00038D90  0x00038FBC
+  0x00039014  0x0009F840  0x00144248  ...  + 2 trampolins
+```
+
+Não é uma função do carregamento de WAD — é **utilitária, chamada de todo o lado**. E o
+backtrace da falha mostra-a alcançada por
+`func_002B2E74 → func_000B71B8 → func_0010F5E8 → func_0024F028`, ou seja pela
+**inicialização do motor**, não pelo caminho onde a fábrica está a produzir.
+
+Enquanto isso, os 175 pushes vêm de `func_0041F700` (`lr=0x0042AF5C`), que é outro
+contexto por completo.
+
+**A leitura final:** o mesmo utilitário corre em dois contextos — dentro da janela de
+produção da fábrica (onde a pergunta tem resposta) e fora dela (a inicialização, onde não
+tem). O boot falha no segundo.
+
+Isso encaixa exactamente no padrão que esta sessão inteira mediu: **cinco sítios a receber
+contexto errado**, e este é o sexto — o mesmo código a correr onde a sua pré-condição não
+se verifica.
+
+## Estado final do documento
+
+Tudo acima está medido. A única coisa que fica por decidir é de **desenho**, e são duas
+hipóteses testáveis:
+
+1. o caminho `func_0024E3D0` não devia correr no contexto de inicialização;
+2. ou devia, e falta quem estabeleça a janela de produção antes.
+
+Nenhuma se resolve por leitura estática — ambas precisam de uma corrida com sonda nos dois
+contextos, a comparar o estado da fábrica.
