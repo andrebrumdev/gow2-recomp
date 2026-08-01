@@ -1181,3 +1181,49 @@ mesmas duas funções (`func_002545D4`, `func_0039D764`) por outro caminho.
 
 O objecto precisa do **tipo certo**, e o tipo certo só existe se a fábrica tiver produto.
 Fecha o círculo no mesmo sítio, e por isso o alvo continua a ser esse, não a escrita.
+
+---
+
+# FRONTEIRA: com AMBOS os gates ligados o boot continua a não chegar ao AutoLoad
+
+Corrida com os dois gates de diagnóstico e o disjuntor levantado
+(`PS3_24E3D0_KEEP_TYPE_ON_NULL=1 PS3_LIST254_EMPTY_IF_NULL=1
+PS3_STUCK_ICALL_LIMIT=2000000`):
+
+```
+run2  st620=11  startseq=2  r_perma=1  setflip=2386  FATAL=0
+      gates dispararam: 24E3D0-GATE=2, LIST254-GATE=1
+      thr_auto_load end = 0        <- continua a NAO chegar
+```
+
+E onde fica preso:
+
+```
+[vm] UNCOMMITTED read16 access 0x65726D69 (+2) ra=func_002547AC+0x454
+... a mesma linha, em loop, ate ao fim do log
+```
+
+`0x65726D69` = `"ermi"` em ASCII — texto usado como ponteiro, outra vez. E
+`func_002547AC` é vizinha directa de `func_002545D4`/`func_002545B0`: **a mesma família,
+o mesmo sintoma.**
+
+## O que esta medição delimita, e é importante não a suavizar
+
+A cadeia de quinze elos deste documento **é real e está medida**, e o gate prova que o
+troço final é causal. Mas **não é a única barreira entre o estado actual e o menu**:
+removidas as duas paredes conhecidas, aparece imediatamente uma terceira do mesmo género.
+
+Isso significa que resolver a pergunta em aberto (a fábrica sem produto) **não garante o
+menu** — garante passar deste obstáculo. É a diferença entre "encontrei a causa" e
+"encontrei uma causa", e vale a pena que fique escrito antes que alguém (eu incluído)
+sobre-estime o alcance do diagnóstico.
+
+## O padrão, agora com sete ocorrências
+
+Todos os obstáculos medidos hoje têm a mesma forma: **um objecto lido com o layout de outro
+tipo, e os campos vêm texto ou zero.** `func_002545D4`, `func_002545B0`, `func_00263554`,
+`func_00220284`, `func_0024E3D0`, `func_0039D764`, e agora `func_002547AC`.
+
+Sete sítios, uma doença. A pergunta que interessa não é qual deles corrigir — é **porque é
+que os objectos chegam com o tipo errado**, que é a Parede D do `CLAUDE.md` e o que o
+trabalho de TYPE15/`CB56C` já persegue.
