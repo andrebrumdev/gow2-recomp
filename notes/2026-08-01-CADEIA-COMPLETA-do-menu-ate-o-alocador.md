@@ -577,3 +577,51 @@ elo até ao ecrã.
 E há uma vantagem prática: o `host_gow2_factory.cpp` **já manipula estas fábricas** (o
 `ps3_type15_*`, o REHOME, o replenish). O sítio para procurar o `push` em falta já está
 aberto e instrumentado.
+
+---
+
+# CORRECÇÃO FINAL: o `push` corre — 150 vezes. A consulta é que é feita fora do par.
+
+Escrevi acima que *"o `push` que devia pôr um produto na fábrica nunca correu"*. **Errado
+outra vez**, e o watch no cursor desfá-lo em três linhas:
+
+```
+w8 [0x400C62D8]=0xFF  func_002B11B8+0x1DF8   <- init: -1
+w8 [0x400C62D8]=0x00  func_0039DA78+0x150    <- PUSH  (cursor 0)
+w8 [0x400C62D8]=0xFF  func_0039DAB0+0x1A8    <- POP   (cursor -1)
+w8 [0x400C62D8]=0x00  func_0039DA78+0x150    <- PUSH
+w8 [0x400C62D8]=0xFF  func_0039DAB0+0x1A8    <- POP
+...  301 escritas ao todo, alternando, e com aninhamento (cursor chega a 1)
+```
+
+**`func_0039DA78` é o push e `func_0039DAB0` é o pop, e a pilha está equilibrada.** O
+mecanismo da fábrica está são. O `-1` é o estado **correcto** de uma pilha vazia.
+
+## O que isto quer dizer, e é melhor do que a leitura anterior
+
+Não falta um `push`. O que acontece é que **`func_0024E3D0` pergunta "qual é o produto
+corrente?" num momento em que não há produto corrente** — fora de qualquer par push/pop.
+
+Ou seja, mais uma vez, **contexto errado** — o mesmo veredicto dos outros cinco sítios do
+dia. A fábrica responde correctamente "não tenho nada" (NULL), e é o chamador que não devia
+estar a perguntar ali, ou devia estar dentro de um push que não abrange este ponto.
+
+## A pergunta final, e agora é mesmo a última desta cadeia
+
+**Porque é que o walk de registos do WAD chama `vt[0x48]` fora de um push?** Duas leituras,
+ambas mediveis com a instrumentação que já existe:
+
+1. **O push devia envolver este ponto** e não envolve — um `func_0039DA78` em falta, ou
+   com âmbito curto demais.
+2. **A chamada não devia acontecer de todo** para estes dois registos (tipos `0x3` e `0xF`)
+   — chega lá por um ramo que não devia ser tomado.
+
+Um `PS3_TRACE_ICALL_TO=0x0039DA78` com timestamps ao lado do `[FAB48]` distingue as duas:
+se houver um push imediatamente antes noutro objecto, é (1); se não houver push nenhum na
+vizinhança, é (2).
+
+## Nota de método — a nona correcção do dia
+
+Escrevi "o push nunca correu" a partir de um único facto (`cursor = -1`) sem medir o
+próprio push. Correu 150 vezes. É o mesmo erro de sempre, na mesma forma: **um estado
+observado não conta a história de como se lá chegou.** O watch conta.
