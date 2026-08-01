@@ -348,3 +348,59 @@ o registo devolve a classe errada para a chave 0x4077ED10
 **Porque é que o registo de tipos devolve a classe errada para `0x4077ED10`?** É a mesma
 tabela `0x00868D48` e a mesma família de código dos `[WADLD-VT28]`, do `CB56C`, do TYPE15.
 A diferença é que agora há uma chave concreta para seguir, em vez de um sintoma.
+
+---
+
+# O índice é ZERO — e isso é a Parede D, com o mecanismo escrito
+
+`func_0039D3C4`, lido do lift, é o lookup do registo:
+
+```c
+nivel = *(sing + 0x44);
+base  = *(sing + 0x24);
+array = *( base + nivel*12 );
+idx   = *(uint16*)(key + 6);        // <- o TIPO do objecto-chave
+slot  = array[idx];
+return slot ? slot - 4 : 0;
+```
+
+E a medição, para a chave que a `[SING50]` já tinha identificado independentemente:
+
+```
+[REGLOOKUP] #278 key=0x4077ED10 idx=0 slot=0x400C6B54 obj=0x400C6B50 vt=0x00515008
+```
+
+**`idx = 0`.** O campo de tipo do objecto-chave (`*(uint16*)(key+6)`) vale zero, e o
+`array[0]` guarda um objecto da classe `0x00515008` — que não é um alocador de pools.
+
+Outras chaves com o mesmo `idx=0` caem no mesmo slot:
+
+```
+#19  key=0x42F85594 idx=0 -> 0x400C6B50
+#38  key=0x406387E4 idx=0 -> 0x400C6B50
+#278 key=0x4077ED10 idx=0 -> 0x400C6B50
+```
+
+## Porque isto é a Parede D
+
+O `idx` é o **tipo** do objecto. Valer zero significa que o objecto **nunca foi registado
+com um tipo** — e o registo devolve então o slot 0, o do "sem tipo", que contém outra
+coisa qualquer.
+
+É exactamente o que o `CLAUDE.md` chama Parede D (*"Registry de shaders / typemap"*): o
+registo não está populado, os objectos saem com tipo 0, e a partir daí cada consumidor
+recebe a classe errada. Os cinco sintomas do dia — `rec=0`, objecto-matriz, `pool=5`,
+`this=0`, `tab[lixo]` — são todos a jusante disto.
+
+## Ressalva honesta sobre esta medição
+
+A agulha desta sonda casou em **103 sítios** do lift, não só no `func_0039D3C4` — é um
+idioma genérico de leitura indexada. As outras 299 linhas do log **não são de confiança**:
+os campos `key`/`idx` não significam nada fora deste lookup.
+
+A linha `#278` é fiável por um motivo específico: a chave `0x4077ED10` foi medida
+**independentemente** pela sonda `[SING50]`, que está num único sítio, e bate certo. As
+outras duas linhas com `idx=0` são consistentes mas não têm essa confirmação cruzada.
+
+Uma agulha mais estreita (ancorada nas linhas próprias do `func_0039D3C4`) é o primeiro
+passo de quem retomar, antes de tratar qualquer outra linha como facto.
