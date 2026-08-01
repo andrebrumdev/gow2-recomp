@@ -243,3 +243,51 @@ objectos da classe errada, e o candidato natural continua a ser a resolução de
 
 Ambas são medições com a instrumentação que já existe (`PS3_TRACE_ICALL_TO`,
 `PS3_TRACE_TYPESLOT`, sonda na entrada). Nenhuma precisa de código novo.
+
+---
+
+# A resposta: o singleton devolve um alocador de OUTRA CLASSE
+
+Sondando o resultado da primeira chamada virtual dentro de `func_00227788` — a que produz
+o "alocador" que ela depois indexa — a corrida inteira tem **dois** resultados distintos:
+
+```
+[ALLOCSRC] #1 alloc=0x406387E0 vt=0x00514F28 tab8C[0]=0x407719A8   <- são
+[ALLOCSRC] #2 alloc=0x400C6B50 vt=0x00515008 tab8C[0]=0x00000000   <- partido
+```
+
+**As vtables são diferentes.** `0x00514F28` e `0x00515008` são duas classes distintas, e só
+a primeira tem a tabela de pools em `+0x8C`.
+
+E o `PS3_WATCH_STORE` no `0x400C6B50` já tinha mostrado a construção completa desse
+objecto — a cadeia de vptr da herança, todas escritas por `func_00411AC8`:
+
+```
+[0x400C6B50]=0x511628   func_00411AC8+0x55C
+[0x400C6B50]=0x5115B0   func_00411AC8+0x630
+[0x400C6B50]=0x511538   func_00411AC8+0x74C
+[0x400C6B50]=0x515008   func_00411AC8+0x870   <- classe final
+```
+
+**O objecto está bem construído.** Não falta inicialização nenhuma: é um objecto completo
+de uma classe que simplesmente não é um alocador de pools.
+
+## O que isto estabelece, e é o fim desta linha
+
+`func_00227788` faz `this->singleton->vt[0x50]()` e usa o resultado como alocador. Numa
+das passagens o singleton devolve um objecto de classe `0x00515008` em vez de
+`0x00514F28`, e a partir daí tudo o que se segue — o `pool=0`, o `this=0`, o nó com
+payload nulo, o `tab[lixo]`, o `FATAL` — é consequência mecânica.
+
+Fecha o padrão do dia com o mesmo veredicto que os outros quatro sítios: **não é memória,
+não é o heap, não é o lifter, não é inicialização em falta. É despacho** — um método
+virtual a devolver um objecto da classe errada.
+
+## A pergunta seguinte, e é só uma
+
+O que distingue as duas invocações do `*(vt+0x50)`? O singleton é o mesmo
+(`*(TOC-0x2A78)+0xC`); o que muda é o contexto. Medir `this`, `r4` (que vem de
+`*(obj+0x24)+0x14`) e o `code` resolvido em cada uma das duas passagens diz se o singleton
+está a escolher mal, ou se lhe estão a pedir a coisa errada.
+
+É uma sonda no mesmo sítio, com dois campos a mais. Nenhum código novo no motor.
