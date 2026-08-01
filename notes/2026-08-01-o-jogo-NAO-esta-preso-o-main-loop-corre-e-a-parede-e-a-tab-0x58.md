@@ -171,12 +171,62 @@ a primeira palavra `0x9102FFFF` é usada como ponteiro de vtable, e o log traz
 - **POR VERIFICAR:** se `boot_gow2.pre_v3` (a referência) tem a mesma corrupção em
   `tab[0x58]` — decide se isto é regressão ou defeito antigo.
 
-## A próxima medição, exacta
+## O watch de store: o escritor NÃO passa por `vm_write*`
 
-`PS3_WATCH_W32=0x400C3D88` (o watcher de store do `ppu_loader.cpp:1462`, com atribuição
-simbólica via `dladdr`) numa corrida com `PS3_TRACE_TYMAP=1`. Isso responde sem
-inferência **quem escreve `0x9102FFFF` por cima do slot**, e quando — antes ou depois de
-`tab[0x58]` ser publicado.
+`PS3_WATCH_W32=0x400C3D88,0x00868DA0` — **8 escritas, byte a byte idênticas em 2/2
+corridas**, e são exactamente o ciclo de vida do objecto:
+
+```
+[0x00868DA0]=0x00000000  ra0=func_002B2998+0x180   ra1=func_002B2EEC+0xD0   <- tab[0x58] a zero
+[0x400C3D88]=0x40083D04  ra0=func_00263178+0x9CC   ra1=func_002B28BC+0x120  <- allocator
+[0x400C3D88]=0x00511628  ra0=func_002B11B8+0x757C  ra1=ps3_indirect_call    <- ctor base
+[0x400C3D88]=0x005116E8  ra0=func_002B11B8+0x7670                           <- ctor
+[0x400C3D88]=0x00517198  ra0=func_002B11B8+0x8244                           <- ctor
+[0x400C3D88]=0x005170B8  ra0=func_002B11B8+0x8344                           <- vtable FINAL
+[0x00868DA0]=0x400C3D88  ra0=func_0042B078+0x1A4                            <- publica em tab[0x58]
+```
+
+A sequência `0x511628 → 0x5116E8 → 0x517198 → 0x005170B8` é o idioma clássico de
+atribuição de vptr ao longo da cadeia de herança em C++. **E depois nada.**
+
+Como o `PS3_WATCH_W32` só vive dentro de `vm_write32`, isso podia ser um store de 8/16/64
+bits. Foi acrescentado um `PS3_WATCH_STORE` (commit `fc2bddc` no ps3recomp) no `heap_w()`
+— o único ponto por onde passam `vm_write8/16/32/64` — com disparo por **sobreposição de
+intervalo**. Resultado, 2/2 corridas (uma delas com `thr_end=1`):
+
+```
+WATCHSTORE total=8   -- as MESMAS 8, todas w32, nenhuma com o veneno
+[WADLD-VT28] #28 obj=0x400C3D88 vt=0x005170B8   (mesmo log)
+[WADLD-VT28] #49 obj=0x400C3D88 vt=0x9102FFFF   (mesmo log)
+```
+
+**MEDIDO: o stomp não passa por nenhum `vm_write*`.** Logo é uma escrita **HOST directa
+em `vm_base`**. Os candidatos, enumerados por grep no motor e no port:
+
+| sítio | ficheiro |
+|---|---|
+| `movie_io_pread(…, vm_base + base + avail, n, …)` | `gow2-recomp/host_gow2_f2b.c:212` (o pump do stream do WAD) |
+| `memmove/memcpy` da compactação do ring | `host_gow2_f2b.c:166,178` |
+| `memcpy(vm_base + dst_ea, bounce, got)` | `libs/video/fios_aread_hle.c:136` (AREAD HLE) |
+| `memcpy(ea_ptr, ls_ptr, size)` — **PUT de SPU** | `runtime/spu/spu_dma.h` |
+| `fread(vm_base + buf, …)` | `runtime/ppu/ppu_fs.cpp:427` (cellFsRead) |
+
+Geometria que torna dois deles plausíveis: o ring do stream é
+`base=0x40083D40 cap=262144` → acaba em `0x400C3D40`, e os objectos de tipo foram
+alocados **logo a seguir** (`0x400C3D48`, `0x400C3D88`). Um overrun de ≥0x48 bytes
+aterra em cheio no alvo. E o conteúdo que lá fica (`9102FFFF 07009502 B90B9002 …`) tem
+mesmo cara de payload comprimido.
+
+Os cinco sítios foram instrumentados com `ps3_watch_store_bulk(ea, len, who)` — mesma
+env var, etiqueta `[WATCHSTORE] BULK`, chamada **depois** da escrita para imprimir o
+valor que ficou no alvo. Medição a correr.
+
+## O `2001` é limite duro — confirmado
+
+Repetida a corrida com `timeout=45 s` em vez de 90 s: `2B2DD0 tot=2001` **outra vez**.
+Não é proporcional ao tempo. O tick de frame pára ao fim de 2001 iterações e o processo
+continua vivo o resto da corrida. Fica como linha de investigação **separada** da do
+`tab[0x58]`.
 
 ## Lição de método (a terceira vez que esta sessão a paga)
 
