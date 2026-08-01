@@ -822,3 +822,43 @@ escolhe o caminho que assume um produto empilhado.
 `r26` é callee-saved e vem da entrada de `func_0024E1E8` ou do seu chamador
 (`func_0024F028`). Uma sonda na entrada — a técnica que se provou a única fiável neste
 lift — dá o valor e a origem numa corrida.
+
+---
+
+# Segunda suspeita de bug do lifter — também refutada, e antes de a escrever como facto
+
+`func_0024E1E8` (onde o `cr3` decide o ramo) é um **fragmento**: restaura os callee-saved
+do stack mas nunca define `r26`. O prólogo real está em `0x0024E19C`
+(`stdu r1,-224(r1)` … `0x0024E1D8: mr r26, r5`), e `func_0024E19C` **não existe no lift**.
+
+Isso tinha toda a cara do padrão que o `CLAUDE.md` manda auditar. Verifiquei antes de o
+escrever:
+
+1. **Chamadas directas a `0x0024E19C` no PPC original: zero.** Ninguém lá salta por `bl`.
+2. **O prólogo está liftado** — sob outro nome, `func_0024E198` (o lifter começou a função
+   quatro bytes antes, no `mfcr`/`cmpwi` que precede o `stdu`), e contém as duas linhas que
+   interessavam:
+
+```c
+vm_write64(ctx->gpr[1] + 0xB0, ctx->gpr[26]);   // std r26, 176(r1)
+ctx->gpr[26] = ctx->gpr[5];                     // mr  r26, r5
+```
+
+**Não há bug.** É a segunda hipótese de defeito do lifter que levanto hoje e a segunda que
+cai por verificação — a primeira foi o `cr3` cross-fragment. Ambas pareciam sólidas
+estaticamente.
+
+## O facto que fica, e é o topo da cadeia em termos do próprio jogo
+
+`r26` é o **terceiro argumento** (`r5`) de `func_0024E198`. `r26 == 0` significa que **o
+chamador passou `r5 = 0`** — e é isso que selecciona o caminho que assume um produto
+empilhado na fábrica.
+
+O chamador é `func_0024F028` (elo #7 do backtrace original). A pergunta final, em termos
+do jogo e não da máquina:
+
+> **Porque é que `func_0024F028` chama `func_0024E198` com o terceiro argumento a zero
+> para os registos de tipo `0x3` e `0xF`?**
+
+É uma sonda na entrada de `func_0024F028` a registar os seus próprios argumentos — a mesma
+técnica que se provou a única fiável neste lift, e que resolve numa corrida.
