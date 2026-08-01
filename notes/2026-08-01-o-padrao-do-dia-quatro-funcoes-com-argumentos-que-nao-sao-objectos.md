@@ -72,3 +72,32 @@ outro, o defeito fica reduzido a um único call site.
 investigação deixou de ser "o boot pára algures" e passou a ter quatro sintomas do mesmo
 mecanismo, nomeados à função e ao argumento, com contra-exemplos sãos medidos ao lado de
 cada um.
+
+---
+
+## Correcção ao enquadramento: o #4 não é despacho indirecto
+
+`PS3_TRACE_ICALL_TO=0x00220284` deu **zero** — `func_00220284` nunca é alcançada por
+chamada indirecta. E não tem um único chamador por `bl` no lift. É alcançada por
+**tail-call**, de quatro sítios, todos com a mesma forma:
+
+```c
+ctx->gpr[3] = ctx->gpr[26];                              // this = r26
+{ g_trampoline_fn = (void(*)(void*))func_00220284; return; }
+```
+
+Confirmado no PPC original (`0x00221040: mr r3, r26` … `0x00221064: b -> 0x00220284`), e
+`0x00220284` é uma entrada de função legítima (`stdu r1,-144(r1)` / `mflr` / `mr r31,r3`) —
+não é fragmento mal cortado, ao contrário do que aconteceu com `0x002545D4`.
+
+Logo, para o #4, **o `this=0` é um `r26` que já vinha a zero** dentro de
+`func_00220F88`/`func_002210BC`. O `r26` é callee-saved e é reposto da pilha
+(`0x00221048: ld r26, 112(r1)`), portanto o valor vem da entrada dessa função.
+
+Isso corrige o enquadramento que escrevi acima: *"é despacho"* é verdade para o #1–#3, mas
+**o #4 é um nulo que se propaga por chamadas directas**. A pergunta certa para ele passa a
+ser "quem chamou `func_00220F88` com um objecto nulo", não "quem escolheu o alvo".
+
+**Próxima medição para o #4:** sonda na entrada da função de que
+`func_00220F88`/`func_002210BC` são fragmentos, registando `r3` — o mesmo padrão do
+`[E545B0]` e do `[CPY284]`, que foi o método fiável o dia inteiro.
