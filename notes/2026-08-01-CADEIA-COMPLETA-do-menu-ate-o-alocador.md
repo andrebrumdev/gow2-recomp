@@ -291,3 +291,60 @@ O que distingue as duas invocações do `*(vt+0x50)`? O singleton é o mesmo
 está a escolher mal, ou se lhe estão a pedir a coisa errada.
 
 É uma sonda no mesmo sítio, com dois campos a mais. Nenhum código novo no motor.
+
+---
+
+# O último elo: uma chave concreta devolve a classe errada
+
+Sondando o pedido e a resposta, na mesma corrida:
+
+```
+[SING50]  109 despachos, TODOS iguais:
+          sing=0x400C6210 vt=0x00514FA0 opd=0x0051B0A0 code=0x0039D3C4
+          -- o singleton e o método são CONSTANTES; só a `key` varia.
+
+[ALLOCSRC] dois resultados:
+          alloc=0x406387E0 vt=0x00514F28 tab8C[0]=0x407719A8   (são)
+          alloc=0x400C6B50 vt=0x00515008 tab8C[0]=0x00000000   (partido)
+```
+
+E a correlação, linhas consecutivas:
+
+```
+[SING50]   #107 ... key=0x4077ED10 obj24=0x4077CAB8
+[ALLOCSRC] #2   alloc=0x400C6B50 vt=0x00515008 tab8C[0]=0
+[vm] UNCOMMITTED write32 ... ra=func_00220284+0x1244
+```
+
+**Uma chave concreta — `0x4077ED10` — devolve um objecto de outra classe.** As outras 108
+devolvem a classe certa. E o `obj24=0x4077CAB8` é o mesmo objecto que aparece como
+`p50=0x4077CAB8` no `[CPY284] #13`, o que corre com `this=0`.
+
+O `code=0x0039D3C4` é da família `0x39Dxxx` — **o registo de tipos**, o mesmo mecanismo que
+atravessa esta investigação do princípio ao fim (`func_0039D428`, `func_0039D764`,
+`tab[(tipo<<2)]` em `0x00868D48`).
+
+## A cadeia completa, doze elos, todos medidos
+
+```
+o registo devolve a classe errada para a chave 0x4077ED10
+ └─ alloc=0x400C6B50 (vt 0x00515008) não tem tabela de pools em +0x8C
+   └─ *(alloc+0x8C) = 0 vai como "pool" para o pop
+     └─ o pop lê *(0+4) e devolve lixo
+       └─ func_002182A4 não verifica o retorno
+         └─ func_002210BC põe-no em r26
+           └─ func_00220284 corre com this=0
+           └─ e o objecto que devia existir nunca é alocado
+             └─ o nó da lista fica com payload 0
+               └─ func_002545D4 lê o "tipo" do endereço 2 → tab[lixo]=0
+                 └─ FATAL: stuck calling 0x00514E80
+                   └─ thr_auto_load nunca termina
+                     └─ gate 0/6 no elo AUTO_LOAD
+                       └─ o menu não aparece
+```
+
+## O que sobra, e é a mesma pergunta de sempre — mas agora com uma chave
+
+**Porque é que o registo de tipos devolve a classe errada para `0x4077ED10`?** É a mesma
+tabela `0x00868D48` e a mesma família de código dos `[WADLD-VT28]`, do `CB56C`, do TYPE15.
+A diferença é que agora há uma chave concreta para seguir, em vez de um sintoma.
