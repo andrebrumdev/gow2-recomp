@@ -862,3 +862,57 @@ do jogo e não da máquina:
 
 É uma sonda na entrada de `func_0024F028` a registar os seus próprios argumentos — a mesma
 técnica que se provou a única fiável neste lift, e que resolve numa corrida.
+
+---
+
+# O topo, na lógica do próprio jogo: `r5 = (x == r31)`
+
+O sítio em `func_0024F028` que produz o terceiro argumento:
+
+```c
+r3 = <resultado da chamada indirecta anterior>;
+r3 = r31 ^ r3;                        // XOR
+r0 = sraw(r3, 31);                    // 0 se >=0, -1 se <0
+r5 = (r0 ^ r3) - r0;                  // = abs(r3)
+r5 = r5 - 1;                          // abs - 1
+r5 = rlwinm(r5, 1, 31, 31);           // extrai o bit que fica a 1 só quando abs==0
+func_0024E198(r3 = r29, r4 = r26, r5);
+```
+
+É o idioma clássico de **`r5 = (x == r31) ? 1 : 0`**: se `x == r31`, o XOR dá 0, o `abs`
+dá 0, o `-1` dá `0xFFFFFFFF` e o `rlwinm` extrai um 1. Se forem diferentes, dá 0.
+
+**`r5 == 0` significa portanto: `x != r31`.**
+
+E é esse `r5 = 0` que vira `r26 = 0` dentro de `func_0024E198`, que activa o `cr3`, que
+manda o walker pedir o produto à fábrica — o produto que não existe.
+
+## A cadeia, do princípio ao fim, em uma frase por elo
+
+```
+uma comparação em func_0024F028 dá "diferente" (x != r31)  ->  r5 = 0
+ -> func_0024E198 recebe r26 = 0
+   -> cr3 encaminha para o ramo que assume um produto empilhado
+     -> func_0024E3D0 pede o produto corrente à fábrica 0x400C6210
+       -> o cursor +0xC8 está a -1 (pilha vazia) e func_0039E5A8 devolve NULL
+         -> escreve *(NULL+0x20) = 0 como tipo do objecto
+           -> o lookup do registo devolve array[0] -> classe 0x00515008
+             -> essa classe não tem tabela de pools em +0x8C
+               -> o "pool" é 0, o pop devolve lixo, ninguém verifica
+                 -> this=0 em func_00220284; o objecto nunca é alocado
+                   -> nó de lista com payload 0
+                     -> func_002545D4 lê o "tipo" do endereço 2 -> tab[lixo]=0
+                       -> FATAL: stuck calling 0x00514E80
+                         -> thr_auto_load nunca termina -> gate 0/6
+                           -> o menu não aparece
+```
+
+## A pergunta que abre a próxima sessão
+
+**O que é `x` e o que é `r31` nessa comparação, e porque diferem para os registos de tipo
+`0x3` e `0xF`?** `x` vem da chamada indirecta imediatamente anterior; `r31` é
+callee-saved de `func_0024F028`. Uma sonda nesse ponto — a registar `x`, `r31` e o `r5`
+resultante — responde numa corrida, e é a mesma técnica que resolveu todos os outros elos.
+
+O gate `PS3_24E3D0_KEEP_TYPE_ON_NULL` já provou (3/3) que resolver isto derruba os oito
+elos finais de uma vez.
