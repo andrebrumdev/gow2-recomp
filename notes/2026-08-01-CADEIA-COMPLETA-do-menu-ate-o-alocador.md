@@ -625,3 +625,48 @@ vizinhança, é (2).
 Escrevi "o push nunca correu" a partir de um único facto (`cursor = -1`) sem medir o
 próprio push. Correu 150 vezes. É o mesmo erro de sempre, na mesma forma: **um estado
 observado não conta a história de como se lá chegou.** O watch conta.
+
+---
+
+# Sem truncagem: a pilha está equilibrada e a consulta chega DEPOIS do último pop
+
+O cap do meu próprio watch estava escrito a martelo (300) e cortava em silêncio. Com
+`PS3_WATCH_STORE_CAP=-1`:
+
+```
+352 escritas do cursor (eram 301, truncadas)
+push = 175      pop = 175      <- perfeitamente equilibrado
+
+...
+w8 [0x400C62D8]=0x00  func_0039DAB0   <- pop
+w8 [0x400C62D8]=0xFF  func_0039DAB0   <- pop FINAL, cursor volta a -1
+[FAB48] #1 fab=0x400C6210 ... cursor+C8=-1  <NEGATIVO>
+[FAB48] #2 fab=0x403008E8 ... cursor+C8=-1  <NEGATIVO>
+```
+
+**Não havia contradição nenhuma.** A "última escrita = 0" que eu tinha lido era só o cap a
+esconder o pop final. A pilha esvazia-se normalmente e a consulta acontece **imediatamente
+a seguir**, na linha seguinte do log.
+
+## A leitura correcta, e é mais precisa que a anterior
+
+Não falta um `push` e não há desequilíbrio: **a consulta chega depois do ciclo terminar.**
+O walker pergunta "qual é o produto corrente?" quando a fábrica já fechou o último par
+push/pop e voltou ao estado vazio.
+
+Duas leituras possíveis, e é aqui que a próxima sessão pega:
+
+1. **O produto devia ter sido guardado antes do último pop** — alguém devia ter copiado o
+   `*(fab+0x48+cursor*4)` para outro lado enquanto ainda estava empilhado, e não copiou.
+2. **A consulta devia acontecer mais cedo**, dentro do último par — o walker chama
+   `vt[0x48]` fora da janela em que a resposta existe.
+
+A ordenação no log (pop final e depois a consulta, linhas consecutivas) favorece (2), mas
+**não a prova**: falta ver se há um caminho em que a consulta corre antes do pop.
+
+## Terceira armadilha de instrumentação do dia
+
+O `lr` do guest, o tracer que só cobria metade dos despachantes, e agora **um cap escrito a
+martelo**. As três mentiram da mesma maneira: por omissão, e a omissão parecia prova. O cap
+ficou configurável (`PS3_WATCH_STORE_CAP`, `<0` = sem limite) e o comentário no motor conta
+porquê.
