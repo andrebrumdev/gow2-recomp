@@ -116,9 +116,57 @@ O fix mínimo e fiel é **o pump passar a ler `base`/`cap` do objecto de stream*
 nunca escrever fora desse intervalo — exactamente a disciplina que o `f2b_stream_fill` já
 tem. Vira `patch_*.py` idempotente, como manda o CLAUDE.md.
 
+## O fix aplicado e o que ele mede
+
+`recomp_mid_v2/patch_fios_f2b_pump_ring_bounds.py` (idempotente, `ALREADY` na 2.ª
+passagem; o nome começa por `patch_fios_f2b_p` para o glob do `apply_all_patches.sh` o
+correr **depois** do `patch_fios_f2b_open_block_install.py`, que instala o bloco).
+
+Medido em **3/3 corridas** com `PS3_WATCH_STORE=0x400C3D88 PS3_TRACE_TYMAP=1`:
+
+| sinal | antes | depois |
+|---|---:|---:|
+| `F2B-STREAM-PUMP pumped` | 20169344 em 154 chunks | **262144 em 2 chunks** (um ring) |
+| `[WATCHSTORE] BULK` sobre o alvo | 19 | **0** |
+| `[WADLD-VT28] #49 vt` | `0x9102FFFF` | **`0x005170B8`** (igual ao #28) |
+| `ICALL-BAD ctr=0x40637408` | 10 | **0** |
+| `F2B-STREAM-FILL` | 64 | 64 |
+| `startseq(handle=` | 2 | 2 |
+| `R_PermA full` | 1 | 1 |
+| `REPLAY-NOPIC` | 4 | 4 |
+| `SetFlip` | ~2250 | ~2380 |
+
+**A corrupção está resolvida e não há regressão nos elos a montante.**
+
+## Mas a parede não caiu — mudou de sítio, e isso diz-se sem rodeios
+
+Nas mesmas 3 corridas o boot continua a abortar, agora noutro alvo:
+
+```
+antes:   [ppu] FATAL: stuck calling 0x40678C90 (2000 times) -- aborting run
+depois:  [ppu] FATAL: stuck calling 0x00514E80 (2000 times) -- aborting run
+                [ICALL-BAD] ctr=0x00514E80 lr=0x0024E2D4 r3=0x00000000 r12=0x88004044
+```
+
+`thr_auto_load end` deu **0 em 3/3 antes E depois** nesta série (as corridas com
+`PS3_TRACE_TYMAP` ligado nunca lá chegaram; sem ele, o histórico é ~1 em 3). Ou seja:
+**estas corridas não provam nem regressão nem não-regressão** do `thr_end` — a prova tem
+de vir do `smoke_chain_gate.sh` com as sondas desligadas, que está a correr.
+
+O novo alvo é qualitativamente diferente: `0x00514E80` está no **segmento de dados do
+guest** (vizinhança das vtables `0x005170B8`/`0x0051B2F8`), não é lixo de heap como o
+`0x40678C90`. O `lr=0x0024E2D4` cai no walker de registos do WAD
+(`func_0024E1E8` → `func_0024D570`, laço `r24` de 0 a 0x30 de 4 em 4). Parece uma
+vtable a ser chamada onde devia estar um OPD — uma indirecção a mais ou a menos —, não
+memória destruída.
+
+**Hipótese, não medida:** com o objecto de tipo intacto, o walk do WAD passou a executar
+código que antes nunca corria (com a vtable destruída, o despacho caía no `ICALL-BAD` e
+não fazia nada), e o `0x00514E80` é o primeiro problema real desse caminho. Consistente
+com o log crescer ~200 linhas, mas **ninguém provou** que é código novo.
+
 ## Ressalva honesta
 
-Isto explica a corrupção de `tab[0x58]` e os `ICALL-BAD`. **Não está provado** que seja a
-única coisa entre aqui e um menu — o `2B2DD0 tot=2001` (limite duro, ver a nota irmã de hoje)
-continua por explicar, e nada garante que o desenho volte só por isto. O que está provado é
-que este stomp é real, é nosso, e destrói o objecto que o walk do typemap precisa.
+Isto explica e corrige a corrupção de `tab[0x58]`. **Não está provado** que seja a única
+coisa entre aqui e um menu. O que está provado é que este stomp era real, era nosso, e
+destruía o objecto que o walk do typemap precisa.

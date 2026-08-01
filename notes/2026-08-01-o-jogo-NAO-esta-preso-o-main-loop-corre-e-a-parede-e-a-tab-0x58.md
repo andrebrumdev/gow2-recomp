@@ -221,12 +221,28 @@ Os cinco sítios foram instrumentados com `ps3_watch_store_bulk(ea, len, who)` �
 env var, etiqueta `[WATCHSTORE] BULK`, chamada **depois** da escrita para imprimir o
 valor que ficou no alvo. Medição a correr.
 
-## O `2001` é limite duro — confirmado
+## O `2001` é limite duro — e é o NOSSO disjuntor (resolvido)
 
 Repetida a corrida com `timeout=45 s` em vez de 90 s: `2B2DD0 tot=2001` **outra vez**.
-Não é proporcional ao tempo. O tick de frame pára ao fim de 2001 iterações e o processo
-continua vivo o resto da corrida. Fica como linha de investigação **separada** da do
-`tab[0x58]`.
+Não é proporcional ao tempo.
+
+E a explicação estava no fim dos mesmos logs, escondida por um `head -5` meu:
+
+```
+[ppu] FATAL: stuck calling 0x40678C90 (2000 times) -- aborting run
+```
+
+É o `PS3_STUCK_ICALL_LIMIT` do `ppu_loader.cpp` (default **2000**). Cada frame do main
+loop faz uma chamada indirecta não-resolvida para o **mesmo** alvo `0x40678C90`; ao fim de
+2000 repetições idênticas o motor faz `exit(3)`. Daí `2B2DD0 tot=2001` — 2000 abortadas
+mais a que estava em curso — igual ao byte em 3/3 corridas e independente do timeout.
+
+**Não é um limite do jogo nem uma parede nova: é o nosso circuit-breaker a matar o
+processo**, e o `0x40678C90` é a mesma assinatura já registada na nota `gate6-0x40678c90`.
+
+Lição de método, outra vez a mesma: um `grep ... | head -5` escondeu a linha que fechava
+a questão. Quando um número não faz sentido, ler o **fim** do log inteiro antes de
+construir hipóteses.
 
 ## Lição de método (a terceira vez que esta sessão a paga)
 
