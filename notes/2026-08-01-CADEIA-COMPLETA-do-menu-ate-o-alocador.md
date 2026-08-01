@@ -1016,3 +1016,53 @@ escrever depois. A metade de cima não existe: são hipóteses que caíram.
 
 Fica assim marcado no documento, para que ninguém herde as minhas suposições como se
 fossem factos.
+
+---
+
+# CORRECÇÃO DA CORRECÇÃO: li a polaridade ao contrário. O elo estava certo.
+
+Os sete sítios que saltam para `func_0024E3D0` têm todos a mesma condição:
+
+```c
+if ((!((ctx->cr >> 12) & 2))) { g_trampoline_fn = func_0024E3D0; return; }
+```
+
+`(cr >> 12) & 2` é o bit **EQ** de `cr3`, e `cr3` foi posto por `cmpwi cr3, r26, 0`.
+Logo a condição é **`r26 != 0`** — e não `r26 == 0`, como eu tinha escrito.
+
+**Com `r26 = 1` medido, o ramo É tomado.** Não havia contradição nenhuma entre o `[R26]` e
+o `[TYPEASSIGN]`: eram consistentes, e fui eu que inverti a leitura.
+
+## O que isto repõe
+
+A retractação anterior (*"os dois elos do topo estão mal atribuídos"*) **estava ela própria
+errada**. A cadeia estava certa; a descrição é que tinha o sinal trocado. Reposta:
+
+```
+o call site passa r5 = 1  ->  r26 = 1
+ -> cr3 diz "r26 != 0"  ->  ramo para func_0024E3D0
+   -> pede o produto corrente à fábrica 0x400C6210
+     -> cursor +0xC8 = -1 (pilha vazia)  ->  func_0039E5A8 devolve NULL
+       -> escreve *(NULL+0x20) = 0 como tipo do objecto
+         -> lookup devolve array[0] -> classe 0x00515008 (sem tabela de pools)
+           -> pool=0 -> pop devolve lixo -> ninguém verifica
+             -> this=0, objecto nunca alocado, nó com payload 0
+               -> tab[lixo]=0 -> FATAL 0x00514E80 -> thr_auto_load 0 -> sem menu
+```
+
+**Cada elo desta cadeia está agora medido**, e o gate `PS3_24E3D0_KEEP_TYPE_ON_NULL` prova
+(3/3) que o troço final é causal.
+
+## O que continua genuinamente desconhecido
+
+**Uma coisa só: porque é que o cursor `+0xC8` da fábrica está a `-1` no instante em que o
+walker pede o produto.** A pilha está equilibrada (175 push / 175 pop) e o pedido chega
+depois do último pop — mas não se sabe se o produto devia ter sido guardado antes, ou se o
+pedido devia acontecer dentro do par.
+
+## Décima quarta correcção — e a primeira que devolve um elo em vez de o tirar
+
+Retirei um elo correcto por ter lido `!(EQ)` como "igual a zero". As treze anteriores foram
+conclusões a mais; esta foi uma conclusão a menos, pelo mesmo defeito de fundo: **ler
+depressa e escrever antes de conferir**. A diferença é que desta vez a verificação era
+gratuita — estava tudo no ecrã.
