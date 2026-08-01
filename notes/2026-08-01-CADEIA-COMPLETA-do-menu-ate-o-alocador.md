@@ -197,3 +197,49 @@ ambas baratas de testar:
 
 A (1) resolve-se lendo `func_00411A5C` e o sítio de `func_002B11B8+0x6FB8`; a (2) com uma
 sonda na entrada do popular. Nenhuma das duas precisa de adivinhar.
+
+---
+
+# E fecha o círculo: `0x400C6B50` não é um alocador de pools
+
+`func_0022E6A4` — a única função que escreve na tabela do objecto partido — **nunca cria
+pools**. As suas chamadas, todas:
+
+```
+func_002637D8 (×4)   func_00252564   func_0025BE3C
+```
+
+Nenhuma é `func_002BB1B0` (o criador de pool), nem `func_0022851C`, nem `func_00228368`.
+E carimba `0xDEADBEEF` no início — um magic de sentinela, coisa de quem inicializa memória
+que ainda não tem dono.
+
+Compare-se com o construtor a sério, `func_00228368`, que zera as **três** tabelas do
+objecto (`+0x48`, `+0x8C`, `+0xD0`, 17 entradas cada) e depois **ou** cria os pools de raiz
+(`func_0022851C`, quando `r3==0`) **ou** copia os ponteiros de um template.
+
+**Logo `0x400C6B50` não é um objecto desta família.** A escrita de `0` em `0x400C6BDC` que
+o watch apanhou não é "a tabela de pools inicializada e nunca preenchida" — é outra
+estrutura, de outra classe, que calha ocupar aquela memória.
+
+## O que isto quer dizer
+
+O círculo fecha no padrão do dia: **`func_00227788` recebeu, da sua primeira chamada
+virtual, um objecto que não é o alocador que ela assume.** É o mesmo mecanismo do
+`func_002545B0` a receber um objecto-matriz, e do `func_002545D4` a ler um "tipo" do
+endereço 2.
+
+Não é memória corrompida (quatro watches limpos), não é o heap (8 alocações, 8 sucessos),
+não é o lifter (cada passo desmontado e comparado). É **despacho**: métodos a correr sobre
+objectos da classe errada, e o candidato natural continua a ser a resolução de tipos
+`tab[(tipo<<2)]` — a mesma tabela `0x00868D48` que atravessa esta investigação toda.
+
+## O que fica por fazer, em ordem
+
+1. Sondar a **primeira chamada virtual** dentro de `func_00227788` (`*(vt+0x50)` do
+   singleton `*(TOC-0x2A78)+0xC`): que objecto devolve, e qual é o seu tipo. Se devolver
+   `0x400C6B50` quando devia devolver um `0x406387E0`-like, o defeito está no que essa
+   vtable resolve.
+2. Cruzar com o registo de tipos: `0x400C6B50` está registado como que tipo, e por quem.
+
+Ambas são medições com a instrumentação que já existe (`PS3_TRACE_ICALL_TO`,
+`PS3_TRACE_TYPESLOT`, sonda na entrada). Nenhuma precisa de código novo.
