@@ -706,3 +706,38 @@ Quatro ferramentas mentiram-me, todas por omissão:
 As quatro estão corrigidas e documentadas no motor, ao lado do código que as causou. **É o
 que fica de mais reutilizável desta sessão** — mais do que qualquer elo individual da
 cadeia.
+
+---
+
+# Uma hipótese de bug do lifter, levantada e REFUTADA por medição
+
+Auditando o walker do WAD por `cr3` (o `ctx->cr >> 12` que decide o ramo que leva ao
+`func_0024E3D0`), cinco fragmentos **usam `cr3` sem o definirem**:
+
+```
+func_0024E1E8   set=[27]  use=[42,62]     ok
+func_0024E208   set=[19]  use=[34,54]     ok
+func_0024E26C   set=[]    use=[29]        <- usa sem definir
+func_0024E29C   set=[]    use=[15]        <- usa sem definir
+func_0024E2A8   set=[]    use=[12]        <- usa sem definir
+func_0024E270   set=[]    use=[28]        <- usa sem definir  (é o elo #6 do backtrace)
+func_0024E284   set=[]    use=[22]        <- usa sem definir
+```
+
+Estaticamente, isto parece exactamente o **fallthrough cross-fragment** que o `CLAUDE.md`
+manda auditar (o padrão do fix `func_002550C8`). No modelo do lifter é legítimo — o `ctx`
+é partilhado e `cr3` sobrevive à queda — **mas só se esses fragmentos nunca forem entrados
+de fora**. E todos os cinco estão na tabela de lookup, logo podem ser alvo de um `bctrl`.
+
+**Medido, com o cap já corrigido (`PS3_TRACE_ICALL_TO_CAP=-1`):**
+
+```
+entradas indirectas nos cinco fragmentos: 0
+[FAB48] (a falha) continua a acontecer:   2
+```
+
+Zero. Numa corrida que chega ao ponto de falha. **Nenhum deles é entrado de fora**, `cr3`
+chega sempre do fragmento anterior, e a hipótese cai.
+
+Vale registá-la na mesma: é a primeira vez nesta sessão que um "zero" é de confiança, e é
+por causa do cap corrigido meia hora antes. Antes disso teria sido mais um falso negativo.
