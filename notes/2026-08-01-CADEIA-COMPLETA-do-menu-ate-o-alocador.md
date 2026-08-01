@@ -1158,3 +1158,26 @@ hipóteses testáveis:
 
 Nenhuma se resolve por leitura estática — ambas precisam de uma corrida com sonda nos dois
 contextos, a comparar o estado da fábrica.
+
+---
+
+# Com o gate ligado, a parede seguinte é a MESMA função com o tipo errado
+
+Estendido o `[OOBRA]` a todos os OOB (estava limitado a `a >= 0xFFFF0000`, o que excluía
+precisamente a classe que o seu comentário descreve — quinta armadilha de instrumentação
+da sessão). Com `PS3_24E3D0_KEEP_TYPE_ON_NULL=1`:
+
+```
+[OOBRA] @0xE5726D65 ra1=func_002545D4+0x750   <- a MESMA função da cadeia
+[OOBRA] @0xE5726D6F ra1=func_0039D764+0x80C   <- e a MESMA fábrica
+[OOBRA] @0xE5726D67 ra1=func_0039D764+0x840
+```
+
+`0xE5726D65` contém `72 6D 65` = `"rme"` — outra vez texto usado como ponteiro.
+
+**Confirma o que o gate já sugeria:** manter o tipo em `2` não é a resposta. Com o tipo
+errado, o objecto é lido com o layout errado e os campos vêm texto — e o walk volta às
+mesmas duas funções (`func_002545D4`, `func_0039D764`) por outro caminho.
+
+O objecto precisa do **tipo certo**, e o tipo certo só existe se a fábrica tiver produto.
+Fecha o círculo no mesmo sítio, e por isso o alvo continua a ser esse, não a escrita.
