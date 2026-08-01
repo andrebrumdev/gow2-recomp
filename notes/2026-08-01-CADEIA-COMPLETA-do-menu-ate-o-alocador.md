@@ -133,3 +133,67 @@ Não é "porque falha o heap" — o heap não falha. É **"quem devia criar os p
 Provei que uma das duas saídas NULL não acontecia e **concluí por eliminação** qual era a
 outra, sem a medir. A medição custou uma corrida e desfez a conclusão. Numa cadeia com dez
 elos, "só pode ser a outra" não é um elo medido — é um palpite com boa reputação.
+
+---
+
+# O fim: dois construtores, um faz metade do trabalho
+
+`PS3_WATCH_STORE` nas duas entradas de índice 0 — a do alocador que funciona e a do que
+não — na mesma corrida:
+
+```
+alocador SÃO   (0x406387E0), entrada 0x4063886C:
+  w32 [0x4063886C]=0x00000000   ra0=func_00228368+0x15C  ra1=func_00411A5C+0x1D8   <- zera
+  w32 [0x4063886C]=0x407719A8   ra0=func_0022851C+0x2FC  ra1=func_00411A5C+0x1D8   <- POPULA
+
+alocador PARTIDO (0x400C6B50), entrada 0x400C6BDC:
+  w32 [0x400C6BDC]=0x00000000   ra0=func_0022E6A4+0x8C0  ra1=func_002B11B8+0x6FB8  <- zera
+                                                                                   <- e mais nada
+```
+
+**A construção do alocador tem dois passos: zerar a tabela de pools e depois populá-la.**
+
+| | zera | popula | chamados de |
+|---|---|---|---|
+| `0x406387E0` (são) | `func_00228368` | **`func_0022851C`** | `func_00411A5C` |
+| `0x400C6B50` (partido) | `func_0022E6A4` | **nunca** | `func_002B11B8` |
+
+O caminho que passa por `func_002B11B8` faz o primeiro passo e não faz o segundo. E
+`func_00227788` lê `*(alloc + (idx<<2) + 0x8C)` e passa-o directo ao pop **sem verificar** —
+porque no desenho do jogo essa entrada nunca pode ser nula.
+
+## A cadeia inteira, agora com o primeiro elo
+
+```
+func_002B11B8 constrói o alocador 0x400C6B50 e não popula a tabela de pools
+  └─ *(0x400C6B50 + 0x8C) fica a 0
+      └─ func_00227788 passa esse 0 ao func_00263554 como se fosse um pool
+          └─ o pop lê *(0+4) e devolve lixo/0
+              └─ func_002182A4 não verifica o retorno
+                  └─ func_002210BC põe-no em r26
+                      └─ func_00220284 corre com this=0 e escreve por ponteiros lidos
+                         da base da memória guest
+                      └─ e o objecto que devia ter sido alocado nunca existe
+                          └─ o nó da lista fica com payload 0
+                              └─ func_002545D4 lê o "tipo" do endereço 2 e despacha
+                                 por tab[lixo]=0
+                                  └─ FATAL: stuck calling 0x00514E80
+                                      └─ thr_auto_load nunca termina
+                                          └─ o menu não aparece
+```
+
+**Onze elos, todos medidos, nenhum inferido.**
+
+## A pergunta que fica, e é uma só
+
+Porque é que o caminho de `func_002B11B8` não corre o passo de popular? Duas hipóteses,
+ambas baratas de testar:
+
+1. **Falta uma chamada** — o construtor equivalente ao `func_0022851C` existe e não é
+   invocado neste caminho. Comparar `func_00411A5C` (que chama os dois) com o troço de
+   `func_002B11B8` que chama o `func_0022E6A4`.
+2. **A chamada existe e sai cedo** — algum argumento (contagem de classes, tamanho) chega
+   a zero e o laço de populagem não itera.
+
+A (1) resolve-se lendo `func_00411A5C` e o sítio de `func_002B11B8+0x6FB8`; a (2) com uma
+sonda na entrada do popular. Nenhuma das duas precisa de adivinhar.
