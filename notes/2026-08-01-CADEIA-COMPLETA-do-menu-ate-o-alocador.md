@@ -969,3 +969,50 @@ origem — e eu escrevi-o na mesma.
 
 A regra que falhei é a mesma que já tinha escrito duas vezes hoje: **contar antes de
 concluir.** Um elo que dispara uma vez não explica um sintoma que aparece duas.
+
+---
+
+# E a medição no ponto de uso derruba o resto: `r26 = 1`
+
+Sondado onde interessa, em vez de inferido:
+
+```
+[R26] #1 r26=0x00000001 <nao-zero: outro ramo>  r30=0x4077EBB0 r31=0x4077EBB0 lr=0x0024E1F4
+[TYPEASSIGN] dispara na mesma, duas vezes
+```
+
+**`r26` vale 1.** O ramo que eu tinha identificado como o caminho para `func_0024E3D0` **não
+é tomado**, e a função corre à mesma.
+
+Ou seja: não errei só a origem do `r26` — errei o **caminho inteiro**. `func_0024E3D0` é
+alcançada por outra via, que continua por identificar.
+
+## O estado real do conhecimento, sem embelezar
+
+**MEDIDO, elo a elo, e com causalidade provada por experiência (gate 3/3):**
+
+```
+cursor +0xC8 = -1  ->  func_0039E5A8 devolve NULL
+ -> func_0024E3D0 escreve *(NULL+0x20) = 0 como tipo do objecto
+   -> lookup do registo devolve array[0] -> classe 0x00515008 (sem pools)
+     -> pool=0 -> pop devolve lixo -> ninguém verifica
+       -> this=0, objecto nunca alocado, nó com payload 0
+         -> tab[lixo]=0 -> FATAL 0x00514E80 -> thr_auto_load 0 -> sem menu
+```
+
+**DESCONHECIDO (duas tentativas, ambas refutadas por medição):**
+
+- porque é que `func_0024E3D0` é alcançada — não é pelo `cr3`/`r26` que eu apontei
+- porque é que o cursor da fábrica está a `-1` nesse instante
+
+## Nota de método — e é a que fecha o dia
+
+Nos últimos ciclos acrescentei elos mais depressa do que os verifiquei, e **tive de
+retirar dois**. As duas retractações têm a mesma causa: escrevi a explicação e só depois a
+medi.
+
+A metade de baixo da cadeia é sólida porque foi construída ao contrário — medir primeiro,
+escrever depois. A metade de cima não existe: são hipóteses que caíram.
+
+Fica assim marcado no documento, para que ninguém herde as minhas suposições como se
+fossem factos.
