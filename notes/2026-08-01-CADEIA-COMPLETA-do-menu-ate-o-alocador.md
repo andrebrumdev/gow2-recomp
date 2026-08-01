@@ -1191,10 +1191,13 @@ Corrida com os dois gates de diagnóstico e o disjuntor levantado
 PS3_STUCK_ICALL_LIMIT=2000000`):
 
 ```
-run2  st620=11  startseq=2  r_perma=1  setflip=2386  FATAL=0
-      gates dispararam: 24E3D0-GATE=2, LIST254-GATE=1
-      thr_auto_load end = 0        <- continua a NAO chegar
+run1  st620=1                                        (nao passou a intro — flakiness ~1/3)
+run2  st620=11 startseq=2 r_perma=1 setflip=2386 FATAL=0  G1=2 G2=1  thr_end=0
+run3  st620=11 startseq=2 r_perma=1              FATAL=0  G1=2 G2=1  thr_end=0
 ```
+
+**2/2 das corridas que passaram a intro**: os dois gates disparam, o `FATAL` desaparece, e
+o `thr_auto_load` continua a não chegar.
 
 E onde fica preso:
 
