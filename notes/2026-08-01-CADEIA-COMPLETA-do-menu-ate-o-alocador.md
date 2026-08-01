@@ -76,3 +76,60 @@ alocação nunca falha** — logo o defeito é do nosso lado do heap, não do jo
 que o walk não encontra bloco? O projecto já tem seis guards nessa família e o
 `PS3_TRACE_POOLCNT` para distinguir leak de refill — a instrumentação existe, é aplicá-la
 a esta alocação concreta (`heap=0x40004020`, o tamanho pedido é `hdr + grow*elem`).
+
+---
+
+# CORRECÇÃO: `func_00263040` **não** falha. O que é nulo é o ponteiro do pool.
+
+A conclusão acima — *"`func_00263040` não consegue alocar"* — era **inferência**, não
+medição: eu tinha provado que o `grow=0` nunca acontece e concluí, por eliminação, que a
+outra saída NULL de `func_002635A4` era a culpada. **Errado.** A sonda directa mede:
+
+```
+[POOLALLOC] ok pool=0x40331608 heap=0x40004020 pedido=2576 r3=0x40331830 (ok=1 falhas=0)
+[POOLALLOC] ok pool=0x42F85B50 heap=0x42F83D48 pedido=3472 r3=0x42F85BA8 (ok=2 falhas=0)
+...
+[POOLALLOC] ok pool=0x4007F8B0 heap=0x40004020 pedido=1028 r3=0x40680A58 (ok=8 falhas=0)
+
+falhas = 0
+```
+
+**Oito alocações, oito sucessos.** O heap está bem e o alocador de boundary-tags faz o
+seu trabalho.
+
+## Onde está o zero, então
+
+Relendo `func_00263554` com o valor medido:
+
+```c
+r31 = r3;                 // <- o POOL, que vem de *(alloc + (idx<<2) + 0x8C)
+r3  = *(r31 + 4);         // head da free-list
+```
+
+E o `[SZCLASS] #238` diz `slot=0x00000000`. Esse `slot` **é o `r3` que entra**, ou seja o
+**ponteiro do pool**, não a cabeça da free-list. Com `r31 = 0`, a função lê `*(0+4)` e
+segue com lixo — e por isso o `[FLHEAD]` apanhou `pool=0x00000005` noutra corrida: são
+leituras da base da memória guest, não de nenhuma lista.
+
+Ou seja:
+
+| | 237 primeiras | a 238.ª |
+|---|---|---|
+| alocador | `0x406387E0` | **`0x400C6B50`** |
+| `*(alloc + (idx<<2) + 0x8C)` | ponteiro de pool válido | **`0`** |
+
+E o `PS3_WATCH_STORE` já tinha dito o resto: **uma única escrita** em `0x400C6BDC`, a
+escrever `0`, vinda de `func_0022E6A4` (construtor, chamado de `func_002B11B8`).
+
+**O alocador `0x400C6B50` é construído com a tabela de pools a zero e ninguém a preenche.**
+
+## O que isto muda na pergunta
+
+Não é "porque falha o heap" — o heap não falha. É **"quem devia criar os pools de
+`0x400C6B50`, e porque não corre"**. É uma pergunta de inicialização, não de memória.
+
+## A lição, outra vez
+
+Provei que uma das duas saídas NULL não acontecia e **concluí por eliminação** qual era a
+outra, sem a medir. A medição custou uma corrida e desfez a conclusão. Numa cadeia com dez
+elos, "só pode ser a outra" não é um elo medido — é um palpite com boa reputação.
