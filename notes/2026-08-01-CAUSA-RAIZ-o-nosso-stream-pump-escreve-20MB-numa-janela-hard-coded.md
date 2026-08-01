@@ -165,6 +165,30 @@ código que antes nunca corria (com a vtable destruída, o despacho caía no `IC
 não fazia nada), e o `0x00514E80` é o primeiro problema real desse caminho. Consistente
 com o log crescer ~200 linhas, mas **ninguém provou** que é código novo.
 
+## O gate oficial, 6 corridas, sondas desligadas
+
+```
+run  st620 startseq nopic thr_end r_perma setflip_after_rperm pad  elo_stopped
+ 1     11      2      4      0       1            8            0   AUTO_LOAD (thr_end)
+ 2     11      2      4      0       1            9            0   AUTO_LOAD (thr_end)
+ 3     11      2      4      0       1           10            0   AUTO_LOAD (thr_end)
+ 4     11      2      4      0       1            9            0   AUTO_LOAD (thr_end)
+ 5     11      2      4      0       1           10            0   AUTO_LOAD (thr_end)
+ 6     11      2      4      0       1           10            0   AUTO_LOAD (thr_end)
+elo_stopped=nenhum em 0 de 6 (limiar: 4)   -> rc=1
+```
+
+**0 de 6. Não arredondo isto para "quase".** Os cinco primeiros elos passam em 6/6 e o
+`setflip_after_rperm` estabilizou em 8–10 (a Fase 7 tinha registado **0 mesmo no binário
+de referência**, com um único outlier de 107 numa das seis corridas). O elo que falha é o
+`AUTO_LOAD`.
+
+**Ressalva importante sobre a comparação:** o marco v1.1 registou o `thr_end` a passar
+*com o watchdog subido* (`PS3_STUCK_ICALL_LIMIT` elevado), não com o default de 2000. Como
+o abort pós-fix é exactamente esse disjuntor, o gate com o limite subido é a comparação
+honesta — está a correr. Até haver esse número, **não está estabelecido** se isto é
+regressão do fix ou se o gate com o default sempre deu 0/6.
+
 ## Ressalva honesta
 
 Isto explica e corrige a corrupção de `tab[0x58]`. **Não está provado** que seja a única
