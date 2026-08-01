@@ -916,3 +916,56 @@ resultante — responde numa corrida, e é a mesma técnica que resolveu todos o
 
 O gate `PS3_24E3D0_KEEP_TYPE_ON_NULL` já provou (3/3) que resolver isto derruba os oito
 elos finais de uma vez.
+
+---
+
+# CORRECÇÃO SUBSTANCIAL: os dois elos do topo estão MAL ATRIBUÍDOS
+
+Sondei a comparação que eu tinha descrito como a origem do `r26 = 0`. O resultado
+contradiz-me:
+
+```
+[CMP4F028] #1 x=0x406380F8 r31=0x406380F8 iguais=1 ...      <- IGUAIS, logo r5 = 1
+[TYPEASSIGN] #1 ... produto=0 tipo_escrito=0                 <- e mesmo assim o walker corre
+[TYPEASSIGN] #2 ... produto=0 tipo_escrito=0                    (duas vezes, contra UMA comparação)
+```
+
+E `func_0024E198` tem **dois** call sites, não um:
+
+```
+0x0024F120:  r5 = (x == r31)     -> medido: 1
+0x0024F188:  r5 = 1              -> literal, no código
+```
+
+**Nenhum dos dois passa `r5 = 0`.** Portanto o `r26 = 0` que eu li em `func_0024E1E8`
+**não vem do terceiro argumento**, e os dois elos que acrescentei por cima do
+`produto = NULL` — o `r26` e a comparação — estão mal atribuídos.
+
+## O que continua de pé, e o que cai
+
+**De pé (tudo medido, elo a elo):**
+
+```
+o cursor +0xC8 da fábrica está a -1  ->  func_0039E5A8 devolve NULL
+ -> func_0024E3D0 escreve *(NULL+0x20) = 0 como tipo do objecto
+   -> o lookup do registo devolve array[0] -> classe 0x00515008
+     -> sem tabela de pools -> pool=0 -> pop devolve lixo -> ninguém verifica
+       -> this=0, objecto nunca alocado, nó com payload 0
+         -> tab[lixo]=0 -> FATAL 0x00514E80 -> thr_auto_load 0 -> sem menu
+```
+
+E o gate `PS3_24E3D0_KEEP_TYPE_ON_NULL` prova (3/3) que remover a escrita remove o `FATAL`
+— portanto esta metade da cadeia é causal, não correlação.
+
+**Cai:** a explicação de *porque* `func_0024E3D0` corre. O `cr3`/`r26` que eu identifiquei
+como interruptor não pode vir do `r5` (é 1 nos dois sítios). Ou `r26` é alterado entre o
+prólogo e o uso, ou a função que corre com `r26 = 0` é outra.
+
+## A décima segunda correcção, e a mesma forma
+
+Liguei a comparação ao sintoma **sem verificar a correspondência de contagens**: uma
+comparação contra dois registos afectados. Isso, sozinho, já dizia que não podia ser a
+origem — e eu escrevi-o na mesma.
+
+A regra que falhei é a mesma que já tinha escrito duas vezes hoje: **contar antes de
+concluir.** Um elo que dispara uma vez não explica um sintoma que aparece duas.
