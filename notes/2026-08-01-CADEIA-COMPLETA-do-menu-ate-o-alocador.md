@@ -670,3 +670,39 @@ O `lr` do guest, o tracer que só cobria metade dos despachantes, e agora **um c
 martelo**. As três mentiram da mesma maneira: por omissão, e a omissão parecia prova. O cap
 ficou configurável (`PS3_WATCH_STORE_CAP`, `<0` = sem limite) e o comentário no motor conta
 porquê.
+
+---
+
+# Com os dois caps desligados, os números batem — e a leitura fica firme
+
+```
+PS3_TRACE_ICALL_TO=0x0039DA78 (o push), sem cap:
+
+  2610 pushes no total
+   175 para a fábrica 0x400C6210      <- exactamente o que o watch do cursor viu
+```
+
+Os dois instrumentos independentes concordam. E o push mais recente antes da consulta que
+falha é para **outra** fábrica (`0x400FE150`), não para a `0x400C6210`.
+
+**A sequência é:** os 175 push/pop da `0x400C6210` correm e fecham (cursor a −1) → o
+trabalho continua noutras fábricas → e só então o walker consulta a `0x400C6210`, que já
+está vazia há muito.
+
+Não é "falta um push". Não é desequilíbrio. **É uma consulta feita fora da janela em que a
+resposta existe.**
+
+## O balanço de instrumentação deste dia
+
+Quatro ferramentas mentiram-me, todas por omissão:
+
+| ferramenta | como mentiu | custo |
+|---|---|---|
+| `lr` do guest | fica preso no último `bl`; num `bctrl` aponta para a função errada | uma ronda a provar que `func_0024D5BC` estava saudável |
+| rbp frame walk | trampolins e tail-calls não mapeiam 1:1 | uma ronda a medir 224 despachos que não eram o caminho |
+| `PS3_TRACE_ICALL_TO` | só cobria `ps3_indirect_call`, não o `ps3_indirect_tail` | quase escrevi que `func_00220F88` não era chamada indirectamente |
+| caps a martelo (300 e 64) | cortam em silêncio e o corte parece o fim dos dados | duas conclusões erradas, ambas escritas antes de medir |
+
+As quatro estão corrigidas e documentadas no motor, ao lado do código que as causou. **É o
+que fica de mais reutilizável desta sessão** — mais do que qualquer elo individual da
+cadeia.
