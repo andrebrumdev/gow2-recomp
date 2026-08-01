@@ -1262,3 +1262,52 @@ errado, e o registo que devia dar-lhes o tipo certo está vazio.
 até o `ICGLdrShader` ser invocado pelo caminho real, com `SHADERSRC` a passar de 0 para
 N>0. É o item 1 dos "Próximos passos" do `CLAUDE.md`, e continua a ser o que bloqueia
 pixels de jogo.
+
+---
+
+# PAREDE D, vista de dentro: o jogo diz "Unknown component"
+
+Corrida com o `PS3_GATE_FORCE=1` (a via **forçada** que já existia no motor — não é aceite
+como caminho natural, CLAUDE.md regra 5 — mas o diagnóstico que produz é válido):
+
+```
+[GATE-FORCE] base=0x00700DF8 component=0x4306ADF0 typemap=0x4306B160 vt=0x005130B8
+[GATE-FORCE] stream setup stream=0x0FEFE960 data=0x0FEFEA60 type@data=0xF85F9B1E
+[GATE-FORCE] calling OPD 0x522E70 (171244) this=0x4306B160 ...
+[OPD-ICG] #1 opd=0x00522E70 code=0x00171244 toc=0x00541178 lr=0x002B9CA8
+[vm] UNCOMMITTED read32 access 0x65726D61 (+4) ra=ppu_opd_resolve+0x24
+[vm] UNCOMMITTED read32 access 0x65726D65 (+4) ra=ppu_opd_resolve+0x3C
+Unknown component 0xf85f9b1e in component loader ICGLdrShader.
+Unknown component 0xf85f9b1e in component loader ICGLdrShader.
+[GATE-FORCE] returned from 171244 path r3=0x008695EC
+```
+
+Duas coisas, e as duas são novas:
+
+**1. O `ICGLdrShader` É invocado e responde.** O caminho chega lá — o que faltava não é a
+chamada. E a resposta é a mensagem de erro do **próprio jogo**:
+`"Unknown component 0xf85f9b1e in component loader ICGLdrShader."` Ou seja o loader não
+reconhece o tipo que o registo diz ser o dele.
+
+**2. O `ppu_opd_resolve` lê através de um ponteiro-texto:** `0x65726D61` = **`"erma"`** em
+ASCII — de `R_P`**`erma`**. A tabela de componentes tem **strings onde deviam estar OPDs**.
+
+## Porque isto importa mais do que a cadeia de hoje
+
+É o **oitavo** sítio com a mesma assinatura — texto onde devia estar um ponteiro — mas é o
+primeiro **dentro do loader de componentes**, e o primeiro em que o jogo diz por palavras
+o que está mal. `LDRSH`, `SHADERSRC` e `TYMAP-171` continuam todos a `0`: o loader corre e
+rejeita.
+
+A Parede D deixa de ser "o ICGLdr nunca é invocado" (que era a formulação nas notas
+antigas) e passa a ser: **o ICGLdr é invocado e não reconhece o componente, porque a tabela
+que o descreve tem texto em vez de ponteiros.**
+
+Isso é uma reformulação com consequências: o trabalho não é fazer a chamada acontecer — é
+perceber porque é que a tabela de componentes tem `"...erma..."` onde devia ter OPDs. E
+liga-se directamente ao `R_PermA`, o WAD de 20 MB, cujo nome é literalmente o texto que lá
+está.
+
+**Ressalva:** isto foi obtido com `PS3_GATE_FORCE=1`, um caminho forçado. Não conta como
+aceite de que o caminho natural funciona. Conta como diagnóstico do que acontece quando se
+chega lá.
