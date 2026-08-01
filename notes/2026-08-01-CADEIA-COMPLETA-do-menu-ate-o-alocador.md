@@ -461,3 +461,55 @@ Qual `idx` usa o `func_0024E3D0` nessa passagem, e o que está em `tab[idx]`. Se
 das entradas que o `[WADLD-VT28]` mostrou resolver bem, o problema é o `+0x20` do produto;
 se for uma entrada vazia ou de outro tipo, voltamos ao registo — e aí liga-se directamente
 ao trabalho do TYPE15 e do `CB56C` que já existe no projecto.
+
+---
+
+# O topo: a fábrica está registada e devolve NULL
+
+```
+[TYPEASSIGN] #1 obj=0x4077ED10 reg=0x4077ED10 regtipo=0x3  idx=0xC  tab=0x00868D48 produto=0x00000000 tipo_escrito=0
+[TYPEASSIGN] #2 obj=0x4077F0E0 reg=0x4077F0E0 regtipo=0xF  idx=0x3C tab=0x00868D48 produto=0x00000000 tipo_escrito=0
+```
+
+**`produto = 0`.** A chamada `fabrica->vt[0x48](fabrica)` devolve NULL, e o código a seguir
+faz `*(uint16*)(obj+6) = *(0 + 0x20)` — lê a base da memória guest e escreve o que lá está
+(zero) como tipo do objecto.
+
+E as entradas da tabela **existem e são válidas**: `idx=0xC` é o tipo 3, e o mapa de tipos
+desta mesma investigação já o tinha mostrado —
+
+```
+[WADLD-T1SZ] ... idx=0xC tab=0x00868D48 obj=0x400C6210
+```
+
+`0x400C6210` é **exactamente o singleton** que o `[SING50]` mediu 109 vezes
+(`sing=0x400C6210 vt=0x00514FA0`). Ou seja: a fábrica está registada, é a certa, e é a
+mesma que serve tudo o resto — **só que o seu `vt[0x48]` devolve NULL**.
+
+Dois registos do WAD são afectados na mesma corrida: tipo `0x3` e tipo `0xF`.
+
+## A cadeia inteira, catorze elos
+
+```
+fabrica(tab[0xC] = 0x400C6210)->vt[0x48]() devolve NULL
+ └─ func_0024E3D0 lê *(NULL+0x20) e escreve 0 como tipo do objecto
+   └─ o lookup do registo passa a devolver array[0] -> classe 0x00515008
+     └─ essa classe não tem tabela de pools em +0x8C
+       └─ o "pool" é 0, o pop devolve lixo, ninguém verifica
+         └─ this=0 no func_00220284; o objecto nunca é alocado
+           └─ nó de lista com payload 0
+             └─ func_002545D4 lê o "tipo" do endereço 2 -> tab[lixo]=0
+               └─ FATAL: stuck calling 0x00514E80
+                 └─ thr_auto_load nunca termina -> gate 0/6
+                   └─ o menu não aparece
+```
+
+## Onde a próxima sessão começa
+
+**Porque é que `0x400C6210->vt[0x48]()` devolve NULL?** É uma pergunta com um objecto
+concreto (`0x400C6210`), um slot concreto (`vt+0x48`, vtable `0x00514FA0`) e dois registos
+que a disparam (tipos `0x3` e `0xF`). A sonda é a mesma que se usou o dia inteiro: na
+entrada da função que o `vt[0x48]` resolve, com `PS3_TRACE_ICALL_TO` a nomeá-la primeiro.
+
+E liga-se directamente ao trabalho de TYPE15/`CB56C` que já existe no projecto — é a mesma
+tabela `0x00868D48`, o mesmo mecanismo de fábricas, o mesmo `0x39Dxxx`.
