@@ -109,3 +109,72 @@ A verificação é directa: desmontar o PPC original em torno de `0x00254628`–
 cinco elos anteriores passam em 6/6 e o `setflip_after_rperm` estabilizou em 8–10 (a Fase
 7 tinha registado 0 mesmo no binário de referência). A parede está agora nomeada ao
 endereço e à instrução, o que não acontecia esta manhã.
+
+---
+
+# Continuação: a "lista" é uma MATRIZ. O objecto é do tipo errado.
+
+**Medido a seguir, no mesmo dia.**
+
+## A lista partida, e as saudáveis ao lado
+
+A sonda `PS3_TRACE_LIST254` mostrou duas listas perfeitamente sãs e uma partida:
+
+```
+[LIST254] sent=0x40638608 no=0x40007F34 payload=0x40669528 next=0x40007F28   (13 nós, fecha)
+[LIST254] sent=0x40638130 no=0x40007E2C payload=0x40638528 next=0x40007E20   ( 5 nós, fecha)
+[LIST254] sent=0x4077914C no=0x00000000 payload=0x00000000 next=0x2F725F7C   <-- PAYLOAD NULO
+[LIST254] sent=0x4077914C no=0x2F725F7C payload=0x00000040 next=0x00000000
+```
+
+A cabeça é 0; lendo `*(0)` vem `0x2F725F7C`, e lendo `*(0x2F725F7C)` vem 0 outra vez —
+**um ciclo de dois**, que é exactamente o laço infinito das 2 000 000 iterações.
+
+## Quem escreve o 0, e porquê não é corrupção
+
+`PS3_WATCH_STORE=0x4077914C` deu **uma única escrita**, e é legítima:
+
+```
+[WATCHSTORE] w32 [0x4077914C]=0x0  ra0=func_0024C1F8+0x218  ra1=func_0024CADC+0x25C
+```
+
+E `func_0024C1F8`, lido inteiro, é um **inicializador de matriz identidade**: escreve
+`f13`(=1.0) e `f0`(=0.0) em `obj+0x70/0x80/0x90/0xA0` e nos três offsets seguintes de cada
+linha — as quatro linhas de uma 4×4.
+
+`0x4077914C` = `0x407790D0 + 0x7C` = **elemento [0][3] da matriz**. É legitimamente 0.0.
+
+## O verdadeiro defeito
+
+`func_002545D4` calcula a sentinela da lista como `r28 - 4 + 0x80`, ou seja `obj + 0x7C` —
+**o mesmo endereço que a matriz usa para [0][3]**. Duas leituras incompatíveis do mesmo
+objecto:
+
+| offset | segundo `func_0024C1F8` | segundo `func_002545D4` |
+|---|---|---|
+| `obj+0x7C` | `matriz[0][3]` = 0.0 | sentinela da lista circular |
+
+E o teste de "lista vazia" é `head == sentinela` — nunca satisfeito com `head = 0.0`, por
+isso o walk entra com um nó nulo em vez de sair.
+
+**Logo: o método virtual de um tipo está a ser invocado sobre um objecto de outro tipo.**
+E o despacho vem da fábrica de tipos (`func_0039D428` → `func_0039D764` → `func_002545D4`),
+que é o mesmo mecanismo `tab[(tipo<<2)]` de toda esta parede.
+
+## O que se excluiu por medição, e não por argumento
+
+- **Não é bug do lifter no ramo.** O PPC original em `0x0025463C` é
+  `bc b(true) cr7.eq -> 0x00254644` — exactamente o que o lift gerou.
+- **Não é fragmento mal entrado.** `func_002545B0` (a entrada real, com o prólogo e o
+  `mr r28, r4`) faz `ctx->gpr[28] = ctx->gpr[4]` e só depois trampolina para
+  `func_002545D4`. O `r28` chega correcto.
+- **Não é o walker `func_0024D5BC`.** 758 nós com vtable/OPD/código válidos, 3/3.
+- **Não é o meu fix do pump.** A matriz `PS3_F2B_PUMP_BYTES` 0 vs 262144 mostra que o pump
+  habilita o código que bate na parede; não a cria.
+
+## A próxima medição
+
+Registar, no despacho da fábrica, **que tipo** produziu o objecto `0x407790D0` e **que
+tipo** está a ser invocado sobre ele. Se forem diferentes, o defeito é o índice de tipo;
+se forem iguais, é o layout do objecto que diverge — e aí a pergunta passa a ser quem
+construiu o objecto com um layout de matriz.
