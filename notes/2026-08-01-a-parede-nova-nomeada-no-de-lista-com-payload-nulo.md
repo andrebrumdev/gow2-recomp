@@ -225,7 +225,7 @@ registos do WAD**. É de lá que o objecto errado vem.
 # O que há por trás da parede: nada — e uma pista a montante
 
 Com o gate de diagnóstico `PS3_LIST254_EMPTY_IF_NULL=1` (declarado, OFF por default,
-uma linha de log por salto — **não é um fix**):
+uma linha de log por salto — **não é um fix**), medido em **3/3 corridas idênticas**:
 
 | | sem gate | com gate |
 |---|---:|---:|
