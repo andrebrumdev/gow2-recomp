@@ -144,3 +144,49 @@ diz agora por qual passou).
 É a terceira ferramenta de atribuição que me engana hoje, depois do `lr` do guest e do rbp
 frame walk. **Um instrumento que cobre metade dos caminhos mente por omissão, e a omissão
 parece prova.**
+
+---
+
+# O fim da cadeia: 237 alocações sãs, e a 238.ª de um pool vazio
+
+Correlação directa, no mesmo log, linhas consecutivas:
+
+```
+4535: [SZCLASS] #236 alloc=0x406387E0 idx=10 ea=0x40638894 slot=0x40771A10
+4536: [SZCLASS] #237 alloc=0x406387E0 idx=10 ea=0x40638894 slot=0x40771A10
+4539: [SZCLASS] #238 alloc=0x400C6B50 idx=0  ea=0x400C6BDC slot=0x00000000  <SLOT-ZERO>
+4540: [CPY284]  #13  this=0x00000000 <THIS-MAU>
+```
+
+**237 passagens perfeitamente sãs**, todas no alocador `0x406387E0`, com índices de classe
+entre 0 e 10 e slots válidos. A 238.ª usa **outro alocador** — `0x400C6B50` — e a sua
+free-list de índice 0 está **vazia**.
+
+O pop devolve 0 → `func_00227788` devolve 0 → `func_002182A4` passa-o sem verificar →
+`func_002210BC` põe-no em `r26` → `func_00220284` corre com `this = 0` e escreve através
+dos campos que lê da base da memória guest.
+
+## O que isto elimina, por medição
+
+- **Não é índice absurdo.** `idx=0` é válido; os 237 anteriores usam 0..10 sem problema.
+- **Não é corrupção de memória.** Nenhum watch apanhou uma escrita indevida neste slot, e
+  os 237 anteriores provam que o mecanismo funciona.
+- **Não é o lifter.** Cada passo desta cadeia foi verificado contra o PPC original.
+
+## O que fica, e é uma frase
+
+**O pool `0x400C6B50` nunca foi abastecido.** É a primeira vez que o código o usa, e a sua
+free-list de classe 0 está a zero.
+
+O endereço é revelador: `0x400C6B50` está na mesma vizinhança dos objectos de tipo
+(`0x400C3D48`, `0x400C3D88`) — a região que o `F2B-STREAM-PUMP` destruía antes do fix de
+hoje. Agora está intacta, mas **vazia**.
+
+## A próxima medição, exacta
+
+`PS3_WATCH_STORE=0x400C6BDC` — a cabeça dessa free-list. Duas respostas possíveis, ambas
+úteis:
+
+- **Zero escritas** → o pool nunca foi inicializado; a rotina que o abastece não corre. A
+  pergunta passa a ser qual é e porque não corre.
+- **Escritas e depois um zero** → foi esvaziado; a pergunta passa a ser por quem.
