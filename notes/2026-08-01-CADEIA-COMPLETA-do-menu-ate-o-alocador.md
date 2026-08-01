@@ -1311,3 +1311,46 @@ está.
 **Ressalva:** isto foi obtido com `PS3_GATE_FORCE=1`, um caminho forçado. Não conta como
 aceite de que o caminho natural funciona. Conta como diagnóstico do que acontece quando se
 chega lá.
+
+---
+
+# Quem passa o OPD-texto: `func_001856A8`, e é a linha antes do "Unknown component"
+
+Acrescentado um `[OPD-BAD]` ao `ppu_opd_resolve` (gated, `PS3_TRACE_OPD_BAD`), a denunciar
+qualquer OPD implausível com a cadeia host simbolizada. Corrida com `PS3_GATE_FORCE=1`:
+
+```
+ 13x  opd=0x00000000    ra1=func_0039E6B4+0x760    <- a fábrica do tipo WAD
+  1x  opd=0x00000000    ra1=func_002B0AA8+0x3B8
+  1x  opd=0x65726D61    ra1=func_001856A8+0x72C  ra2=func_0032109C+0x2AC
+      [vm] UNCOMMITTED read32 access 0x65726D61 ra=ppu_opd_resolve
+      [vm] UNCOMMITTED read32 access 0x65726D65 ra=ppu_opd_resolve
+      Unknown component 0xf85f9b1e in component loader ICGLdrShader.
+```
+
+**Dois defeitos distintos, os dois no loader:**
+
+1. **`func_0039E6B4+0x760` chama com OPD nulo, 13 vezes.** É a fábrica do tipo WAD — a
+   mesma que o `[WADLD-VT28]` mostra com `code=0x0039E6B4`. Um slot de despacho a zero.
+
+2. **`func_001856A8+0x72C` chama com OPD = `0x65726D61`** — `"erma"`, de `R_P`**`erma`**.
+   Chamada de `func_0032109C`, que é um dos OPDs que o motor já rastreia no `[OPD-ICG]`.
+   E é **a linha imediatamente antes** da mensagem de erro do jogo.
+
+O (2) é o que produz o `"Unknown component 0xf85f9b1e"`: o loader vai buscar o handler do
+componente, encontra o **nome do WAD** onde devia estar um ponteiro de função, e desiste.
+
+## O estado da Parede D ao fim do dia
+
+Antes: *"o ICGLdr nunca é invocado (TYMAP-171=0, LDRSH=0)"*.
+
+Agora, medido: **o ICGLdr é invocado, corre, e rejeita o componente — porque
+`func_001856A8` lhe passa o nome do WAD como ponteiro de OPD.** Mais 13 despachos com OPD
+nulo na fábrica do tipo WAD, a jusante.
+
+O alvo passa a ser `func_001856A8+0x72C`: de onde vem o valor que ele usa como OPD, e
+porque é o texto `"...erma..."`. É a mesma pergunta dos outros oito sítios — objectos e
+tabelas com o conteúdo de outro tipo — mas agora no sítio que o próprio jogo assinala.
+
+**Ressalva mantida:** tudo isto sob `PS3_GATE_FORCE=1`, caminho forçado. Diagnóstico
+válido; não é aceite de que o caminho natural funcione.
