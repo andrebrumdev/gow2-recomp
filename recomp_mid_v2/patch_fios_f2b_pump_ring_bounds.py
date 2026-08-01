@@ -65,7 +65,14 @@ e no alcance das escritas.
 
 Idempotente: a sentinela e' o proprio marcador PUMP-RING-BOUNDS.
 
-Uso:  patch_f2b_pump_ring_bounds.py [DIR_DE_LIFT]   (default: ../recomp_macos_v2)
+ORDEM (importante): tem de correr DEPOIS do patch_fios_f2b_open_block_install.py,
+que e' quem instala o bloco F2B-STREAM-PUMP no lift. O apply_all_patches.sh
+descobre os patches por glob alfabetico -- dai o nome comecar por
+"patch_fios_f2b_p", que ordena a seguir a "patch_fios_f2b_open". Se um dia isto
+correr antes, a agulha nao casa e o script devolve rc=2 (MISSING), nao um SKIP
+silencioso.
+
+Uso:  patch_fios_f2b_pump_ring_bounds.py [DIR_DE_LIFT]   (default: ../recomp_macos_v2)
 rc: 0 aplicado ou ja aplicado; 2 se nao encontrou a agulha em chunk nenhum.
 """
 import os
@@ -170,7 +177,7 @@ def main():
         print("MISSING  agulha do F2B-STREAM-PUMP nao encontrada em %d chunk(s)"
               % len(chunks), file=sys.stderr)
         return 2
-    print("patch_f2b_pump_ring_bounds: applied=%d already=%d" % (applied, already))
+    print("patch_fios_f2b_pump_ring_bounds: applied=%d already=%d" % (applied, already))
     return 0
 
 
