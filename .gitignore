@@ -93,6 +93,11 @@ ghidra_analysis/
 # Texturas extraidas do WAD do jogo pelo dump de bind_texture -- ARTE DO JOGO,
 # copyright. O frame_*.png acima ja cobria os dumps de frame; estes escapavam.
 wad_tex__*.png
+# Dumps de textura em PPM (frame_wad_tex_*.ppm): mesmo conteudo do jogo, outro
+# formato -- o frame_*.png nao os apanhava. Apareceram por gerar na raiz a
+# 2026-08-01 durante as corridas com PS3_TRACE_TYMAP=1.
+frame_*.ppm
+wad_tex__*.ppm
 
 # Lixo de ferramentas
 .DS_Store
