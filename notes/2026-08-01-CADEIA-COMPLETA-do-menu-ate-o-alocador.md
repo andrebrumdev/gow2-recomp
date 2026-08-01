@@ -741,3 +741,48 @@ chega sempre do fragmento anterior, e a hipótese cai.
 
 Vale registá-la na mesma: é a primeira vez nesta sessão que um "zero" é de confiança, e é
 por causa do cap corrigido meia hora antes. Antes disso teria sido mais um falso negativo.
+
+---
+
+# A experiência do topo: o `FATAL` é mesmo consequência daquela escrita
+
+Gate declarado no topo da cadeia (`PS3_24E3D0_KEEP_TYPE_ON_NULL=1`, OFF por default, uma
+linha por salto — **não é um fix**): quando o produto é NULL, não escrever o tipo lido de
+`*(0x20)` e deixar o campo como estava.
+
+```
+[24E3D0-GATE] produto=NULL -> tipo do obj 0x4077ED10 mantido em 2
+[24E3D0-GATE] produto=NULL -> tipo do obj 0x4077F0E0 mantido em 2
+```
+
+| | sem gate | com gate |
+|---|---:|---:|
+| `FATAL: stuck calling 0x00514E80` | 1 | **0** |
+| `StartSeq` / `R_PermA` | 2 / 1 | 2 / 1 |
+| `thr_auto_load end` | 0 | **0** |
+| `[vm] OOB access` (ponteiro-texto novo) | — | **40** |
+
+**O `FATAL` desaparece.** Isso prova, por experiência directa, que os últimos oito elos da
+cadeia são todos consequência daquela única escrita — e não problemas independentes.
+
+**Mas o boot não avança**, e aparece uma família nova de acessos fora de mapa
+(`0xE5726D65`, outro ponteiro-texto). Faz sentido: manter o tipo em `2` **não é a resposta
+certa** — é só o valor anterior. O tipo correcto é o que o produto teria dado, e o produto
+não existe.
+
+## O que isto delimita, e é útil
+
+- **Confirmado:** a escrita de `*(NULL+0x20)` é a causa do `FATAL` e de tudo o que vem
+  depois dele.
+- **Confirmado:** repor o tipo anterior não basta — o objecto precisa do tipo *certo*, não
+  de um tipo qualquer.
+- **Logo o alvo real não é a escrita**, é fazer com que a fábrica tenha produto quando esta
+  consulta acontece. O que devolve à pergunta de ordenação: porque é que a consulta corre
+  depois do ciclo fechar.
+
+O gate fica commitado como ferramenta de delimitação, com o resultado no cabeçalho, para
+que ninguém o confunda com uma correcção.
+
+**Nota sobre a amostra:** o gate disparou em 1 de 3 corridas; as outras não passaram a
+intro (a flakiness conhecida de ~1 em 3, documentada desde a Fase 9). O contraste
+`FATAL 1 -> 0` é da corrida que chegou lá.
