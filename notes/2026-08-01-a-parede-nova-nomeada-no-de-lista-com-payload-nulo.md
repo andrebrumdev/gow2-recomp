@@ -264,3 +264,50 @@ agora com leitor e escritor nomeados.
 1. `PS3_WATCH_STORE` no slot da free-list que recebe a string — quem lá põe o texto.
 2. Só depois voltar ao `func_002545D4`; é provável que o objecto do tipo errado seja
    consequência desta mesma corrupção.
+
+---
+
+# Correcção: NÃO há texto dentro da free-list. O pool é que vale 5.
+
+A conclusão anterior — *"a free-list do allocator tem uma string lá dentro"* — **estava
+errada**, e a sonda do próprio pop desfez-a numa corrida:
+
+```
+[FLHEAD] TEXTO pool=0x00000005 pool+4=0x00000009 head=0x726D5B2E
+```
+
+**`pool = 5`.** O `r3` que chega a `func_00263554` não é um ponteiro — é o inteiro 5. A
+função lê então `*(5+4) = *(9)` e traz o que estiver no endereço guest 9. O
+`0x726D5B2E` não vem de lista nenhuma: é memória da base do espaço guest, tal como o
+`tipo=0x97DF` de antes vinha do endereço 2. Por isso o valor varia ligeiramente entre
+corridas (`0x726D432E`, `0x726D5B2E`, `0x726D55xx`) — muda o `pool`, muda o endereço lido.
+
+A cadeia real é:
+
+```
+func_00220284  chama  func_00263554(r3 = 5)      // pool que não é pool
+               -> pop devolve lixo como "bloco"
+               -> escreve 16 words através dele  ([vm] UNCOMMITTED write32 ×16)
+```
+
+## O padrão do dia, agora visível três vezes
+
+| sítio | o que devia ser ponteiro | o que lá está |
+|---|---|---|
+| `func_002545D4` | `rec` (payload do nó) | `0` → lê "tipo" do endereço 2 |
+| `func_002545B0` #2 | `arg` (objecto com lista) | objecto de outro tipo (matriz) |
+| `func_00263554` | `pool` | **`5`** |
+
+Três funções a receber argumentos que não são o que assumem. **Não é corrupção de
+memória** — a memória escrita está toda certa onde foi escrita. É **despacho**: métodos a
+correr com `this`/argumentos errados.
+
+Isso reenquadra o trabalho: parar de caçar quem estraga bytes (o `PS3_WATCH_STORE` já
+mostrou, três vezes, que ninguém estraga) e passar a caçar **quem escolhe o alvo da
+chamada** — que é exactamente onde o `PS3_TRACE_ICALL_TO` opera.
+
+## A próxima medição
+
+De onde vem o `5` que `func_00220284` passa a `func_00263554`. É um argumento local, logo
+uma sonda na entrada de `func_00220284` (o mesmo padrão do `[E545B0]`, que foi o único
+método fiável hoje) responde directamente.
