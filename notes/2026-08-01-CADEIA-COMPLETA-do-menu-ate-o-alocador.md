@@ -797,3 +797,28 @@ run3 GATE=2 thr_end=0 startseq=2 r_perma=1 FATAL=0
 **3/3.** O gate dispara sempre e o `FATAL` desaparece sempre, sem regressão nos elos a
 montante. O resultado é mais forte do que eu tinha escrito — mas o erro é o mesmo das
 outras dez vezes desta sessão: **um estado observado a meio não é o resultado.**
+
+---
+
+# O interruptor: `r26 == 0` é o que manda o walker pedir o produto
+
+Lido de `func_0024E1E8` (o `cr3` que decide o ramo do `func_0024E3D0`):
+
+```c
+linha 27:  cmpwi cr3, r26, 0                  // cr3 = (r26 == 0)
+linha 42:  if (cr3 != EQ) -> func_0024E430    // r26 != 0 -> outro caminho
+           // r26 == 0 -> segue para loc_0024E270, o walker de registos
+linha 62:  (o outro uso de cr3, que leva ao func_0024E3D0)
+```
+
+**`r26` é o interruptor.** Com `r26 == 0` o walker corre e acaba a pedir o produto corrente
+à fábrica — assumindo que ele existe. Com `r26 != 0` toma outro caminho e a consulta não
+acontece.
+
+Isso reformula a última pergunta com precisão: não é só *"porque é que a consulta chega
+tarde"*, é **"porque é que `r26` vale 0 nestas duas passagens"** — porque é `r26` que
+escolhe o caminho que assume um produto empilhado.
+
+`r26` é callee-saved e vem da entrada de `func_0024E1E8` ou do seu chamador
+(`func_0024F028`). Uma sonda na entrada — a técnica que se provou a única fiável neste
+lift — dá o valor e a origem numa corrida.
