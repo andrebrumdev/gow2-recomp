@@ -1354,3 +1354,62 @@ tabelas com o conteúdo de outro tipo — mas agora no sítio que o próprio jog
 
 **Ressalva mantida:** tudo isto sob `PS3_GATE_FORCE=1`, caminho forçado. Diagnóstico
 válido; não é aceite de que o caminho natural funcione.
+
+---
+
+# CORRECÇÃO: o OPD-texto era artefacto do gate forçado. Retirado.
+
+Estendida a sonda `[STREAM-OPD]` (que já existia no sítio) para mostrar o objecto e a
+vtable:
+
+```
+[STREAM-OPD] #1 opd=0x65726D61 code=0 obj=0x0FEFE960 vt=0x00000000 vt+8ea=0x00000008
+```
+
+`obj = 0x0FEFE960` é **o stream sintético que o próprio `PS3_GATE_FORCE` monta na pilha**
+(o log do gate di-lo: `stream setup stream=0x0FEFE960 data=0x0FEFEA60`). Esse stream falso
+não tem vtable (`*(obj) = 0`), portanto `opd = *(0 + 8) = *(0x8)` — a leitura do endereço
+guest 8, que por acaso contém `"erma"`.
+
+**O `"...erma..."` não vem de nenhuma tabela do jogo. Vem de `*(0x8)`, porque o objecto que
+o gate forjou tem vtable nula.**
+
+Corrida de controlo, **sem** `PS3_GATE_FORCE`:
+
+| | com gate forçado | natural |
+|---|---:|---:|
+| `opd=0x65726D61` (texto) | 1 | **0** |
+| `Unknown component 0xf85f9b1e` | 2 | **0** |
+| `opd=0x00000000` | 14 | **14** |
+
+## O que cai e o que fica
+
+**CAI** — tudo o que escrevi acima sobre "a tabela de componentes tem strings onde deviam
+estar OPDs" e sobre o `"Unknown component"` ser um sintoma do jogo. **São os dois
+consequência do stream sintético.** A mensagem de erro do jogo é a resposta correcta a um
+componente que o gate inventou.
+
+**FICA, e é real** — no caminho **natural**, sem gate nenhum:
+
+```
+13x  ps3_call_opd(opd = 0x00000000)  de func_0039E6B4+0x760   <- a fábrica do tipo WAD
+ 1x  ps3_call_opd(opd = 0x00000000)  de func_002B0AA8+0x3B8
+```
+
+**A fábrica do tipo WAD despacha treze vezes através de um slot de OPD a zero.** Isso é do
+jogo, não da instrumentação, e é o achado sólido desta frente.
+
+## Décima quinta correcção — e a mais perigosa do dia
+
+As catorze anteriores foram conclusões erradas sobre dados reais. **Esta foi quase
+publicar, como diagnóstico do jogo, sintomas fabricados pela minha própria instrumentação
+forçada.** Escrevi um documento inteiro a explicar um `"Unknown component"` que só existe
+porque eu liguei um gate que inventa um componente.
+
+A regra que falhei está no CLAUDE.md e eu própria a citei duas horas antes: **um caminho
+forçado não é aceite de nada.** Aplica-se também ao diagnóstico, não só ao resultado: os
+sintomas que ele produz podem ser dele.
+
+Regra operacional daqui em diante: **qualquer achado obtido sob `PS3_GATE_FORCE` (ou
+qualquer outro gate) tem de ser reproduzido sem ele antes de ser escrito.** Esta corrida de
+controlo custou 90 segundos.
