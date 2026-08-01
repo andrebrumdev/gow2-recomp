@@ -513,3 +513,67 @@ entrada da função que o `vt[0x48]` resolve, com `PS3_TRACE_ICALL_TO` a nomeá-
 
 E liga-se directamente ao trabalho de TYPE15/`CB56C` que já existe no projecto — é a mesma
 tabela `0x00868D48`, o mesmo mecanismo de fábricas, o mesmo `0x39Dxxx`.
+
+---
+
+# O TOPO ABSOLUTO: o cursor `+0xC8` vale −1, e este projecto já o imprimia
+
+A função que devolve NULL tem catorze linhas:
+
+```c
+func_0039E5A8(fab):                       // "dá-me o produto corrente"
+    cursor = *(int8_t*)(fab + 0xC8);      // índice COM SINAL
+    if (cursor < 0) return NULL;          // <- pilha vazia
+    return *(uint32_t*)(fab + 0x48 + cursor*4);
+```
+
+E a medição, nas duas fábricas que disparam a falha:
+
+```
+[FAB48] #1 fab=0x400C6210 vt=0x00514FA0 opd=0x0051B2E8 code=0x0039E5A8 cursor+C8=-1  <NEGATIVO>
+[FAB48] #2 fab=0x403008E8 vt=0x00516858 opd=0x0051B2E8 code=0x0039E5A8 cursor+C8=-1  <NEGATIVO>
+```
+
+**`cursor = −1` significa "nada empilhado".** O `push` que devia pôr um produto na fábrica
+nunca correu.
+
+## E este campo não é novo neste projecto
+
+O `host_gow2_factory.cpp` já o lê e já o imprime, há meses, na linha do TYPE15:
+
+```
+[TYPE15] REHOME old=0x401002F0 pin=0x47D00000 tab[0x54]=0x47D00000 vt=0x00516D70
+         +24=0x47D00400 +44=0x00000000 +48=0x00000000 +C8b=-1 +D4=0x00000000
+```
+
+**`+C8b=-1`** — o mesmo campo, o mesmo valor, registado desde sempre ao lado do trabalho da
+fábrica de tipos. O que faltava não era o dado: era a cadeia que liga esse `-1` ao menu que
+não aparece.
+
+## A cadeia completa: quinze elos, do cursor ao ecrã
+
+```
+o cursor +0xC8 da fábrica vale -1 (nada empilhado)
+ └─ func_0039E5A8 devolve NULL
+   └─ func_0024E3D0 lê *(NULL+0x20) e escreve 0 como tipo do objecto
+     └─ o lookup do registo devolve array[0] -> classe 0x00515008
+       └─ essa classe não tem tabela de pools em +0x8C
+         └─ o "pool" é 0, o pop devolve lixo, ninguém verifica
+           └─ this=0 em func_00220284; o objecto nunca é alocado
+             └─ nó de lista com payload 0
+               └─ func_002545D4 lê o "tipo" do endereço 2 -> tab[lixo]=0
+                 └─ FATAL: stuck calling 0x00514E80
+                   └─ thr_auto_load nunca termina -> gate 0/6 no elo AUTO_LOAD
+                     └─ o menu não aparece
+```
+
+## Onde isto põe o trabalho, e é concreto
+
+**Quem devia fazer o `push` na fábrica, e porque não corre?** É a mesma pergunta que o
+TYPE15 e o `CB56C` perseguem — mas agora com o campo exacto (`+0xC8`), o valor exacto
+(`-1`), as duas fábricas exactas (`0x400C6210`, `0x403008E8`) e a consequência medida elo a
+elo até ao ecrã.
+
+E há uma vantagem prática: o `host_gow2_factory.cpp` **já manipula estas fábricas** (o
+`ps3_type15_*`, o REHOME, o replenish). O sítio para procurar o `push` em falta já está
+aberto e instrumentado.
