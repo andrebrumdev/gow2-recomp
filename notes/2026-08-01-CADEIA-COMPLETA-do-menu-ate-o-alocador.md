@@ -783,6 +783,17 @@ não existe.
 O gate fica commitado como ferramenta de delimitação, com o resultado no cabeçalho, para
 que ninguém o confunda com uma correcção.
 
-**Nota sobre a amostra:** o gate disparou em 1 de 3 corridas; as outras não passaram a
-intro (a flakiness conhecida de ~1 em 3, documentada desde a Fase 9). O contraste
-`FATAL 1 -> 0` é da corrida que chegou lá.
+**Nota sobre a amostra — e uma correcção ao que aqui estava escrito:** primeiro escrevi
+"o gate disparou em 1 de 3 corridas". **Errado, e pelo motivo de sempre:** li o resultado
+com a 2.ª corrida ainda a decorrer e tomei o estado intermédio por final. As três
+completaram:
+
+```
+run1 GATE=2 thr_end=0 startseq=2 r_perma=1 FATAL=0
+run2 GATE=2 thr_end=0 startseq=2 r_perma=1 FATAL=0
+run3 GATE=2 thr_end=0 startseq=2 r_perma=1 FATAL=0
+```
+
+**3/3.** O gate dispara sempre e o `FATAL` desaparece sempre, sem regressão nos elos a
+montante. O resultado é mais forte do que eu tinha escrito — mas o erro é o mesmo das
+outras dez vezes desta sessão: **um estado observado a meio não é o resultado.**
