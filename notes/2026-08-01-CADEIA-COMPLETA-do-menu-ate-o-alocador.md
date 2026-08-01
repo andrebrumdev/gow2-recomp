@@ -1066,3 +1066,58 @@ Retirei um elo correcto por ter lido `!(EQ)` como "igual a zero". As treze anter
 conclusões a mais; esta foi uma conclusão a menos, pelo mesmo defeito de fundo: **ler
 depressa e escrever antes de conferir**. A diferença é que desta vez a verificação era
 gratuita — estava tudo no ecrã.
+
+---
+
+# A última pergunta, respondida: o walker NUNCA empilha
+
+De onde vêm os 175 pushes para a fábrica `0x400C6210`:
+
+```
+172  func_0041F700+0x718     (lr=0x0042AF5C)
+  3  func_00256B64+0x1394    (lr=0x00256CE0)
+  ---
+  0  da família do walker de registos do WAD (func_0024Exxx)
+```
+
+**Zero.** O walker que pergunta "qual é o produto corrente?" **nunca empilha nada** na
+fábrica. Os pushes todos vêm de outro subsistema (`func_0041F700`, 172 dos 175), noutra
+fase da execução.
+
+Portanto o cursor estar a `-1` no instante do pedido não é anomalia da fábrica: é o estado
+normal fora da janela em que **outro** código a está a usar. O walker faz uma pergunta que
+só tem resposta enquanto esse outro subsistema estiver a meio de um par push/pop — e nesse
+instante não está.
+
+## A cadeia, completa e inteiramente medida
+
+```
+o walker de registos do WAD pergunta pelo produto corrente sem nunca ter empilhado
+ └─ o cursor +0xC8 da fábrica 0x400C6210 está a -1 (estado normal fora da janela)
+   └─ func_0039E5A8 devolve NULL
+     └─ func_0024E3D0 escreve *(NULL+0x20) = 0 como tipo do objecto
+       └─ o lookup do registo devolve array[0] -> classe 0x00515008 (sem tabela de pools)
+         └─ o "pool" é 0, o pop devolve lixo, ninguém verifica o retorno
+           └─ this=0 em func_00220284; o objecto nunca é alocado
+             └─ nó de lista com payload 0
+               └─ func_002545D4 lê o "tipo" do endereço 2 -> tab[lixo]=0
+                 └─ FATAL: stuck calling 0x00514E80
+                   └─ thr_auto_load nunca termina -> gate 0/6
+                     └─ o menu não aparece
+```
+
+**Cada elo medido. O troço final provado causal pelo gate (3/3).**
+
+## O que isto significa para quem retomar
+
+A pergunta deixa de ser "porque falha X" e passa a ser de **desenho**: no console, o que
+garante que a fábrica tem produto quando o walker do WAD pergunta? Duas leituras, e a
+resposta decide o fix:
+
+1. **O walker devia empilhar** — falta-lhe um `func_0039DA78` próprio antes de perguntar.
+2. **O walker não devia perguntar** — o caminho `func_0024E3D0` só devia correr quando
+   invocado de dentro do contexto de `func_0041F700`, e chega lá por outra via.
+
+A (2) é consistente com tudo o que se mediu hoje (cinco sítios a receber contexto errado).
+A (1) verifica-se num minuto: procurar no PPC original um `bl` para a fábrica dentro do
+corpo do walker.
