@@ -178,3 +178,44 @@ Registar, no despacho da fábrica, **que tipo** produziu o objecto `0x407790D0` 
 tipo** está a ser invocado sobre ele. Se forem diferentes, o defeito é o índice de tipo;
 se forem iguais, é o layout do objecto que diverge — e aí a pergunta passa a ser quem
 construiu o objecto com um layout de matriz.
+
+---
+
+# O contra-exemplo saudável, na mesma corrida: o layout está certo, o objecto é que não
+
+Sondando a **entrada real** (`func_002545B0`, o prólogo com o `mr r28, r4`; o
+`func_002545D4` do backtrace é um fragmento), a função é chamada **exactamente duas vezes**
+numa corrida inteira:
+
+```
+[E545B0] #1 this=0x400C61C8 arg=0x4063858C lr=0x0004200C sent=0x40638608 head=0x40007F34
+[E545B0] #2 this=0x400C61C8 arg=0x407790D0 lr=0x0024E2D4 sent=0x4077914C head=0x00000000
+```
+
+**Mesmo `this`. Dois `arg` diferentes.** A #1 tem uma lista circular perfeitamente válida
+— e é o mesmo código, o mesmo offset, o mesmo tudo. A #2 tem `head = 0` e entra em laço.
+
+Isto **fecha uma questão que estava em aberto**: o layout que `func_002545B0` assume
+(`lista em arg+0x7C`) não está errado — funciona no #1. O que está errado é o **objecto**
+que lhe é passado no #2.
+
+E esse objecto, base `arg-4 = 0x407790CC`, é o mesmo que `func_0024C1F8` inicializou como
+**matriz identidade**: o `0x4077914C` que o `PS3_WATCH_STORE` apanhou é `base+0x80`, a
+primeira coluna da linha 1 da matriz.
+
+| offset sobre `0x407790CC` | `func_0024C1F8` | `func_002545B0` |
+|---|---|---|
+| `+0x80` | `matriz[1][0]` = 0.0 | cabeça da lista circular |
+
+O `lr=0x0024E2D4` da chamada #2 cai em `func_0024E1E8`/`func_0024E270` — **o walker de
+registos do WAD**. É de lá que o objecto errado vem.
+
+## Duas vias de investigação que morreram, e ficam registadas
+
+- **O `lr` do guest** num `bctrl` fica preso no último `bl`. Mandou-me para
+  `func_0024D5BC` e gastei uma ronda a provar que esse walker está saudável (758 nós).
+- **O rbp frame walk simbolizado** deu `#2 func_0039D764+0x220`, mas a sonda
+  `PS3_TRACE_VT64` mediu os **224** despachos `*(vt+0x64)` dessa função e nenhum tinha
+  este objecto nem chamava `0x002545B0`. Com trampolins e tail-calls os frames host não
+  mapeiam 1:1 nas chamadas guest — **nem o `lr` guest nem o backtrace host são fiáveis
+  para atribuir uma chamada indirecta neste lift.** A sonda na entrada da função é.
