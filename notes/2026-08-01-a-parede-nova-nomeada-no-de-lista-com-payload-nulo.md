@@ -219,3 +219,48 @@ registos do WAD**. É de lá que o objecto errado vem.
   este objecto nem chamava `0x002545B0`. Com trampolins e tail-calls os frames host não
   mapeiam 1:1 nas chamadas guest — **nem o `lr` guest nem o backtrace host são fiáveis
   para atribuir uma chamada indirecta neste lift.** A sonda na entrada da função é.
+
+---
+
+# O que há por trás da parede: nada — e uma pista a montante
+
+Com o gate de diagnóstico `PS3_LIST254_EMPTY_IF_NULL=1` (declarado, OFF por default,
+uma linha de log por salto — **não é um fix**):
+
+| | sem gate | com gate |
+|---|---:|---:|
+| `FATAL: stuck calling 0x00514E80` | 1 | **0** |
+| `thr_auto_load end` | 0 | **0** |
+| `StartSeq` / `R_PermA` | 2 / 1 | 2 / 1 |
+
+**Saltar a parede não desbloqueia nada.** O abort desaparece e o boot vai directo para o
+sampler. Isso responde à pergunta que o gate existia para responder: o problema real está
+**a montante**, e não vale a pena trabalhar nesta parede como se fosse a última.
+
+## E o log disse onde
+
+Imediatamente antes do salto, uma rajada de escritas por ponteiro-texto. Simbolizando o
+`ra` do `[vm] UNCOMMITTED` (antes era um ponteiro host inútil entre corridas), fica assim:
+
+```
+[vm] UNCOMMITTED read32  access 0x726D432E ra=func_00263554+0x1CC
+[vm] UNCOMMITTED write32 access 0x726D4332 ra=func_00220284+0xF78
+[vm] UNCOMMITTED write32 access 0x726D433A ra=func_00220284+0xFA8
+...  16 escritas de func_00220284, endereços a incrementar de 8 em 8
+```
+
+`0x726D432E` é ASCII `rmC.` — **texto usado como ponteiro**. E `func_00263554` é da família
+**FREE/coalesce do allocator de boundary-tags** — o próprio comentário do
+`PS3_TRACE_POOLCNT` no `ppu_loader.cpp` lista `func_00263318/400/554/5A4` como a região de
+FREE.
+
+Traduzindo: **a free-list do allocator tem uma string lá dentro.** O `func_00263554` lê-a
+como ponteiro e o `func_00220284` escreve uma estrutura inteira através dela. Isso é a
+mesma família de corrupção que este projecto persegue desde os seis `FREELIST-TAG-GUARD` —
+agora com leitor e escritor nomeados.
+
+## A ordem de trabalho que isto define
+
+1. `PS3_WATCH_STORE` no slot da free-list que recebe a string — quem lá põe o texto.
+2. Só depois voltar ao `func_002545D4`; é provável que o objecto do tipo errado seja
+   consequência desta mesma corrupção.
