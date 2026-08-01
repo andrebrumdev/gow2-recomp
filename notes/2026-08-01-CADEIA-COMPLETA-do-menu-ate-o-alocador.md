@@ -404,3 +404,60 @@ outras duas linhas com `idx=0` são consistentes mas não têm essa confirmaçã
 
 Uma agulha mais estreita (ancorada nas linhas próprias do `func_0039D3C4`) é o primeiro
 passo de quem retomar, antes de tratar qualquer outra linha como facto.
+
+---
+
+# O fecho: o tipo não estava por atribuir — foi ATRIBUÍDO A ZERO
+
+`PS3_WATCH_STORE` no campo de tipo do objecto-chave (`0x4077ED16`, u16) dá a vida inteira
+do campo, e desfaz a leitura anterior:
+
+```
+w32 [0x4077ED10]=0x4077ED4C   func_002635A4+0xDA8   <- alocado (grow do pool)
+w32 [0x4077ED10]=0x40000003   func_00210720+0x244   <- construído
+w16 [0x4077ED14]=0x20         func_00210720+0x260
+w16 [0x4077ED16]=0x2          func_00210720+0x340   <- TIPO = 2
+w16 [0x4077ED16]=0x2          func_004117B0+0x54    <- TIPO = 2 (reafirmado)
+w16 [0x4077ED16]=0x0          func_0024E3D0+0x204   <- TIPO = 0
+                              ra1=func_0024F028+0x8F8
+```
+
+**O tipo era 2 e passou a 0.** E o escritor está na cadeia do walker de registos do WAD —
+`func_0024F028` é o elo `#7` do backtrace original desta investigação.
+
+E `func_0024E3D0`, lido do lift, **não zera nada**: atribui.
+
+```c
+tipo_do_registo = *(uint16*)(r28 + 2);          // tipo lido do registo do WAD
+idx     = (tipo_do_registo << 2) & 0x3FFFC;
+fabrica = *(r23 + idx);                          // tab[idx] -- a tabela 0x00868D48
+resultado = fabrica->vt[0x48]( fabrica );        // chama a fábrica
+*(uint16*)(chave + 6) = *(resultado + 0x20);     // <- ESCREVE o tipo no objecto
+```
+
+**O valor escrito é `*(resultado + 0x20)`, e veio 0.** Ou seja: a fábrica de tipo
+devolveu um objecto cujo campo de identificação está a zero.
+
+## A cadeia, agora completa e circular
+
+```
+tab[idx] (a tabela de tipos 0x00868D48) devolve uma fábrica cujo produto tem +0x20 = 0
+ └─ func_0024E3D0 escreve esse 0 no campo de tipo do objecto 0x4077ED10
+   └─ o lookup do registo passa a devolver array[0] -> classe 0x00515008
+     └─ essa classe não tem tabela de pools em +0x8C
+       └─ o "pool" é 0, o pop devolve lixo, ninguém verifica
+         └─ this=0, objecto nunca alocado, nó com payload 0
+           └─ tab[lixo]=0 -> FATAL 0x00514E80 -> thr_auto_load nunca termina
+             └─ o menu não aparece
+```
+
+**É a mesma tabela `0x00868D48` no princípio e no fim.** A Parede D não é uma metáfora:
+o registo de tipos incompleto produz uma fábrica cujo produto não se sabe identificar, e
+essa ignorância propaga-se por treze elos até ao ecrã.
+
+## O que medir a seguir, e é curto
+
+Qual `idx` usa o `func_0024E3D0` nessa passagem, e o que está em `tab[idx]`. Se for uma
+das entradas que o `[WADLD-VT28]` mostrou resolver bem, o problema é o `+0x20` do produto;
+se for uma entrada vazia ou de outro tipo, voltamos ao registo — e aí liga-se directamente
+ao trabalho do TYPE15 e do `CB56C` que já existe no projecto.
