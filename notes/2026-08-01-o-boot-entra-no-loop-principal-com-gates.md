@@ -1009,3 +1009,47 @@ WAD), com a mesma fórmula `idx = (t<<2) & 0x3FFFC`, e despacha `tab[idx]->vt[0x
 São três campos de tipo diferentes em jogo (`+2`, `+4`, `+6`), todos contra a
 mesma tabela — mais uma razão para o próximo passo ser análise de layout, não
 mais sondas.
+
+---
+
+# CORRECÇÃO (22.ª): as listas de `func_0041F700` ESTÃO bem formadas
+
+Sonda de entrada em `func_0041F700` (40 entradas na corrida):
+
+```
+this=0x400C5048 arg=0x42F85334 w0=0xC0010001 sent=0x42F853B0 head=0x42F853B0  ← VAZIA (head==sent)
+this=0x400C5048 arg=0x42F85334 w0=0xC0010001 sent=0x42F853B0 head=0x40007DE4  ← com filhos
+this=0x400C5048 arg=0x4063858C w0=0xC0010001 sent=0x40638608 head=0x40638608  ← VAZIA
+this=0x400C5048 arg=0x4063858C w0=0xC0010001 sent=0x40638608 head=0x40007F34  ← com filhos
+```
+
+**`head == sentinela` nas vazias.** A auto-ligação que procurei estaticamente
+(varrimento de `addi rD,rA,IMM` + `stw rD,IMM(rA)`, que deu zero em `+0x80`)
+**existe em runtime** — é construída por um caminho que o meu padrão não apanha,
+exactamente a limitação que registei na altura.
+
+E `0x4063858C` é o caso `#1` da sonda de Julho, que a nota classificava como
+"lista válida". Bate.
+
+## O que cai
+
+Cai a generalização de que "o campo `+0x7C`/`+0x80` não é uma lista". Para
+**esta** família de objectos (`w0 = 0xC0010001`, endereços `0x4063xxxx` /
+`0x42F8xxxx`) é uma lista intrusiva correcta e bem inicializada.
+
+O que continua verdade, e é de **outra** família: os registos do WAD
+(`w0 = 0x40030001`, endereços `0x4077ACxx`) têm nesse offset a `matriz[0][3]`
+escrita pelo construtor `func_0024C1F8` — provado por desmontagem. Duas famílias
+diferentes, dois significados para o mesmo offset, e eu tratei-as como uma.
+
+## O que fica por explicar
+
+As 27,5 M de iterações **não** vêm de uma lista malformada à entrada. Vêm da
+descida recursiva: o walk visita filhos via `*(nó+8)`, resolve o tipo de cada um
+por `*(filho+4)` e despacha `tab[idx]->vt[0x40]`. Ou a árvore tem um ciclo em
+profundidade, ou é genuinamente enorme.
+
+Distinguir os dois é uma medição concreta: contar a profundidade e detectar
+revisita de nós (um conjunto de vistos, com cap). Isso cabe numa sonda, ao
+contrário da análise de layout que eu tinha dado como próximo passo — este ramo
+não precisa dela.

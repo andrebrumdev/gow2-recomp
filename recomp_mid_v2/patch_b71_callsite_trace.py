@@ -89,7 +89,7 @@ CALL_RE = re.compile(
     re.M)
 
 
-ENTRY_PROBE_FOR = ("func_00254788",)   # laco terminal: precisa do r4 (o arg)
+ENTRY_PROBE_FOR = ("func_00254788", "func_0041F700")  # lacos terminais: precisam do r4
 
 
 def entry_probe(fn):
