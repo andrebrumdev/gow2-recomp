@@ -342,3 +342,65 @@ Comparei o `objvt` de uma corrida com a vigia de outra e construí uma teoria
 inteira — "matriz percorrida como lista" — sobre a diferença. **Duas corridas
 não são uma medição.** Bastou pôr as duas sondas juntas para a teoria cair em
 dois minutos.
+
+---
+
+# As duas hipóteses resolvidas — e uma sobre-correcção minha (19.ª)
+
+`func_0024C1F8` desmontado inteiro do EBOOT, 33 instruções, sem ramos:
+
+```
+0x0024C210  bl    0x0024BC78        escreve o cabecalho (0x40030001)
+0x0024C218  lfs   f13, ...          1.0
+0x0024C220  lfs   f0,  ...          0.0
+0x0024C224  stfsu f13,0x70(r9)      r9 += 0x70 ;  *(r9)   = 1.0
+0x0024C228  stfs  f0,12(r9)                       *(+0x7C) = 0.0
+0x0024C22C  stfs  f0,4(r9)                        *(+0x74) = 0.0
+0x0024C230  stfs  f0,8(r9)                        *(+0x78) = 0.0
+0x0024C238  stfsu f0,0x80(r11)      linha 2:  0,1,0,0
+0x0024C248  stfsu f0,0x90(r9)       linha 3
+0x0024C258  stfsu f0,0xA0(...)      linha 4
+0x0024C278  blr
+```
+
+**Matriz identidade 4×4 em `+0x70/+0x80/+0x90/+0xA0`.** O `+0x7C` é
+`matriz[0][3]`, legitimamente `0.0`.
+
+## Resposta às duas hipóteses
+
+> ou o construtor devia auto-ligar `*(obj+0x7C) = obj+0x7C` e não o faz, ou
+> aquele campo não é uma lista e os walkers não deviam lá tocar.
+
+**É a segunda.** O construtor não está incompleto — está correcto e completo
+para o que constrói. `+0x7C` **não é** uma cabeça de lista neste tipo.
+
+## Sobre-correcção minha, e retiro-a
+
+Na correcção 18 escrevi que "cai a generalização de que as quatro paredes são
+objecto do tipo errado". **Fui longe de mais.** O que caiu foi a caracterização
+do objecto ("é uma matriz", "não-polimórfico", "nunca foi um contentor") — isso
+estava mesmo errado: é um objecto de tipo 1, com cabeçalho e matriz embutida,
+correctamente construído e encadeado numa lista pelo `+0x0`.
+
+Mas a generalização **não** caiu; ficou **provada**. Antes era inferência; agora
+há prova estática: o `+0x7C` deste objecto é um elemento de matriz escrito pelo
+construtor. Um walker que leia `+0x7C` como sentinela de lista está,
+demonstravelmente, a olhar para o objecto errado.
+
+O erro da 18.ª foi retirar a mais por ter retirado de menos antes — reagi à
+descoberta de que `func_0024C1F8` era o construtor (e não um inicializador
+alheio) descartando também a conclusão que essa descoberta não tocava.
+
+## Estado final
+
+Não há menu. Mas a pergunta que fica é a mais estreita de toda a sessão, e está
+provada e não inferida:
+
+> `func_002545B0` recebe em `arg` um objecto cujo `+0x7C` é `matriz[0][3]`.
+> Quem lhe passa esse `arg` é `func_0024E270`, no sítio `0x0024E2D4`.
+> **Porquê esse objecto?**
+
+E há um caminho barato para a resposta: o objecto está encadeado (`+0x0` aponta
+para o irmão `0x4077AD20`) e o walker percorre registos por tag. Ou o walker
+apanha o nó errado da cadeia, ou o `arg` que ele passa devia ser outro campo do
+nó — e isso lê-se em `func_0024E270` com o `arg` já conhecido.
