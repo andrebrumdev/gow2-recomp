@@ -20,14 +20,18 @@
 elf_path = "../EBOOT.ELF"                     # local only; nunca commitar o ELF
 functions_json = "../functions.json"
 out_directory = "../recomp_macos_v2"
-# switch_table_file = "gow2_switch_tables.toml"
-#   COMENTADO no plano 17-03, e nao por gosto: com a chave activa o
-#   ppu_lifter.py ABORTA logo no arranque com
+switch_table_file = "gow2_switch_tables.toml"
+#   REACTIVADA no plano 18-02, no MESMO commit que criou o ficheiro ao lado.
+#   Esteve COMENTADA desde o 17-03 e nao por gosto: o caminho e' resolvido
+#   relativamente a ESTE ficheiro, e com a chave activa a apontar para um
+#   ficheiro inexistente o ppu_lifter.py ABORTA logo no arranque com
 #     Error: .../config/gow2_switch_tables.toml: switch table file not found
-#   (medido nesta corrida), porque o ficheiro so' nasce na Fase 18 (Task B1).
-#   Ou seja: enquanto a chave estiver aqui, --config e' inutilizavel e o
-#   [[midasm_hook]] abaixo nunca chega a ser emitido. Descomentar no MESMO
-#   commit que criar o gow2_switch_tables.toml.
+#   (medido) -- e nao aborta so' a parte das switch tables: morre o --config
+#   INTEIRO, portanto o [[midasm_hook]] abaixo deixa de ser emitido e a Fase 17
+#   parte em silencio. A armadilha continua a existir para um caminho ERRADO;
+#   o que deixou de existir foi o ficheiro em falta.
+#   Nao-regressao provada no 18-02: com esta chave activa, um re-lift com
+#   --config continua a emitir gow2_midasm_Ce03cWaitIdle em func_000CE03C.
 
 # ---------------------------------------------------------------------------
 # Mid-asm hooks
