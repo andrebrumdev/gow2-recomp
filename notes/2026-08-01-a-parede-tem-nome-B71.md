@@ -374,3 +374,50 @@ campo, que produtor, e quem o devia ter chamado". O que falta é a decisão a
 montante: **porque é que o registry entrega `0x400C6B50` a um método que exige
 um objecto inicializado por `func_0022851C`** — e essa é a mesma pergunta da
 Parede D, agora com três testemunhas independentes em vez de uma.
+
+---
+
+# O gate de diagnóstico: move, mas não abre
+
+`PS3_POOL_NULL_IF_BAD=1` recusa usar o número 5 como ponteiro e devolve bloco
+nulo. Não inventa memória nem estampa valores — só recusa a conversão.
+
+| | LIST254 só | LIST254 + POOL |
+|---|---:|---:|
+| `FATAL` | 0 | 0 |
+| saltos do gate | — | 1 |
+| escritas `UNCOMMITTED` de `func_00220284` no fim | 16/volta | **0** |
+| `func_00411A5C` (chamador do produtor correcto) | **0** | **corre** |
+| último degrau | B71 | B71 |
+| loop principal (`STATE`) | 0 | 0 |
+
+**Move duas coisas reais:** as 16 escritas por ponteiro inválido desaparecem, e
+`func_00411A5C` — que nunca corria — passa a correr. É o chamador de
+`func_0022851C`, o produtor correcto da tabela de pools. Ou seja, saltar o pop
+mau deixa a execução alcançar o caminho de inicialização certo.
+
+**Mas não abre:** o B71 continua sem retornar, o loop principal continua a
+nunca correr, e o boot acaba no mesmo ciclo de stream FIOS
+(`F2B-STREAM-ENSURE`/`FILL` + SPU jobs + flips).
+
+Conclusão honesta: esta parede não é a última. É pelo menos a terceira em fila
+dentro do B71 — `func_002545B0` (head=0), o pop sobre lixo, e o que quer que
+prenda o ciclo de stream. Cada uma tem de cair pela raiz, não por gate.
+
+## Balanço da sessão
+
+Entregue:
+
+- **Dois defeitos NOSSOS removidos**, com prova de não-regressão medida:
+  o `F2B-STREAM-PUMP` a escrever 770 KiB para lá do ring real, e o paliativo
+  TYPE15 REHOME que, morto o stomp, passou a ser a causa de 13 despachos nulos.
+- **Dois instrumentos consertados:** o gate media `thr_auto_load() end`, string
+  inexistente em todos os 26 binários; e não havia marcador de fim de thread.
+- **Um elo do gate provado irrelevante:** o AUTO_LOAD só é criado por código de
+  pós-loop; um binário que "passasse" esse elo teria saído do jogo.
+- **A cadeia inteira medida**, do `main()` ao campo concreto, degrau a degrau,
+  com sonda de controlo em cada bissecção.
+- **Três hipóteses de bug do lifter levantadas e as três refutadas** contra o
+  binário desmontado, não por opinião.
+
+Não entregue: **o menu.** O gate oficial continua 0/3.
