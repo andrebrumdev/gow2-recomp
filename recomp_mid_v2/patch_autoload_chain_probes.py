@@ -88,6 +88,13 @@ CHAIN = [
     "func_000B5294",
     "func_000BBDC8",
     "func_000BB0B0",
+    # o produtor CORRECTO da tabela de pools e o seu chamador -- medido
+    # 2026-08-01: o objecto sao recebe *(obj+0x14) de func_0022851C+0xD8C
+    # (chamado de func_00411A5C+0x1D8); o objecto MAU recebe um bloco cru
+    # de func_00263178, de func_002B11B8. Saber quantos objectos o
+    # produtor correcto cobre diz se o mau ficou de fora.
+    "func_0022851C",
+    "func_00411A5C",
     "func_0039E6B4",   # CONTROLO
 ]
 

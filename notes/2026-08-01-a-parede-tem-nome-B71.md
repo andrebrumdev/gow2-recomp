@@ -316,3 +316,61 @@ isso à sua maneira. É a Parede D vista de três ângulos.
 Pergunta fechada, com dois endereços: **quem decide que `0x400C6C68` é o objecto
 a passar a `func_002182A4`** — e é o mesmo `idx=(tipo<<2)&0x3FFFC` de
 `func_0010F5E8` que já está medido a alimentar esta cadeia.
+
+---
+
+# Quem devia ter inicializado o objecto mau: ninguém o fez
+
+## Os dois campos, lado a lado
+
+`func_002182A4` faz `r29 = r3 + 0x118` e lê `*(r29+0x14)` como tabela de pools.
+Vigiando esse campo nos dois objectos:
+
+```
+[0x4063890C]=0x00000000   ra0=func_004117C0+0x850     <- zero-init (objecto SÃO)
+[0x4063890C]=0x40773630   ra0=func_0022851C+0xD8C     <- array de pools
+[0x400C6C7C]=0x4007FCE8   ra0=func_00263178+0x2054    <- bloco CRU (objecto MAU)
+```
+
+**Produtores diferentes.** O são recebe um array de pools de `func_0022851C`;
+o mau recebe um bloco cru do alocador `func_00263178`, cuja palavra 0 é a
+contagem — o 5.
+
+## E o produtor correcto só conhece um objecto
+
+Sonda de entrada em `func_0022851C` (`PS3_TRACE_ALCHAIN`, sem cap):
+
+```
+107 chamadas, TODAS com r3 = 0x406387E0
+     49x  lr=0x0024E710
+     44x  lr=0x0024E654     <- o walker de registos do WAD
+     14x  lr=0x002BCAC8
+```
+
+`0x406387E0 + 0x118 = 0x406388F8` — o objecto **são**. O pai do objecto mau
+(`0x400C6B50`) **nunca é passado a `func_0022851C`**.
+
+> Nota de instrumento: o `ra1` da vigia dizia `func_00411A5C+0x1D8`, mas a sonda
+> de entrada mostra que `func_00411A5C` **nunca corre**. Frames do host não
+> mapeiam 1:1 em chamadas guest quando há trampolins — o mesmo aviso que já
+> tinha escrito hoje sobre o `lr` do guest. Só o `ra0` (o frame imediato) e as
+> sondas de entrada são de fiar.
+
+## O que isto quer dizer
+
+O objecto `0x400C6B50` nunca passou pela inicialização de tabela de pools. Não
+é que a inicialização tenha corrido mal: **não corre para ele.** E depois um
+método que assume essa tabela é invocado sobre ele.
+
+É exactamente a terceira instância do padrão já registado — o método certo, o
+objecto errado. E os chamadores do produtor correcto são o walker de registos do
+WAD (`0x0024E6xx`/`0x0024E7xx`), a mesma família que aparece nas outras duas
+instâncias.
+
+## Estado honesto
+
+Não cheguei ao menu. A parede está localizada até ao nível de "que objecto, que
+campo, que produtor, e quem o devia ter chamado". O que falta é a decisão a
+montante: **porque é que o registry entrega `0x400C6B50` a um método que exige
+um objecto inicializado por `func_0022851C`** — e essa é a mesma pergunta da
+Parede D, agora com três testemunhas independentes em vez de uma.
