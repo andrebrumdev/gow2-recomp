@@ -28,8 +28,33 @@ NAO inclui as linhas de probe (SCHEDARM-PROBE / MENUPRESENT-PROBE): essas tem
 escritores proprios (patch_sched_arm_probe.py, patch_menu_present_schedule_probe.py)
 e sao aplicadas por eles.
 
+MIGRADO PARA MID-ASM (Fase 17, plano 17-03) -- ler antes de mexer
+-----------------------------------------------------------------
+O bloco wait-idle deste script deixou de ser a fonte de verdade. Vive agora em
+codigo host VERSIONADO, `games/gow2/hooks/gow2_midasm_hooks.cpp`
+(`gow2_midasm_Ce03cWaitIdle`), e o `ppu_lifter.py` emite a chamada sozinho a
+partir da entrada `[[midasm_hook]] address = 0x000CE03C` de
+`games/gow2/config/gow2_recomp.toml`. Um lift feito com `--config` ja' vem com
+o fix la' dentro -- sem correr patch nenhum. E' esse o ponto da migracao.
+
+Este ficheiro NAO foi apagado (politica A do plano 17-03): a producao ainda
+corre lifts ANTIGOS, gerados sem `--config`, e esses continuam a precisar do
+texto injectado. O script passou a DISTINGUIR os dois casos:
+
+  - funcao ja' contem `gow2_midasm_Ce03cWaitIdle(` -> MIDASM, nao escreve nada
+  - funcao ja' contem o bloco injectado             -> ALREADY, nao escreve nada
+  - funcao tem o corpo gerado esperado              -> injecta (lift antigo)
+
+O que o mid-asm NAO absorveu, e por isso nao e' reposto por ninguem num lift
+com `--config`: o pad de setjmp/longjmp (`g_ce03c_play_abort`) a' volta do
+corpo natural, com `cellVdec_stop_all_for_play_abort()` e a reconstrucao da
+freelist do media object. Um `[[midasm_hook]]` corre AO LADO de uma instrucao,
+nao ENVOLVE a funcao -- isso e' weak override (Fase 19). Esta' declarado no
+17-03-SUMMARY.md e no ledger; nao se afirma paridade de 143 linhas.
+
 Contrato
 --------
+- mid-asm ja' presente   -> MIDASM (skip), rc=0
 - ja' instalado          -> ALREADY, rc=0
 - corpo gerado esperado  -> substitui, rc=0
 - corpo diferente do esperado -> RECUSA, rc=2 (nao adivinha: o lifter mudou e o
@@ -48,6 +73,25 @@ from lift_paths import resolve_lift_paths            # noqa: E402
 SIG = "void func_000CE03C(ppu_context* ctx) {\n"
 MARKER = "[INTROSEQ] CE03C wait-idle 1st movie"
 
+# A chamada que o ppu_lifter.py emite quando corre com --config (Fase 17).
+# Procurada SO' dentro da regiao de func_000CE03C, nunca no ficheiro inteiro: o
+# lifter tambem escreve a DECLARACAO `void gow2_midasm_Ce03cWaitIdle(...);` no
+# preambulo de TODAS as TUs geradas, e um `in t` global daria MIDASM em chunks
+# que nem sequer tem a funcao.
+MIDASM_CALL = "gow2_midasm_Ce03cWaitIdle(ctx);"
+
+
+def func_region(t: str) -> str | None:
+    """Fatia [inicio de func_000CE03C, inicio da funcao seguinte).
+
+    Mesma delimitacao que o check_contracts.py e os patches OPD ja' usam.
+    """
+    i = t.find(SIG)
+    if i < 0:
+        return None
+    j = t.find("void func_", i + 20)
+    return t[i:j] if j >= 0 else t[i:]
+
 # Corpo GERADO que este patch espera encontrar (lifter de 2026-07-25).
 CLEAN_BODY = 'void func_000CE03C(ppu_context* ctx) {\n        ctx->gpr[9] = vm_read32(ctx->gpr[2] + -0x5E44);\n        ctx->gpr[5] = (int64_t)(int32_t)(0x7EFF);\n        ctx->gpr[11] = vm_read32(ctx->gpr[2] + -0x5E48);\n        ctx->gpr[7] = (int64_t)(int32_t)(0);\n        ctx->gpr[3] = vm_read32(ctx->gpr[2] + -0x5E4C);\n        ctx->gpr[0] = vm_read32(ctx->gpr[9] + 0x0);\n        ctx->gpr[4] = vm_read32(ctx->gpr[11] + 0x0);\n        ctx->gpr[0] = ctx->gpr[0] ^ 0x1;\n        ctx->gpr[9] = ppc_sraw(&ctx->xer, (int32_t)ctx->gpr[0], 0x1F);\n        ctx->gpr[6] = ctx->gpr[9] ^ ctx->gpr[0];\n        ctx->gpr[6] = ctx->gpr[6] - ctx->gpr[9];\n        ctx->gpr[6] = ctx->gpr[6] + (int64_t)(-1);\n        ctx->gpr[6] = (uint64_t)ppc_rlwinm((uint32_t)ctx->gpr[6], 1, 31, 31);\n        ctx->gpr[6] = (int64_t)(int32_t)ctx->gpr[6];\n        ctx->lr = 0x000CE078; func_002C00DC(ctx); DRAIN_TRAMPOLINE(ctx);\n        /* nop */;\n        ctx->gpr[3] = (int64_t)(int32_t)(1);\n        ctx->lr = 0x000CE084; func_002BFF00(ctx); DRAIN_TRAMPOLINE(ctx);\n        /* nop */;\n        ctx->lr = 0x000CE08C; func_002C0508(ctx); DRAIN_TRAMPOLINE(ctx);\n        /* nop */;\n        ctx->gpr[9] = vm_read32(ctx->gpr[30] + 0x0);\n        ctx->gpr[9] = ctx->gpr[9] + (int64_t)(1);\n        vm_write32(ctx->gpr[30] + 0x0, ctx->gpr[9]);\n        { g_trampoline_fn = (void(*)(void*))func_000CE01C; return; }\n}\n'
 
@@ -56,10 +100,17 @@ PATCHED_BODY = 'void func_000CE03C(ppu_context* ctx) {\n        /* Intro idx→2
 
 
 def patch_one(path: Path) -> int:
-    """0 aplicado | 1 ja' aplicado | -1 nao tem a funcao | -2 corpo inesperado."""
+    """0 aplicado | 1 ja' aplicado | 2 mid-asm | -1 sem a funcao | -2 corpo inesperado."""
     t = path.read_text(encoding="utf-8", errors="replace")
     if SIG not in t:
         return -1
+    region = func_region(t) or ""
+    if MIDASM_CALL in region:
+        # Lift gerado com --config: o fix ja' la' esta', emitido pelo lifter, e
+        # o corpo vive em games/gow2/hooks/gow2_midasm_hooks.cpp. Reinjectar as
+        # 116 linhas por cima seria repor a duplicacao que a migracao eliminou.
+        print(f"  {path.name}: MIDASM (hook emitido pelo lifter -- nada a injectar)")
+        return 2
     if MARKER in t:
         print(f"  {path.name}: ALREADY")
         return 1
@@ -79,15 +130,22 @@ def main() -> int:
     if not paths:
         print("ERRO: nenhum ficheiro de lift legivel", file=sys.stderr)
         return 3
-    applied = already = unexpected = 0
+    applied = already = midasm = unexpected = 0
     for p in paths:
         r = patch_one(p)
         if r == 0:
             applied += 1
         elif r == 1:
             already += 1
+        elif r == 2:
+            midasm += 1
         elif r == -2:
             unexpected += 1
+    if midasm:
+        print(f"[ce03c-introseq] SKIP: mid-asm e' a fonte de verdade neste lift "
+              f"({midasm} ficheiro(s) com gow2_midasm_Ce03cWaitIdle; "
+              f"{applied} aplicado, {already} ja' aplicado)")
+        return 0
     if applied or already:
         print(f"[ce03c-introseq] ok ({applied} aplicado, {already} ja' aplicado)")
         return 0

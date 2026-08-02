@@ -40,8 +40,22 @@ escondido ate agora.
 Fechar isso por completo exige um segundo patch que instale o bloco CE03C
 inteiro. Fica registado em notes/2026-07-25-baseline-depende-de-wip.md.
 
+SUBSUMIDO PELO MID-ASM (Fase 17, plano 17-03)
+---------------------------------------------
+O corpo host `gow2_midasm_Ce03cWaitIdle` (games/gow2/hooks/gow2_midasm_hooks.cpp)
+CHAMA `movie_done_timebased_reset()` -- tal como o bloco injectado ja' fazia --
+e o lifter emite esse hook sozinho quando corre com `--config`. Num lift assim,
+este script nao tem ancora nenhuma para casar (o bloco `[INTROSEQ]` nunca chega
+a existir no lift) e, ate' esta fase, FALHAVA com rc=2 -- medido em
+/tmp/m1_f17_apply_patches.log antes desta alteracao. Um FAILED nao e' o
+resultado certo: a chamada ESTA' la', so' que vinda do host.
+
+Por isso o script passa a reconhecer o mid-asm e a devolver MIDASM/rc=0. Em
+lifts ANTIGOS (sem --config) o comportamento nao muda um bit: a ancora existe e
+a insercao acontece como antes.
+
 Uso:  patch_ce03c_movie_done_reset.py [LIFT_DIR_OU_FICHEIRO...]
-rc=0 aplicado ou ja' aplicado | rc=2 ancora ausente | rc=3 lift ilegivel
+rc=0 aplicado, ja' aplicado ou mid-asm | rc=2 ancora ausente | rc=3 lift ilegivel
 """
 from __future__ import annotations
 
@@ -52,6 +66,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lift_paths import resolve_lift_paths            # noqa: E402
 
 MARKER = "movie_done_timebased_reset"
+
+# Mid-asm (Fase 17): a chamada que o lifter emite dentro de func_000CE03C
+# quando corre com --config. Procurada SO' na regiao dessa funcao -- o lifter
+# tambem escreve a DECLARACAO no preambulo de TODAS as TUs, e um `in t` global
+# daria MIDASM em chunks que nem sequer tem a funcao.
+SIG_CE03C = "void func_000CE03C(ppu_context* ctx) {\n"
+MIDASM_CALL = "gow2_midasm_Ce03cWaitIdle(ctx);"
+
+
+def tem_midasm(t: str) -> bool:
+    """A regiao de func_000CE03C ja' traz o hook mid-asm emitido pelo lifter?"""
+    i = t.find(SIG_CE03C)
+    if i < 0:
+        return False
+    j = t.find("void func_", i + 20)
+    region = t[i:j] if j >= 0 else t[i:]
+    return MIDASM_CALL in region
 
 ANCHOR = (
     '            { extern void movie_vt_clear_overlay_done(void) '
@@ -67,12 +98,15 @@ INSERT = (
 
 
 def patch_one(path: Path) -> int:
-    """0 = aplicado, 1 = ja' aplicado, -1 = ancora ausente."""
+    """0 = aplicado, 1 = ja' aplicado, 2 = mid-asm, -1 = ancora ausente."""
     try:
         t = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         print(f"  {path.name}: ilegivel ({exc})")
         return -2
+    if tem_midasm(t):
+        print(f"  {path.name}: MIDASM (movie_done_timebased_reset() vem do hook host)")
+        return 2
     if MARKER not in t and ANCHOR not in t:
         return -1
     if MARKER in t:
@@ -93,7 +127,7 @@ def patch_one(path: Path) -> int:
 
 def main() -> int:
     paths = resolve_lift_paths(sys.argv[1:], "ppu_recomp_001.cpp")
-    seen = applied = already = 0
+    seen = applied = already = midasm = 0
     for p in paths:
         if not p.is_file():
             continue
@@ -103,11 +137,17 @@ def main() -> int:
             applied += 1
         elif r == 1:
             already += 1
+        elif r == 2:
+            midasm += 1
         elif r == -2:
             return 3
     if not seen:
         print("ERRO: nenhum ficheiro de lift legivel", file=sys.stderr)
         return 3
+    if midasm:
+        print(f"[ce03c-movie-done-reset] SKIP: subsumido pelo mid-asm neste lift "
+              f"({midasm} ficheiro(s) com gow2_midasm_Ce03cWaitIdle)")
+        return 0
     if applied or already:
         print(f"[ce03c-movie-done-reset] ok ({applied} aplicado, {already} ja' aplicado)")
         return 0

@@ -72,9 +72,25 @@ if [ "${RELIFT:-0}" = "1" ]; then
         exit 1
     fi
 
+    # --config: sem ele o lifter corre "como antes" e NAO emite os mid-asm
+    # hooks -- ou seja, um RELIFT=1 produzia um lift SEM o wait-idle do CE03C
+    # e o build seguinte compilava um gow2_midasm_hooks.o que ninguem chama
+    # (medido no plano 17-03: e' o bug que faz o piloto parecer migrado sem o
+    # estar). PS3_RECOMP_CONFIG permite apontar para outro TOML; vazio ou
+    # ficheiro ausente = comportamento legado, sem hooks.
+    RECOMP_CFG="${PS3_RECOMP_CONFIG:-$HERE/config/gow2_recomp.toml}"
+    CFG_ARGS=()
+    if [ -f "$RECOMP_CFG" ]; then
+        CFG_ARGS=(--config "$RECOMP_CFG")
+        echo "  RELIFT: --config $RECOMP_CFG"
+    else
+        echo "  RELIFT: sem --config (nao existe $RECOMP_CFG) -- lift SEM mid-asm hooks"
+    fi
+
     mkdir -p "$LIFT"
     echo "=== 0. RELIFT=1: regenerando lift em $LIFT (a partir de $EBOOT) ==="
-    python3 "$PS3/tools/ppu_lifter.py" "$EBOOT" --functions "$FUNCS" -o "$LIFT" -j 4
+    python3 "$PS3/tools/ppu_lifter.py" "$EBOOT" --functions "$FUNCS" \
+        ${CFG_ARGS[@]+"${CFG_ARGS[@]}"} -o "$LIFT" -j 4
     _relift_rc=$?
     if [ "$_relift_rc" != "0" ]; then
         exit "$_relift_rc"

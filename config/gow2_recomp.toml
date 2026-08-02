@@ -20,7 +20,14 @@
 elf_path = "../EBOOT.ELF"                     # local only; nunca commitar o ELF
 functions_json = "../functions.json"
 out_directory = "../recomp_macos_v2"
-switch_table_file = "gow2_switch_tables.toml" # ainda nao existe -- chega na Task B1
+# switch_table_file = "gow2_switch_tables.toml"
+#   COMENTADO no plano 17-03, e nao por gosto: com a chave activa o
+#   ppu_lifter.py ABORTA logo no arranque com
+#     Error: .../config/gow2_switch_tables.toml: switch table file not found
+#   (medido nesta corrida), porque o ficheiro so' nasce na Fase 18 (Task B1).
+#   Ou seja: enquanto a chave estiver aqui, --config e' inutilizavel e o
+#   [[midasm_hook]] abaixo nunca chega a ser emitido. Descomentar no MESMO
+#   commit que criar o gow2_switch_tables.toml.
 
 # ---------------------------------------------------------------------------
 # Mid-asm hooks
