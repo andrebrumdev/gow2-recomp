@@ -1246,3 +1246,64 @@ A pergunta é agora estreita e mecânica:
 Ou o campo `+4` dos filhos não está a ser preenchido, ou o do pai vem de outro
 sítio. Uma sonda na comparação distingue os dois — e é a sétima da mesma família
 que resolveu todas as camadas desta noite.
+
+---
+
+# A poda medida: é um teste de auto-recursão, não um guarda de ciclo
+
+Sonda `PS3_TRACE_PRUNE` nos dois lados da comparação:
+
+```
+#1  filho=0x42F86AD8 w0=0x00517700 campo=18 pai=1 desce  (coincidem 0 de 1)
+#2  filho=0x42F869E8 w0=0x005179A0 campo=25 pai=1 desce
+#3  filho=0x42F86990 w0=0x00516C10 campo=32 pai=1 desce
+#4  filho=0x42F86940 w0=0x00515488 campo=16 pai=1 desce
+#5  filho=0x42F85AE0 w0=0x00516E50 campo=21 pai=1 desce
+#6  filho=0x42F85A88 w0=0x00518038 campo=23 pai=1 desce
+#7  filho=0x42F859F0 w0=0x00515F80 campo=9  pai=1 desce
+#8  filho=0x42F85920 w0=0x00516AA8 campo=17 pai=1 desce
+#9  filho=0x42F85888 w0=0x005168C8 campo=15 pai=1 desce
+#10 filho=0x42F85800 w0=0x00515290 campo=20 pai=1 desce
+#11 filho=0x42F856C8 w0=0x005157E0 campo=4  pai=1 desce
+#12 filho=0x42F85590 w0=0x00514F28 campo=3  pai=1 desce  (coincidem 0 de 12)
+```
+
+**Os `campo` são tags de tipo.** 18, 25, 32, 16, 21, 23, 9, 17, 15, 20, 4, 3 —
+todos presentes no despejo do registry feito antes (`tab=0x00868D48`, 26 entradas,
+tags 0..32). E os `w0` dos filhos são todos `0x0051xxxx`, ou seja **vtables**: os
+filhos são objectos polimórficos, um por tipo.
+
+O pai tem tag **1**. **Nenhum dos 12 filhos é 1 — logo a poda nunca dispara.**
+
+## O que isto quer dizer
+
+A comparação `child_tag == parent_tag` **não é um guarda de ciclo**: só impede a
+auto-recursão imediata do mesmo tipo. Não há conjunto de visitados. Portanto o
+walk só termina se o grafo de tipos for uma árvore ou um DAG raso.
+
+Aqui não é: o tipo 1 tem como filhos os outros 12, e cada um deles volta a ter
+como filhos todos os tipos diferentes do seu. Isso é um grafo **completo** — e
+percorrê-lo em profundidade sem marcar visitados dá exactamente 12⁷ ≈ 35 M, a
+ordem de grandeza medida.
+
+## A pergunta final, e é de dados
+
+> **O tipo 1 deve mesmo ter como filhos os outros doze tipos?**
+
+Se a lista de filhos de cada tipo devia conter só os seus subtipos directos, a
+lista está mal construída — e quem a constrói é o `push` de `func_0041F700`
+(`cursor++; array[cursor] = nó`), que empurra **cada nó visitado** para a pilha
+de produtos da fábrica.
+
+Ou seja: o walk que explode é o mesmo que popula a estrutura que ele percorre.
+Se a população estiver errada, a travessia herda o erro — e é aí que a próxima
+sessão deve começar, com o registry já provado saudável e as 26 entradas
+conhecidas.
+
+## Balanço da noite
+
+Sete camadas abertas por medição. **Todas correctas menos uma, que era nossa**
+(`cellPadSetActDirect`, corrigido). O problema deixou de ser "o boot não avança"
+e passou a ser uma pergunta sobre o conteúdo de uma lista, com o tipo do pai
+(1), os tipos dos filhos (12 conhecidos) e o sítio que os empurra, todos
+nomeados.
