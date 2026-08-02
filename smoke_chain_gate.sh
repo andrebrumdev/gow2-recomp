@@ -108,8 +108,16 @@ PY
 # ---- deriva elo_stopped andando pela cadeia por ORDEM, parando no PRIMEIRO
 # elo cujo valor nao bate o "bom". Os elos 6/7 (SetFlip_after_R_Perm/
 # Pad_total) sao sempre impressos mas NAO decidem elo_stopped nem o rc.
+# CORRECCAO 2026-08-01: o elo AUTO_LOAD dizia sempre "AUTO_LOAD (thr_end)"
+# porque thr_end media uma string que nao existe em binario nenhum (ver a nota
+# extensa em lib_boot_chain_metrics.sh). Com o marcador real, thr_created
+# separa os dois estados que antes eram indistinguiveis -- e sao perguntas
+# diferentes, com investigacoes diferentes:
+#   nunca criada           -> porque nao chega o codigo que a cria?
+#   criada e nao termina   -> em que fica presa?
 derive_elo_stopped() {
   local st620="$1" startseq="$2" nopic="$3" thr_end="$4" r_perma="$5"
+  local thr_created="${6:-0}"
   if [ "${st620:-0}" -lt 3 ] 2>/dev/null; then
     echo "intro (st620)"
   elif [ "${startseq:-0}" -lt 2 ] 2>/dev/null; then
@@ -117,7 +125,11 @@ derive_elo_stopped() {
   elif [ "${nopic:-0}" -lt 4 ] 2>/dev/null; then
     echo "re-Play (NOPIC)"
   elif [ "${thr_end:-0}" -lt 1 ] 2>/dev/null; then
-    echo "AUTO_LOAD (thr_end)"
+    if [ "${thr_created:-0}" -lt 1 ] 2>/dev/null; then
+      echo "AUTO_LOAD (nunca criada)"
+    else
+      echo "AUTO_LOAD (criada, nao termina)"
+    fi
   elif [ "${r_perma:-0}" -lt 1 ] 2>/dev/null; then
     echo "WAD (R_PermA)"
   else
@@ -127,7 +139,7 @@ derive_elo_stopped() {
 
 # ---- TSV: cabecalho (trunca se ja existir) ---------------------------------
 if [ -n "$TSV" ]; then
-  printf 'run\tst620\tstartseq\tnopic\tthr_end\tr_perma\tsetflip_after_rperm\tpad_total\telo_stopped\tclass\n' > "$TSV"
+  printf 'run\tst620\tstartseq\tnopic\tthr_created\tthr_end\tr_perma\tsetflip_after_rperm\tpad_total\telo_stopped\tclass\n' > "$TSV"
 fi
 
 set -a; . "$HERE/env_gow2.sh"; set +a
@@ -139,13 +151,13 @@ for r in $(seq 1 "$RUNS"); do
   LOG="/tmp/chain_gate_${TAG}_run${r}_$(date +%Y%m%d_%H%M%S).log"
   measure_one "$BIN" "$LOG" "$TIMEOUT"
 
-  read -r LOG_LINES STARTSEQ THR_END R_PERMA NOPIC <<< "$(extract_counts "$LOG")"
+  read -r LOG_LINES STARTSEQ THR_END R_PERMA NOPIC THR_CREATED <<< "$(extract_counts "$LOG")"
   ST620="$(extract_st620 "$LOG")"
   read -r SETFLIP_AFTER PAD_TOTAL <<< "$(count_gate_pair "$LOG")"
   SETFLIP_AFTER=${SETFLIP_AFTER:-0}
   PAD_TOTAL=${PAD_TOTAL:-0}
 
-  ELO_STOPPED="$(derive_elo_stopped "$ST620" "$STARTSEQ" "$NOPIC" "$THR_END" "$R_PERMA")"
+  ELO_STOPPED="$(derive_elo_stopped "$ST620" "$STARTSEQ" "$NOPIC" "$THR_END" "$R_PERMA" "$THR_CREATED")"
   if [ "$ELO_STOPPED" = "nenhum" ]; then
     CLASS="OK"
     OK_COUNT=$((OK_COUNT + 1))
@@ -155,13 +167,13 @@ for r in $(seq 1 "$RUNS"); do
 $ELO_STOPPED"
   fi
 
-  printf "run%d  st620=%s startseq=%s nopic=%s thr_end=%s r_perma=%s setflip_after_rperm=%s pad_total=%s elo_stopped=%s class=%s\n" \
-    "$r" "$ST620" "$STARTSEQ" "$NOPIC" "$THR_END" "$R_PERMA" "$SETFLIP_AFTER" "$PAD_TOTAL" "$ELO_STOPPED" "$CLASS"
+  printf "run%d  st620=%s startseq=%s nopic=%s thr_created=%s thr_end=%s r_perma=%s setflip_after_rperm=%s pad_total=%s elo_stopped=%s class=%s\n" \
+    "$r" "$ST620" "$STARTSEQ" "$NOPIC" "$THR_CREATED" "$THR_END" "$R_PERMA" "$SETFLIP_AFTER" "$PAD_TOTAL" "$ELO_STOPPED" "$CLASS"
   echo "log: $LOG"
 
   if [ -n "$TSV" ]; then
-    printf '%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$r" "$ST620" "$STARTSEQ" "$NOPIC" "$THR_END" "$R_PERMA" "$SETFLIP_AFTER" "$PAD_TOTAL" "$ELO_STOPPED" "$CLASS" >> "$TSV"
+    printf '%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$r" "$ST620" "$STARTSEQ" "$NOPIC" "$THR_CREATED" "$THR_END" "$R_PERMA" "$SETFLIP_AFTER" "$PAD_TOTAL" "$ELO_STOPPED" "$CLASS" >> "$TSV"
   fi
 done
 

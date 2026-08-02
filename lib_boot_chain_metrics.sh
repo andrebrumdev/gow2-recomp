@@ -8,7 +8,7 @@
 #   arm_menu_fast_recipe()  -- o bloco de env da recipe menu-fast Metal
 #   measure_one()           -- lanca em fundo, poll por segundo, mata SEMPRE
 #                              por PID (TERM -> espera 1s -> -9, NUNCA pkill -f)
-#   extract_counts()        -- 5 numeros via grep -c (log_lines/startseq/
+#   extract_counts()        -- 6 numeros via grep -c (log_lines/startseq/
 #                              thr_end/r_perma/nopic)
 #   classify()               -- STRUCTURAL_FAIL/OK/REGRESSAO por log_lines/thr_end
 #
@@ -60,22 +60,49 @@ measure_one() {
   wait "$bpid" 2>/dev/null
 }
 
-# ---- extract_counts LOG_PATH -> imprime 5 numeros separados por espaco ----
+# ---- extract_counts LOG_PATH -> imprime 6 numeros separados por espaco ----
 # grep -c ja imprime 0 quando nao ha match (exit 1, stdout "0"); capturar
 # so' com VAR=$(grep -c ...), sem encadear "|| echo 0" a seguir (isso
 # duplicaria o 0).
+#
+# CORRECCAO 2026-08-01 -- o elo AUTO_LOAD media uma string inexistente
+# ----------------------------------------------------------------------
+# thr_end procurava 'thr_auto_load() end'. Essa string NAO EXISTE em nenhum
+# dos 26 binarios guardados (`strings -a boot_gow2* | grep -c thr_auto_load`
+# = 0 em todos, incluindo os de referencia pre_v3/rdy0_ref que este gate foi
+# escrito para medir), nem em nenhum ficheiro fonte. `thr_auto_load` e' o
+# nome de uma FUNCAO HOST citada num comentario sobre um SIGSEGV
+# (sys_ppu_thread.c) -- nunca foi um marcador impresso.
+#
+# Consequencia: thr_end era sempre 0, classify() devolvia sempre REGRESSAO e
+# elo_stopped era sempre "AUTO_LOAD", medisse o binario o que medisse. Um
+# instrumento que nao pode passar nao distingue progresso de regressao.
+#
+# E o elo colapsava dois estados MUITO diferentes num so' numero:
+#   - a thread nunca ser criada          (o que de facto acontece hoje)
+#   - a thread ser criada e nao terminar
+# Medido: `sys_ppu_thread_create name="AUTO_LOAD"` nao aparece uma unica vez
+# -- as threads criadas sao BPETrophyInitThread, fios mediathread, fios
+# scheduler, snd_stream_service_thread e syn_tick_timer_thread. A pergunta
+# certa nao e' "porque nao termina", e' "porque nunca e' criada".
+#
+# Agora thr_end mede o marcador REAL de fim de thread (acrescentado em
+# ps3recomp `[SYS] sys_ppu_thread end name="AUTO_LOAD"`, simetrico ao de
+# create) e thr_created e' devolvido a' parte para os dois estados serem
+# distinguiveis no relatorio.
 extract_counts() {
   local log_path="$1"
-  local log_lines startseq thr_end r_perma nopic
+  local log_lines startseq thr_end thr_created r_perma nopic
 
   log_lines=$(wc -l < "$log_path" 2>/dev/null | tr -d ' ')
   log_lines=${log_lines:-0}
   startseq=$(grep -c 'StartSeq(handle=' "$log_path" 2>/dev/null)
-  thr_end=$(grep -c 'thr_auto_load() end' "$log_path" 2>/dev/null)
+  thr_end=$(grep -c 'sys_ppu_thread end name="AUTO_LOAD"' "$log_path" 2>/dev/null)
+  thr_created=$(grep -c 'sys_ppu_thread_create name="AUTO_LOAD"' "$log_path" 2>/dev/null)
   r_perma=$(grep -c 'R_PermA full flagged' "$log_path" 2>/dev/null)
   nopic=$(grep -c 'REPLAY-NOPIC' "$log_path" 2>/dev/null)
 
-  echo "$log_lines $startseq $thr_end $r_perma $nopic"
+  echo "$log_lines $startseq $thr_end $r_perma $nopic $thr_created"
 }
 
 # ---- extract_st620 LOG_PATH -> imprime o st620 maximo (0 se ausente) ------

@@ -93,7 +93,7 @@ if [ "${1:-}" = "--bin" ]; then
   BUILD_DATE="$(stat -f '%Sm' -t '%d %b %H:%M' "$BIN_PATH" 2>/dev/null || echo '?')"
 
   measure_one "$BIN_PATH" "$LOG_PATH" "$TIMEOUT"
-  read -r LOG_LINES STARTSEQ THR_END R_PERMA NOPIC <<< "$(extract_counts "$LOG_PATH")"
+  read -r LOG_LINES STARTSEQ THR_END R_PERMA NOPIC THR_CREATED <<< "$(extract_counts "$LOG_PATH")"
   CLASS="$(classify "$LOG_LINES" "$THR_END")"
 
   print_header
@@ -123,7 +123,7 @@ for bin_rel in "${DEFAULT_BINS[@]}"; do
   build_date="$(stat -f '%Sm' -t '%d %b %H:%M' "$bin_path" 2>/dev/null || echo '?')"
 
   measure_one "$bin_path" "$log_path" 90
-  read -r log_lines startseq thr_end r_perma nopic <<< "$(extract_counts "$log_path")"
+  read -r log_lines startseq thr_end r_perma nopic thr_created <<< "$(extract_counts "$log_path")"
   class="$(classify "$log_lines" "$thr_end")"
 
   print_row "$bin_rel" "$build_date" "$log_lines" "$startseq" "$thr_end" "$r_perma" "$nopic" "$class"
