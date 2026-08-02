@@ -76,3 +76,71 @@ sabe-se que entre o WAD e o loop principal há exactamente **três** paredes, qu
 são todas a mesma doença (objecto errado num método que assume outro tipo), e
 que atrás delas o jogo tem um loop principal funcional que despacha o seu
 primeiro estado.
+
+---
+
+# A raiz unificada: memória de matriz percorrida como lista intrusiva
+
+## Quatro paredes, um só defeito
+
+| # | função | forma |
+|---|---|---|
+| 1 | `func_002545B0` | lista intrusiva, sentinela em `arg+0x7C` |
+| 2 | `func_002182A4` | tabela de pools em `obj+0x14` |
+| 3 | `func_002547AC` | lista intrusiva, sentinela em `arg+0x7C` |
+| 4 | `func_004244C0` | lista intrusiva, sentinela em `this+0x24` |
+
+Três das quatro são caminhamentos de lista circular intrusiva com sentinela. E
+todos os `head` medidos são **zero**, nunca lixo:
+
+```
+[LIST254-GATE] head=0 em sent=0x4077AC8C
+[LIST254-GATE] head=0 em sent=0x4077AD9C
+[LIST547-GATE] head=0x00000000 em sent=0x4077AC8C
+```
+
+Repare-se: **a mesma sentinela `0x4077AC8C` falha em dois walkers diferentes.**
+
+## Quem escreve lá: um único escritor
+
+`PS3_WATCH_STORE` nas duas sentinelas, corrida inteira, sem cap — **duas
+escritas, ambas do mesmo sítio**:
+
+```
+[0x4077AC8C]=0x0   ra0=func_0024C1F8+0x218   ra1=func_0024CADC+0x25C
+[0x4077AD9C]=0x0   ra0=func_0024C1F8+0x218   ra1=func_0024CADC+0x25C
+```
+
+`func_0024C1F8` é o **inicializador de matriz identidade** — a mesma função que
+Julho já tinha apanhado a escrever `0.0` em `0x4077914C` (`patch_2545b0_entry_probe.py`
+regista-o). Escreve zeros porque é isso que uma matriz identidade tem fora da
+diagonal. **A escrita é legítima; o que está errado é quem depois lê aquilo.**
+
+## A conclusão
+
+Numa lista circular intrusiva bem construída, o `head` de uma lista vazia aponta
+para **si próprio** (a sentinela), nunca para zero. Um `head` a zero não é uma
+lista vazia nem uma lista corrompida: **não é uma lista.** É a linha de uma
+matriz.
+
+Portanto as quatro paredes não são quatro bugs. São quatro consumidores a
+descobrir, cada um à sua maneira, que **recebem um objecto que é uma matriz e
+tratam-no como um contentor**. Já não é inferência: há um único escritor, é o
+inicializador de matrizes, e a mesma morada falha em dois walkers distintos.
+
+## O que isto muda para a próxima sessão
+
+**Parar de pôr um gate por walker.** Não converge — há um walker por classe, e
+já se encontraram quatro. A pergunta é uma só, e é a Parede D:
+
+> porque é que o despacho entrega um objecto-matriz a métodos de contentor?
+
+A suspeita mais directa, e barata de testar: a **vtable** desses objectos. Se
+`*(obj)` apontar para a vtable da classe errada, todos os sintomas seguem — o
+objecto é uma matriz, mas os seus métodos virtuais são de um contentor. O
+`func_0039E40C` faz literalmente `r11 = *(r3); call *(r11+0x60)`, e foi assim
+que se chegou a `func_00254788`.
+
+Medição sugerida (uma corrida, sem reconstrução): `PS3_WATCH_STORE` na word 0
+dos objectos `0x400C61C8` e `0x400C3D48`, para ver quem lhes escreve a vtable e
+se essa vtable é a da classe que os walkers assumem.

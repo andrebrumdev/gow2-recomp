@@ -58,12 +58,21 @@ MARKER = "B71-CALLSITE-TRACE"
 #                     nao retorna (medido). Familia das fabricas 0x0039Dxxx.
 #   func_0039E40C  -- o alvo seguinte (this=0x400C61C8, o objecto de Julho).
 #                     Pendura no PRIMEIRO despacho dela, vt[0x60].
-#   func_002545xx / func_0024Exxx / func_0024D5BC -- a familia do walker de
+#   func_00254xxx / func_0024Exxx / func_0024D5BC -- a familia do walker de
 #                     registos do WAD, instrumentada em bloco para nao gastar
-#                     uma reconstrucao (~5 min) por degrau.
+#                     uma reconstrucao (~5 min) por degrau. Alargado de
+#                     002545xx para 00254xxx: o ponto terminal medido e'
+#                     func_00254788 (o vt[0x60] de 0x400C61C8) e a agulha
+#                     estreita deixava-o de fora.
+#   func_002B2DD0 / func_002B2660 -- com os tres gates de diagnostico o boot
+#                     ENTRA no loop principal e despacha o primeiro estado,
+#                     cujo handler e' func_002B2DD0. Ele tem tres chamadas e a
+#                     PRIMEIRA (func_002B2660) nao retorna: e' a quarta parede,
+#                     e a primeira DENTRO do loop.
 HEAD_RE = re.compile(
     r'^void (func_000B7[0-9A-F]{3}|func_0010F5E8|func_0039D51C|func_0039E40C'
-    r'|func_002545[0-9A-F]{2}|func_0024E[0-9A-F]{3}|func_0024D5BC)'
+    r'|func_00254[0-9A-F]{3}|func_0024E[0-9A-F]{3}|func_0024D5BC'
+    r'|func_002B2660|func_002B2DD0|func_004244C0)'
     r'\(ppu_context\* ctx\) \{$', re.M)
 # uma chamada directa a outra funcao liftada, ou o despacho indirecto
 CALL_RE = re.compile(
