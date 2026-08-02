@@ -838,3 +838,61 @@ o que o método `func_0039D428` dela assume, e verificar se existe outra entrada
 da tabela cuja fábrica produza objectos com lista em `+0x7C`. Se não existir
 nenhuma, a resposta é que o consumidor é código morto neste caminho e o
 despacho não devia lá chegar.
+
+---
+
+# O registry está COMPLETO — a Parede D não é "tabela não populada"
+
+Despejo único da tabela `0x00868D48` no caminho natural:
+
+```
+26 entradas não-nulas, tags 0..32, TODAS com fábrica válida e vtable viva
+
+tag= 0  fab=0x4003ECB8 vt=0x005172F0     tag=15  fab=0x403008E8 vt=0x00516858
+tag= 1  fab=0x400C5048 vt=0x00515AA0     tag=16  fab=0x400CA970 vt=0x005153A8
+tag= 2  fab=0x403028B0 vt=0x00516B28     tag=17  fab=0x40300E80 vt=0x005169C0
+tag= 3  fab=0x400C6210 vt=0x00514FA0     tag=18  fab=0x400D7338 vt=0x00517620
+tag= 4  fab=0x400D6808 vt=0x00515700     tag=19  fab=0x400C7130 vt=0x00515500
+tag= 5  fab=0x400C3D48 vt=0x00516F70     tag=20  fab=0x400C6B98 vt=0x00515340
+tag= 6  fab=0x400D7E68 vt=0x00516FE8     tag=21  fab=0x401002F0 vt=0x00516D70
+tag= 7  fab=0x400FDBD0 vt=0x00517050     tag=22  fab=0x400C3D88 vt=0x005170B8
+tag= 8  fab=0x400D9958 vt=0x00516780     tag=23  fab=0x40302318 vt=0x00517F50
+tag= 9  fab=0x400D6DA0 vt=0x00511458     tag=25  fab=0x400D78D0 vt=0x005178C0
+tag=10  fab=0x400C4378 vt=0x00517278     tag=27  fab=0x40301418 vt=0x00516088
+tag=11  fab=0x40331348 vt=0x00517200     tag=32  fab=0x40301D80 vt=0x00516BA0
+tag=12  fab=0x400FE150 vt=0x00516350
+tag=13  fab=0x40100888 vt=0x005165A0
+```
+
+**Isto refuta a suposição de longa data de que a Parede D é "o registry de tipos
+não populado".** Está populado, com 26 tipos, e responde correctamente.
+
+Note-se `tag=21 fab=0x401002F0 vt=0x00516D70` — é exactamente o objecto e a
+vtable que o paliativo TYPE15 (removido hoje) andava a "reparar". A tabela
+sempre teve a entrada certa; o paliativo é que a redireccionava para uma cópia
+congelada.
+
+## E o `this` do consumidor não é uma fábrica
+
+`0x400C61C8` **não aparece na tabela**. Não é uma entrada do registry: é um
+objecto que a fábrica do tag 1 (`0x400C5048`) produz ou possui.
+
+Reparo, sem lhe dar peso porque não o verifiquei:
+`0x400C61C8 + 0x48 = 0x400C6210`, que é a fábrica do **tag 3** — e `+0x48` é
+precisamente o offset do array de produtos numa fábrica. Pode ser estrutura ou
+pode ser coincidência de layout; fica como pista, não como facto.
+
+## Fecho
+
+Esta sessão não chegou ao menu. O que fez foi **eliminar hipóteses caras**:
+
+| hipótese de longa data | veredicto medido |
+|---|---|
+| o registry de tipos não está populado | **falso** — 26 tags, todos válidos |
+| o objecto entregue está corrompido | **falso** — construtor completo e correcto |
+| o `lift` perdeu um store/fallthrough | **falso** — 3 hipóteses, 3 refutadas |
+| a cadeia de indirecções está partida | **falso** — os 3 ponteiros são válidos |
+| "AUTO_LOAD nunca criada" é a parede | **falso** — é o 1.º estado, e o marcador nunca existiu |
+
+Sobra: **duas classes com layouts incompatíveis a partilhar a mesma memória**,
+e um despacho que as junta. Todo o resto está excluído por medição.
