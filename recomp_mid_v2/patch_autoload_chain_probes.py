@@ -55,6 +55,31 @@ MARKER = "ALCHAIN-PROBE"
 # o instrumento e' que esta partido. Nao se le' um zero sem controlo -- foi a
 # licao das quatro sondas que mentiram nesta sessao.
 CHAIN = [
+    "func_00010354",   # topo do call graph estatico
+    "func_0025C838",   # o main(): nove chamadas em linha recta, sem condicionais
+    # as sete chamadas do main() ANTES do loop principal, por ordem. Como sao
+    # sequenciais e sem ramos, a ULTIMA que imprimir e' a que nao retorna.
+    "func_002B37D4",   # 0x0025C868
+    "func_00242700",   # 0x0025C870
+    "func_002B4F04",   # 0x0025C878
+    "func_0025C680",   # 0x0025C880
+    "func_002B76EC",   # 0x0025C884
+    "func_002B2EEC",   # 0x0025C88C
+    "func_002B2E74",   # 0x0025C894 -- ENTRA e NAO RETORNA (medido)
+    # as 11 chamadas de func_002B2E74, tambem em linha recta e sem ramos.
+    "func_0024A7CC",   # 0x002B2E88
+    "func_002AAC84",   # 0x002B2E90
+    "func_002AC328",   # 0x002B2E98
+    "func_002AB2F8",   # 0x002B2EA0
+    "func_002B5C94",   # 0x002B2EA8
+    "func_002B5508",   # 0x002B2EB0
+    "func_002D2978",   # 0x002B2EB8
+    "func_002287AC",   # 0x002B2EC0
+    "func_000B71B8",   # 0x002B2EC8  -- o "B71" dos comentarios do lift
+    "func_0023B654",   # 0x002B2ED0
+    "func_002B7188",   # 0x002B2ED8
+    "func_002B2E04",   # 0x0025C89C -- contem o `bl` para o loop principal
+    "func_00242C94",   # O LOOP PRINCIPAL
     "func_002B2DD0",
     "func_000B951C",
     "func_000B9204",
