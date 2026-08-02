@@ -670,3 +670,68 @@ O que fica commitado:
   uma em que a ferramenta com o bug era minha
 - **o impasse formulado** como duas hipóteses exclusivas, com endereços, e com
   a via de resolução identificada (RE manual de layouts)
+
+---
+
+# Os dois layouts, extraídos — a análise que faltava
+
+Sem RTTI não há nomes, mas há **assinaturas de layout**: os offsets que cada
+lado toca. Extraídos do EBOOT por varrimento de acessos com deslocamento,
+agrupados por registo-base.
+
+## O que o consumidor (`func_002545B0`/`D4`) assume
+
+```
+base r11 :  lwz +0x00      elo (next)
+            lhz +0x02      tag
+            lwz +0x78      contador  ── lwz, decrementa, stw
+            stw +0x78
+base r4  :  lhz +0x04      flags
+```
+
+E a base é **`arg − 4`** (`func_002547AC`: `r9 = r4 - 4; lwz r11,0x78(r9)`),
+com a sentinela da lista em `base + 0x80`.
+
+**Assinatura da classe que o consumidor espera:**
+`+0x00` elo · `+0x02` tag · `+0x04` flags · `+0x78` contador · `+0x80` lista.
+
+## O que o construtor (`func_0024C1F8`) constrói
+
+```
+stfsu +0x70   e depois +0x74, +0x78, +0x7C     linha 0 da matriz
+stfsu +0x80   e depois +0x84, +0x88, +0x8C     linha 1
+stfsu +0x90   ...                               linha 2
+stfsu +0xA0   ...                               linha 3
+```
+
+**Matriz identidade 4×4 em `+0x70`..`+0xAC`.**
+
+## A sobreposição, exacta
+
+Com base do consumidor em `arg−4` e base do construtor em `arg`:
+
+| campo do consumidor | endereço | o que lá está de facto |
+|---|---|---|
+| contador `+0x78` | `arg + 0x74` | `matriz[0][1]` |
+| lista `+0x80` | `arg + 0x7C` | `matriz[0][3]` |
+
+**Não é um desalinhamento de 4 bytes.** Mesmo que o walker passasse `objecto+4`
+(base do consumidor = objecto), o contador cairia em `matriz[0][2]` e a lista em
+`matriz[1][0]` — continua dentro da matriz. **São duas classes diferentes a
+reclamar a mesma região.**
+
+## O que isto reduz a pergunta a
+
+O objecto diz `tag = 1` (`+0x02`), e o registry mapeia tag 1 → fábrica
+`0x400C5048` → `func_0039D428` → o consumidor. Logo:
+
+> **ou o `tag` deste objecto está errado** (ele não é do tipo 1),
+> **ou a entrada `tab[1]` do registry aponta para a fábrica errada.**
+
+E agora há um teste barato para escolher: procurar, em corrida, um objecto cujo
+layout **bata** com a assinatura do consumidor (`+0x78` a variar como contador,
+`+0x80` auto-ligado) e ler o `tag` dele. Esse é o tag correcto para esta fábrica
+— e se for diferente de 1, o defeito está no tag do objecto; se for 1, está na
+tabela.
+
+Isso é uma medição, e cabe numa sonda.
