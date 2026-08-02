@@ -896,3 +896,87 @@ Esta sessão não chegou ao menu. O que fez foi **eliminar hipóteses caras**:
 
 Sobra: **duas classes com layouts incompatíveis a partilhar a mesma memória**,
 e um despacho que as junta. Todo o resto está excluído por medição.
+
+---
+
+# O crash do utilizador destrancou a frente — e apareceu o PUSH de Julho
+
+## 1. Um bug nosso, corrigido (não é gate)
+
+Crash real reportado com stack completa:
+
+```
+EXC_BAD_ACCESS (SIGSEGV) KERN_INVALID_ADDRESS at 0x000000000feff741
+ 0  cellPadSetActDirect + 52
+ ...
+11  func_00424588        ← o walker de lista já identificado
+13  func_002B2660
+14  func_002B2DD0        ← o 1.º handler de estado
+16  func_00242C94        ← O LOOP PRINCIPAL
+18  func_0025C838        ← main()
+```
+
+A stack **confirma independentemente** toda a cadeia mapeada por sondas.
+
+`param` chegava como EA do guest (`0x0FEFF740`) e era desreferenciado como
+ponteiro host. O próprio ficheiro já documentava a armadilha
+(`pad_data_to_guest`: *"The generic HLE adapter hands us raw GUEST addresses…"*)
+e as vizinhas cumprem-na — `cellPadGetData`/`cellPadGetInfo2` chamam o parâmetro
+`_guest`. **`cellPadSetActDirect` e `cellPadGetCapabilityInfo` ficaram de fora.**
+
+Corrigido pela mesma convenção (`ps3recomp edd3e7a`). Verificado in-boot: zero
+SIGSEGV, e o jogo passa a sondar o pad
+(`[PADPOLL] cellPadGetData port=0 — game IS polling pad`).
+
+## 2. A parede andou, e o que apareceu responde a uma pergunta de Julho
+
+Com o crash removido, o ponto terminal passou de `func_00254788` para:
+
+```
+func_002546FC → func_0041FF70 → #004 → func_0041F700   ← 27 539 083 repetições
+```
+
+E o corpo de `func_0041F700`:
+
+```c
+func_0041F700(fab, node):
+    if (node == 0) -> sai
+    node   = node - 4                       // container_of
+    cursor = *(uint8*)(fab + 0xC8) + 1
+    *(uint8*)(fab + 0xC8)        = cursor   // ← PUSH (cursor++)
+    *(fab + 0x48 + cursor*4)     = node     // ← PUSH (array[cursor] = node)
+    sentinela = node + 0x80                 // = arg + 0x7C
+    ...caminha a lista dos filhos, recursivamente...
+```
+
+**Isto é o PUSH.** A pergunta que estava aberta desde Julho — *"o walker do WAD
+pede à fábrica o produto corrente sem nunca ter feito push"* — tem resposta: o
+push está aqui, em `func_0041F700`, e é um **walk recursivo de árvore** que
+empurra cada nó para a pilha de produtos da fábrica antes de descer aos filhos.
+
+E desce pelo **mesmo campo** `node+0x80` (= `arg+0x7C`) que já está provado ser
+`matriz[0][3]`. Por isso o walk não termina: 27,5 milhões de iterações.
+
+## 3. O que isto reorganiza
+
+Deixa de haver quatro paredes independentes. Há **um** defeito com cinco
+consumidores, todos a caminhar a mesma lista intrusiva no mesmo offset:
+
+| função | papel |
+|---|---|
+| `func_002545B0` | walk (parede 1) |
+| `func_002547AC` | walk (parede 3) |
+| `func_004244C0` | walk (parede 4) |
+| `func_0041F700` | **walk + PUSH** (parede 5, a actual) |
+| `func_0039E5A8` | lê o produto corrente que o push acima produz |
+
+O `func_0039E5A8` (que eu tinha excluído por medir 253 consultas sãs) é o
+**consumidor** do push — e as consultas eram sãs porque o push das outras
+fábricas funciona. É a fábrica do tag 1 que fica presa.
+
+## Estado
+
+Não há menu. Mas a frente mudou de natureza: já não é "porque é que o boot não
+avança", é **"porque é que a lista de filhos em `node+0x80` não termina"** — com
+o push identificado, o consumidor identificado, e cinco consumidores a
+concordarem no offset.

@@ -69,16 +69,49 @@ MARKER = "B71-CALLSITE-TRACE"
 #                     cujo handler e' func_002B2DD0. Ele tem tres chamadas e a
 #                     PRIMEIRA (func_002B2660) nao retorna: e' a quarta parede,
 #                     e a primeira DENTRO do loop.
+#   func_0041Fxxx / 00423xxx / 00424xxx / 002B5xxx / 002B24E0 -- o caminho
+#                     que a STACK DE UM CRASH REAL revelou (2026-08-02):
+#                       func_00424588 -> func_00423AB4 -> func_002B24E0
+#                       -> func_002B5ED8 -> func_002B5BF8 -> func_002B5874
+#                       -> cellPadSetActDirect  (SIGSEGV, ja' corrigido)
+#                     Um stack trace real vale mais do que uma ronda de sondas.
 HEAD_RE = re.compile(
     r'^void (func_000B7[0-9A-F]{3}|func_0010F5E8|func_0039D51C|func_0039E40C'
     r'|func_00254[0-9A-F]{3}|func_0024E[0-9A-F]{3}|func_0024D5BC'
-    r'|func_002B2660|func_002B2DD0|func_004244C0)'
+    r'|func_002B2660|func_002B2DD0|func_004244C0'
+    r'|func_0041F[0-9A-F]{3}|func_00423[0-9A-F]{3}|func_00424[0-9A-F]{3}'
+    r'|func_002B5[0-9A-F]{3}|func_002B24E0)'
     r'\(ppu_context\* ctx\) \{$', re.M)
 # uma chamada directa a outra funcao liftada, ou o despacho indirecto
 CALL_RE = re.compile(
     r'^(        )(?:ctx->lr = 0x[0-9A-F]+; )?'
     r'(func_[0-9A-F]{8}|ps3_indirect_call|ps3_indirect_tail)\(ctx\);',
     re.M)
+
+
+ENTRY_PROBE_FOR = ("func_00254788",)   # laco terminal: precisa do r4 (o arg)
+
+
+def entry_probe(fn):
+    """Sonda de ENTRADA: imprime this(r3) e arg(r4). O rasto de call-sites nao
+    cobre funcoes sem chamadas -- e `func_00254788` nao tem nenhuma, e' um laco
+    puro. Sem isto o `arg` do laco terminal nunca foi medido (media-se o r21 do
+    walker, que e' OUTRO sitio de chamada)."""
+    return (
+        "        /* " + MARKER + "-ENTRY */\n"
+        "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
+        "            const char* _e=getenv(\"PS3_TRACE_B71\"); _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
+        "          if(_on){ static int _n=0; if(_n++<40){\n"
+        "            uint32_t _a=(uint32_t)ctx->gpr[4];\n"
+        "            int _ok=(_a>=0x10000u && _a<0x4F000000u);\n"
+        "            uint32_t _sent=_a-4u+0x80u;\n"
+        "            fprintf(stderr,\"[B71-ENTRY] " + fn + " this=0x%08X arg=0x%08X \"\n"
+        "              \"argw0=0x%08X tag=%d sent=0x%08X head=0x%08X\\n\",\n"
+        "              (uint32_t)ctx->gpr[3], _a,\n"
+        "              _ok?vm_read32(_a):0u, _ok?(int)vm_read16(_a+2u):-1,\n"
+        "              _sent, _ok?vm_read32(_sent):0u);\n"
+        "            fflush(stderr); } } }\n"
+    )
 
 
 def probe(idx, callee, owner):
@@ -116,6 +149,8 @@ def patch_text(t):
         owner = h.group(1)
         ini, fim = body_span(t, h.start())
         out.append(t[prev:ini])
+        if owner in ENTRY_PROBE_FOR:
+            out.append(entry_probe(owner))
         body = t[ini:fim]
         pieces = []
         last = 0
