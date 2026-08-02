@@ -1189,3 +1189,60 @@ exactamente ~1,15 M de re-invocações.
 
 Isso mede-se com a mesma sonda de listagem, aplicada a `func_002547AC`. É o
 passo seguinte, e é o mesmo tamanho dos outros cinco.
+
+---
+
+# A causa: recursão exponencial por revisitar nós, e a guarda que não poda
+
+## O suspeito anterior caiu, medido
+
+Hipótese: o gate `PS3_LIST547_EMPTY_IF_BAD` deixaria passar listas cíclicas e
+`func_002547AC` re-invocaria o walk. **Refutada:** sonda `PS3_TRACE_W547` deu
+**zero linhas** — com o gate ligado, esse walk nunca corre. Medida antes de ser
+escrita como facto.
+
+## Quem repete, contado
+
+```
+linhas do log: 27 549 345
+
+27 539 083  func_0041F700      ← 99,96% de tudo
+     2 088  func_0041F924
+     1 744  func_00254250
+       472  func_0024E5BC
+```
+
+O chamador (`func_0041FF70`) nem aparece no topo. **`func_0041F700` é
+recursiva**: o despacho interno `tab[idx]->vt[0x40]` volta a entrar nela para
+cada filho.
+
+E 12⁷ ≈ 35 M. Com 12 irmãos por nível, sete níveis de ramificação dão
+exactamente esta ordem de grandeza. **Não é um ciclo: é explosão exponencial por
+revisitar os mesmos nós** — o grafo não é uma árvore, e o walk percorre-o como se
+fosse. Bate com a sonda da descida, que viu o filho `#1` reaparecer.
+
+## A guarda que devia podar
+
+O walk tem um teste de poda:
+
+```c
+r29 = (*(nó   + 4) >> 16) & 0xFFF     // campo do PAI, calculado à entrada
+...
+r0  = (*(filho + 4) >> 16) & 0xFFF    // campo do FILHO
+if (r0 == r29) goto loc_0041F7C4;     // ← PODA: salta este filho
+```
+
+Se `r0 == r29` nunca se verificar, nada é podado e a recursão visita todas as
+combinações. É essa a hipótese seguinte, e é directamente medível: imprimir
+`r0` e `r29` na comparação e ver se alguma vez coincidem.
+
+## Onde isto deixa a frente
+
+A pergunta é agora estreita e mecânica:
+
+> **porque é que a poda `(*(filho+4)>>16)&0xFFF == (*(pai+4)>>16)&0xFFF` nunca
+> dispara?**
+
+Ou o campo `+4` dos filhos não está a ser preenchido, ou o do pai vem de outro
+sítio. Uma sonda na comparação distingue os dois — e é a sétima da mesma família
+que resolveu todas as camadas desta noite.
