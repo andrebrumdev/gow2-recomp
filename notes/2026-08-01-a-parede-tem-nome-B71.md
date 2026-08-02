@@ -245,3 +245,74 @@ As quatro anteriores foram caps hard-coded em sondas. **Esta foi um `head` meu
 na linha de comandos.** A regra que escrevi de manhã — cap fixo é mentiroso por
 omissão — vale igual para o `head`/`tail` com que se lê o log. Contar primeiro
 (`grep -c`), truncar depois.
+
+---
+
+# O 5 é uma contagem, e o lift está fiel: é o objecto que está errado
+
+## O store nomeado
+
+Sonda em todos os 16 `vm_write32` de `func_00263178` (`PS3_TRACE_ALLOCST`):
+
+```
+[ALLOCST] store#12 [0x4007FCE8]=0x00000005
+```
+
+E `store#12`, no bloco de saída do laço:
+
+```c
+r0  = sraw(fim - inicio, 2);   // CONTAGEM de elementos
+r7  = inicio;
+vm_write32(r12 + 0, r11);      // store#8   *(obj+0x14) = inicio
+vm_write32(r7 + 4, r28);       // store#10
+vm_write32(r7 + 8, r26);       // store#11
+vm_write32(r7 + 0, r0);        // store#12  *(inicio) = contagem
+```
+
+**`0x4007FCE8` é um cabeçalho de bloco de três words, e a palavra 0 é a
+contagem.** O 5 nunca foi um ponteiro corrompido — é o número de elementos.
+
+## Verificado contra o binário: o lift está fiel
+
+```
+0x00263254  rldicl r7,r11,0,32      <- r7 == r11 (o lift diz o mesmo)
+0x00263288  stw    r11,0(r12)       <- store#8
+0x00263290  stw    r28,4(r7)        <- store#10
+0x00263294  stw    r26,8(r7)        <- store#11
+```
+
+Nenhum offset perdido, nenhum `addi` em falta. **Terceira hipótese de bug do
+lifter levantada hoje, terceira refutada por verificação.**
+
+## Logo o defeito é de tipo, não de tradução
+
+`func_002182A4` faz `base = *(obj+0x14)` e lê `base[idx]` como ponteiro de pool.
+Para `obj=0x406388F8` isso dá um ponteiro válido; para `obj=0x400C6C68` dá a
+contagem de um cabeçalho. Os dois objectos foram publicados pelo mesmo
+alocador mas a partir de contextos diferentes (`ra1` = `func_002BA4B4` num caso,
+`func_002B11B8` no outro).
+
+**`0x400C6C68` não é um dono de tabela de pools.** Chegou às mãos de um método
+que assume outro tipo.
+
+## E isto é a terceira instância do MESMO padrão
+
+| onde | sintoma | objecto |
+|---|---|---|
+| `func_002545B0` (Julho) | lista circular com `head=0` — na verdade uma matriz identidade | `0x407790D0` |
+| `func_0039E6B4` (hoje, manhã) | tabela de produtos vazia — na verdade uma cópia congelada | `0x47D00000` |
+| `func_002182A4` (hoje, agora) | tabela de pools — na verdade um cabeçalho de bloco | `0x400C6C68` |
+
+Três métodos virtuais diferentes, três objectos do tipo errado. Duas das três
+já foram explicadas por causas nossas (o stomp do pump, o paliativo TYPE15) e
+resolvidas. A terceira tem a mesma forma.
+
+Isto deixa de ser "um bug" e passa a ser uma **hipótese estrutural**: o registry
+de tipos entrega a fábrica errada para certos tipos, e cada consumidor descobre
+isso à sua maneira. É a Parede D vista de três ângulos.
+
+## O que fica para a próxima sessão
+
+Pergunta fechada, com dois endereços: **quem decide que `0x400C6C68` é o objecto
+a passar a `func_002182A4`** — e é o mesmo `idx=(tipo<<2)&0x3FFFC` de
+`func_0010F5E8` que já está medido a alimentar esta cadeia.
