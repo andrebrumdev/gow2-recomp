@@ -794,3 +794,47 @@ numa frase, com todos os elos intermédios medidos, excluídos ou refutados:
 Tudo o resto foi verificado: o registry responde, o objecto está bem construído,
 o `arg` chega por três indirecções válidas, o lift é fiel ao binário nos três
 sítios onde suspeitei dele, e os dois layouts em conflito estão extraídos.
+
+---
+
+# Duas medições independentes, o mesmo zero
+
+**Estática** — varrimento do EBOOT à procura do idioma de auto-ligação
+(`addi rD,rA,IMM` + `stw rD,IMM(rA)`): 31 sítios no binário inteiro, **zero** em
+`+0x80` ou `+0x7C`.
+
+**Dinâmica** — sonda em todos os produtos devolvidos pelas fábricas, a testar
+`*(prod+0x7C) == prod+0x7C`: **0 de 253**, de 20 fábricas distintas.
+
+As duas convergem: **nenhum objecto, em nenhum momento deste boot, tem a
+estrutura que o consumidor exige.**
+
+## O que isto deixa de pé
+
+Duas hipóteses, e a segunda encolheu:
+
+1. **A classe do consumidor nunca é instanciada neste boot** — e portanto o
+   consumidor nunca devia ser chamado. Se assim é, o defeito está na entrada
+   `tab[1]` do registry, que despacha para uma fábrica cujo método assume uma
+   classe que ali não existe.
+
+2. **A minha leitura do offset está errada.** Verifiquei a desmontagem de
+   `func_002547AC` (`r30 = r29 - 4 + 0x80`) e o lift concorda, mas registo a
+   hipótese porque já me enganei hoje a ler desmontagem — e da última vez o bug
+   era do meu próprio descodificador.
+
+## Fecho definitivo desta sessão
+
+Não há menu. O boot só entra no loop principal com três gates de diagnóstico, e
+o primeiro handler de estado não retorna.
+
+A pergunta que fica é única, e todos os elos à sua volta foram medidos,
+excluídos ou refutados:
+
+> **`tab[1]` do registry de tipos aponta para a fábrica certa?**
+
+Para a responder: comparar a fábrica `0x400C5048` (a que `tab[1]` seleciona) com
+o que o método `func_0039D428` dela assume, e verificar se existe outra entrada
+da tabela cuja fábrica produza objectos com lista em `+0x7C`. Se não existir
+nenhuma, a resposta é que o consumidor é código morto neste caminho e o
+despacho não devia lá chegar.
