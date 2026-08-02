@@ -184,7 +184,8 @@ def check_cobertura_87_87_contra_corpus_real() -> None:
     assert nomes_rows == nomes_disco, "cobertura incompleta ou divergente do disco"
     print(
         f"[PASS] cobertura: build_catalog() produz {len(rows)} linhas, "
-        f"igual a len(list(PATCH_DIR.glob('patch_*.py'))) == {esperado} (medido: 87)"
+        f"igual a len(list(PATCH_DIR.glob('patch_*.py'))) == {esperado} "
+        "(linha de base historica 2026-07-26: 87; o numero acima e' o medido AGORA)"
     )
 
 
