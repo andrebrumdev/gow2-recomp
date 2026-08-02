@@ -413,6 +413,59 @@ extern "C" void ps3_type15_note_resolve(uint32_t idx, uint32_t obj, uint32_t vt)
                     if (fl >= 0x40000000u && fl < 0x47D00000u) {
                         for (uint32_t off = 0; off < 0x200u; off += 4u)
                             vm_write32(k_fl_pin + off, vm_read32(fl + off));
+                        /* TYPE15-FL-REHOME-FIXUP (2026-07-31): o copy acima e'
+                         * RAW -- qualquer ponteiro AUTO-REFERENTE dentro do
+                         * proprio blob (ex.: o head em fl+0 que apontava para
+                         * fl+0x18, o "mid" da mesma free-list) continua a
+                         * apontar para dentro da arena ANTIGA (nao protegida),
+                         * mesmo depois deste REHOME. Medido 3/3 corridas
+                         * (notes/2026-07-31-*): a 2a chamada da fabrica le
+                         * esse ponteiro auto-referente -- que entretanto foi
+                         * stream-stomped para ASCII ("Orbs", 0x4F726273) por
+                         * outra alocacao do guest reusando a arena antiga --
+                         * e devolve 'Orbo' (0x4F72626F) em vez de um produto
+                         * valido. O reparador (ps3_type15_freelist_replenish)
+                         * ate' dispara, mas so' no EPILOGO da chamada seguinte
+                         * -- tarde de mais para essa mesma chamada, que ja'
+                         * leu o lixo. Traduz qualquer palavra copiada que
+                         * caia dentro de [fl, fl+0x200) para o mesmo
+                         * deslocamento dentro de [k_fl_pin, k_fl_pin+0x200):
+                         * so' assim o blob copiado fica inteiramente
+                         * auto-contido na zona pinada, tal como a estrutura
+                         * que ps3_type15_freelist_replenish constroi de raiz
+                         * mais abaixo neste ficheiro. */
+                        for (uint32_t off = 0; off < 0x200u; off += 4u) {
+                            uint32_t w = vm_read32(k_fl_pin + off);
+                            if (w >= fl && w < fl + 0x200u)
+                                vm_write32(k_fl_pin + off, k_fl_pin + (w - fl));
+                        }
+                        /* TYPE15-FL-SHELL-REHOME (2026-07-31): a traducao acima so'
+                         * protege ponteiros AUTO-REFERENTES dentro do proprio
+                         * blob [fl, fl+0x200). O "mid" (fl+0x18) guarda um
+                         * ponteiro para um OBJECTO SEPARADO (o "shell"; slot =
+                         * shell+4) que fica FORA dessa janela e nunca foi pinado.
+                         * Medido (PS3_TRACE_TYPE15_SHELL=1): esse objecto
+                         * sobrevive a' 1a chamada (produto valido) mas e'
+                         * stream-stomped por outra alocacao do guest (uma
+                         * tabela de paths tipo "S2_446a/...") antes da 2a
+                         * chamada, que devolve NULL. Copia o objecto real
+                         * (preserva o conteudo capturado, nao forja um novo)
+                         * para o mesmo slot que ps3_type15_freelist_replenish
+                         * usa para shells sinteticos e retarget o slot. */
+                        {
+                            uint32_t mid_val = vm_read32(k_fl_pin + 0x18u);
+                            if (mid_val >= 0x10000u && mid_val < 0x4F000000u &&
+                                (mid_val < k_ty15_pin || mid_val >= k_ty15_pin + 0x1000u)) {
+                                uint32_t old_shell = mid_val - 4u;
+                                uint32_t new_shell = k_ty15_pin + 0x800u;
+                                for (uint32_t o = 0; o < 0x80u; o += 4u)
+                                    vm_write32(new_shell + o, vm_read32(old_shell + o));
+                                vm_write32(k_fl_pin + 0x18u, new_shell + 4u);
+                                { static int _n=0; if(_n++<8)
+                                    fprintf(stderr,"[TYPE15] REHOME shell old=0x%08X pin=0x%08X vt=0x%08X\n",
+                                      old_shell, new_shell, vm_read32(new_shell)); }
+                            }
+                        }
                         vm_write32(k_ty15_pin + 0x24u, k_fl_pin);
                         { static int _n=0; if(_n++<8) {
                             fprintf(stderr,"[TYPE15] REHOME freelist old=0x%08X pin=0x%08X "

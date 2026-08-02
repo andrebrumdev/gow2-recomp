@@ -108,7 +108,23 @@ static void ps3_cd498_dump_summary(void) {
     fflush(stderr);
 }
 
-static void ps3_cd498_on_sigterm(int sig) { (void)sig; ps3_cd498_dump_summary(); }
+/* ENCADEAMENTO (defeito medido em 2026-07-30): `signal()` SUBSTITUI o
+ * handler, nao o acumula. Com varios probes armados no mesmo binario, o
+ * ultimo constructor a correr ficava com o SIGTERM e os outros nunca
+ * imprimiam o SUMMARY. Guardar o handler anterior e chama-lo no fim mantem
+ * a cadeia inteira viva, seja qual for a ordem de arranque -- mesmo padrao
+ * ja provado em 29AF0/CB56C (commit 09c3850). */
+typedef void (*ps3_cd498_sigh_t)(int);
+static ps3_cd498_sigh_t g_ps3_cd498_prev_sigterm = 0;
+
+static void ps3_cd498_on_sigterm(int sig) {
+    ps3_cd498_dump_summary();
+    if (g_ps3_cd498_prev_sigterm
+        && g_ps3_cd498_prev_sigterm != SIG_DFL
+        && g_ps3_cd498_prev_sigterm != SIG_IGN) {
+        g_ps3_cd498_prev_sigterm(sig);
+    }
+}
 
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((constructor))
@@ -121,7 +137,7 @@ static void ps3_cd498_ctor(void) {
         g_ps3_cd498_atexit_reg = 1;
         atexit(ps3_cd498_dump_summary);
 #ifndef _WIN32
-        signal(SIGTERM, ps3_cd498_on_sigterm);
+        g_ps3_cd498_prev_sigterm = signal(SIGTERM, ps3_cd498_on_sigterm);
 #endif
     }
 }
@@ -168,6 +184,53 @@ void ps3_cd498_on_enter(int id, ppu_context* ctx) {
 '''
 
 
+# ---- upgrade-in-place: encadear o SIGTERM num bloco JA baked (codigo antigo) --
+# O guard de idempotencia do apply_all_patches.sh olha so' para o MARKER do
+# bloco -- um lift que ja tem o HELPER_BLOCK antigo (signal() sem guardar o
+# handler anterior) ficava para sempre "ALREADY", nunca actualizado. Este
+# ramo faz uma substituicao textual cirurgica APENAS das duas linhas antigas
+# (o corpo do on_sigterm e o unico `signal(SIGTERM, ...)` do ctor), sem tocar
+# em mais nada do bloco ja aplicado.
+OLD_SIGTERM_HANDLER = (
+    "static void ps3_cd498_on_sigterm(int sig) { (void)sig; ps3_cd498_dump_summary(); }"
+)
+NEW_SIGTERM_HANDLER = (
+    "typedef void (*ps3_cd498_sigh_t)(int);\n"
+    "static ps3_cd498_sigh_t g_ps3_cd498_prev_sigterm = 0;\n"
+    "\n"
+    "static void ps3_cd498_on_sigterm(int sig) {\n"
+    "    ps3_cd498_dump_summary();\n"
+    "    if (g_ps3_cd498_prev_sigterm\n"
+    "        && g_ps3_cd498_prev_sigterm != SIG_DFL\n"
+    "        && g_ps3_cd498_prev_sigterm != SIG_IGN) {\n"
+    "        g_ps3_cd498_prev_sigterm(sig);\n"
+    "    }\n"
+    "}"
+)
+OLD_SIGNAL_CALL = "        signal(SIGTERM, ps3_cd498_on_sigterm);\n"
+NEW_SIGNAL_CALL = "        g_ps3_cd498_prev_sigterm = signal(SIGTERM, ps3_cd498_on_sigterm);\n"
+
+
+def upgrade_sigterm_chain(t: str, path: Path) -> str:
+    if "g_ps3_cd498_prev_sigterm" in t:
+        print(f"  helpers: already in {path.name}")
+        return t
+    n1 = t.count(OLD_SIGTERM_HANDLER)
+    if n1 != 1:
+        raise SystemExit(
+            f"{path}: OLD_SIGTERM_HANDLER aparece {n1}x (esperado 1) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGTERM_HANDLER, NEW_SIGTERM_HANDLER, 1)
+    n2 = t.count(OLD_SIGNAL_CALL)
+    if n2 != 1:
+        raise SystemExit(
+            f"{path}: OLD_SIGNAL_CALL aparece {n2}x (esperado 1) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGNAL_CALL, NEW_SIGNAL_CALL, 1)
+    print(f"  helpers: UPGRADED in {path.name}")
+    return t
+
+
 def patch_file(path: Path) -> bool:
     t = path.read_text(encoding="utf-8", errors="replace")
     orig = t
@@ -183,7 +246,7 @@ def patch_file(path: Path) -> bool:
             t = t.replace(alt, alt + HELPER_BLOCK, 1)
         print(f"  helpers: added to {path.name}")
     else:
-        print(f"  helpers: already in {path.name}")
+        t = upgrade_sigterm_chain(t, path)
 
     applied = 0
     for site_id, (short, fn, _cap) in enumerate(SITES):

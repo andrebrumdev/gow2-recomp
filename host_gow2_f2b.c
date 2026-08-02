@@ -166,6 +166,8 @@ int f2b_stream_fill(uint32_t stream, uint32_t min_need) {
             uint8_t* b = vm_base + base;
             if (cursor + avail <= cap) {
                 memmove(b, b + cursor, avail);
+                { extern void ps3_watch_store_bulk(uint32_t, uint32_t, const char*);
+                  ps3_watch_store_bulk(base, avail, "f2b compact memmove"); }
             } else {
                 uint32_t len1 = cap - cursor;
                 uint32_t len2 = avail - len1;
@@ -176,6 +178,8 @@ int f2b_stream_fill(uint32_t stream, uint32_t min_need) {
                         memcpy(tmp, b + cursor, (size_t)len1);
                         memcpy(tmp + len1, b, (size_t)len2);
                         memcpy(b, tmp, (size_t)avail);
+                        { extern void ps3_watch_store_bulk(uint32_t, uint32_t, const char*);
+                          ps3_watch_store_bulk(base, avail, "f2b wrap-compact memcpy"); }
                         free(tmp);
                         { static int _n=0; if(_n++<32)
                             fprintf(stderr,"[FIOSOPEN] F2B-STREAM-WRAP-COMPACT "
@@ -211,6 +215,11 @@ int f2b_stream_fill(uint32_t stream, uint32_t min_need) {
         if (!n) return avail > 0 ? 1 : 0;
         unsigned got = movie_io_pread(g_f2b_fill_mfd, vm_base + base + avail, n,
                                       g_f2b_fill_file_pos);
+        /* PS3_WATCH_STORE: o pread escreve DIRECTAMENTE em vm_base e nunca
+         * passa por vm_write* -- e' invisivel aos dois watches de store.
+         * Gated, OFF por default. */
+        { extern void ps3_watch_store_bulk(uint32_t, uint32_t, const char*);
+          ps3_watch_store_bulk(base + avail, got, "f2b_stream_fill pread"); }
         if (got != n) {
             { static int _n=0; if(_n++<12)
                 fprintf(stderr,"[FIOSOPEN] F2B-STREAM-FILL short stream=0x%08X pos=%u n=%u got=%u\n",

@@ -113,9 +113,20 @@ static void ps3_mp_dump_summary(void) {
     fflush(stderr);
 }
 
+/* ENCADEAMENTO (defeito medido em 2026-07-30): signal() SUBSTITUI o handler,
+ * nao o acumula -- ver a nota longa em patch_29af0_switch_probe.py (commit
+ * 09c3850). Guardar o handler anterior e chama-lo no fim mantem a cadeia
+ * inteira viva, seja qual for a ordem de arranque. */
+typedef void (*ps3_mp_sigh_t)(int);
+static ps3_mp_sigh_t g_ps3_mp_prev_sigterm = 0;
+
 static void ps3_mp_on_sigterm(int sig) {
-    (void)sig;
     ps3_mp_dump_summary();
+    if (g_ps3_mp_prev_sigterm
+        && g_ps3_mp_prev_sigterm != SIG_DFL
+        && g_ps3_mp_prev_sigterm != SIG_IGN) {
+        g_ps3_mp_prev_sigterm(sig);
+    }
 }
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -129,7 +140,7 @@ static void ps3_mp_ctor(void) {
         g_ps3_mp_atexit_reg = 1;
         atexit(ps3_mp_dump_summary);
 #ifndef _WIN32
-        signal(SIGTERM, ps3_mp_on_sigterm);
+        g_ps3_mp_prev_sigterm = signal(SIGTERM, ps3_mp_on_sigterm);
 #endif
     }
 }
@@ -141,7 +152,7 @@ void ps3_mp_on_enter(int id, ppu_context* ctx) {
         g_ps3_mp_atexit_reg = 1;
         atexit(ps3_mp_dump_summary);
 #ifndef _WIN32
-        signal(SIGTERM, ps3_mp_on_sigterm);
+        g_ps3_mp_prev_sigterm = signal(SIGTERM, ps3_mp_on_sigterm);
 #endif
     }
     unsigned long long t = ++g_ps3_mp_tot[id];
@@ -178,8 +189,54 @@ def inject_call(site_id: int) -> str:
     )
 
 
+# ---- upgrade-in-place: encadear o SIGTERM num bloco JA baked (codigo antigo) --
+OLD_SIGTERM_HANDLER = (
+    "static void ps3_mp_on_sigterm(int sig) {\n"
+    "    (void)sig;\n"
+    "    ps3_mp_dump_summary();\n"
+    "}"
+)
+NEW_SIGTERM_HANDLER = (
+    "typedef void (*ps3_mp_sigh_t)(int);\n"
+    "static ps3_mp_sigh_t g_ps3_mp_prev_sigterm = 0;\n"
+    "\n"
+    "static void ps3_mp_on_sigterm(int sig) {\n"
+    "    ps3_mp_dump_summary();\n"
+    "    if (g_ps3_mp_prev_sigterm\n"
+    "        && g_ps3_mp_prev_sigterm != SIG_DFL\n"
+    "        && g_ps3_mp_prev_sigterm != SIG_IGN) {\n"
+    "        g_ps3_mp_prev_sigterm(sig);\n"
+    "    }\n"
+    "}"
+)
+OLD_SIGNAL_CALL = "        signal(SIGTERM, ps3_mp_on_sigterm);\n"
+NEW_SIGNAL_CALL = "        g_ps3_mp_prev_sigterm = signal(SIGTERM, ps3_mp_on_sigterm);\n"
+
+
+def upgrade_sigterm_chain(t: str, path: Path) -> str:
+    if "g_ps3_mp_prev_sigterm" in t:
+        print(f"  helpers: already in {path.name}")
+        return t
+    n1 = t.count(OLD_SIGTERM_HANDLER)
+    if n1 != 1:
+        raise SystemExit(
+            f"{path}: OLD_SIGTERM_HANDLER aparece {n1}x (esperado 1) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGTERM_HANDLER, NEW_SIGTERM_HANDLER, 1)
+    n2 = t.count(OLD_SIGNAL_CALL)
+    if n2 != 2:
+        raise SystemExit(
+            f"{path}: OLD_SIGNAL_CALL aparece {n2}x (esperado 2 -- ctor + on_enter) -- upgrade abortado"
+        )
+    t = t.replace(OLD_SIGNAL_CALL, NEW_SIGNAL_CALL)
+    print(f"  helpers: UPGRADED in {path.name}")
+    return t
+
+
 def ensure_helpers(t: str, path: Path, chunk: str) -> str:
     if chunk == "000":
+        if "/* MENUPRESENT-PROBE: R9 menu present" in t:
+            return upgrade_sigterm_chain(t, path)
         if "/* MENUPRESENT-PROBE: R9 menu present" not in t:
             plp = "/* PRESENTLOOP-PROBE end helpers */\n"
             if plp in t:

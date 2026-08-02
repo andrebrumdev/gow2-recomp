@@ -43,6 +43,14 @@ export PS3_MOVIE_CACHE
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
 
+# Som: MUDO por default nas corridas de desenvolvimento. O ciclo de
+# medicao repete a mesma intro dezenas de vezes por sessao e o audio
+# torna-se insuportavel. Uma unica variavel cobre os DOIS caminhos de
+# audio (cellAudio e o WAV do overlay do filme). Para ouvir:
+#   PS3_MUTE= ./rodar_gow2_menu_fast.sh
+: "${PS3_MUTE:=1}";            export PS3_MUTE
+[ -n "${PS3_MUTE:-}" ] || unset PS3_MUTE
+
 # SPU1 = dearch / EDGE-zlib (fp 0x2A5C4E67A14505B8). Hit limpo in-boot
 # (2026-07-22: HIT>=1, MISS=0, SPUJOB clean). Necessario para consumo
 # real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
