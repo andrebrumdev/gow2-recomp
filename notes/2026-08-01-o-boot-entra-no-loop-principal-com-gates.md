@@ -509,3 +509,67 @@ O caminho certo para a próxima sessão é sondar `r21` em cada fragmento de
 `func_0024E354`, `func_0024E3D0`, `func_0024E414`, `func_0024E430`) e ver em
 qual ele passa a valer `0x4077ACxx`. É o mesmo padrão da bissecção que
 funcionou hoje — e desta vez com o dado medido, não inferido.
+
+---
+
+# A origem do `arg`, medida — e a 21.ª correcção (o bug era do meu descodificador)
+
+## O que a sonda deu
+
+`PS3_TRACE_R21` em 19 fragmentos do walker. O mais cedo no fluxo onde `r21` já
+vale `0x4077ACxx` é `func_0024E26C` — antes do laço.
+
+## O que eu concluí, e estava errado
+
+Varri o binário à procura de escritas em `r21` e li três:
+
+```
+0x0024E268  .long 0x7AD50020    ← li como "clrldi r21,r21,32" (só trunca)
+0x0024E318  ld r21,136(r1)      ← restauro do slot do prólogo
+0x0024E434  .long 0x7AD50020    ← idem
+```
+
+e concluí que **`r21` vinha do chamador** — uma função a usar um registo
+callee-saved sem o inicializar.
+
+**Está errado, e o erro era do meu descodificador.** Em `rldicl` o destino é
+**rA**, não rS. Listando os campos em vez de confiar na minha impressão:
+
+```
+0x0024E268  op=30  rT/rS=22  rA=21   →  clrldi r21, r22, 32   →  r21 = r22
+```
+
+## A origem, correcta
+
+```
+0x0024E1F0  bl    0x003A6740        r30 = resultado
+0x0024E214  lwz   r9,12(r30)        r9  = *(r30 + 0xC)
+0x0024E22C  lwz   r22,8(r9)         r22 = *(r9 + 8)
+0x0024E268  clrldi r21,r22,32       r21 = r22        <- o arg
+0x0024E2C8  mr    r3,r21            e' usado aqui
+0x0024E2D8  lhz   r0,2(r21)         e o tag sai de +0x2
+```
+
+**`arg = *( *(func_003A6740() + 0xC) + 8 )`.**
+
+Três indirecções, todas mediveis, e uma chamada nomeada no início da cadeia.
+
+## A lição, e é nova
+
+As vinte correcções anteriores foram sobre **dados** — instrumentos que
+mentiram, amostras truncadas, inferências não medidas. **Esta foi uma ferramenta
+minha com um bug**: o descodificador de `rldicl` trocava origem e destino, e eu
+li o output como se fosse verdade porque o tinha escrito.
+
+O que a apanhou foi despejar os **campos brutos** (`op`, `rT/rS`, `rA`) em vez
+da minha própria formatação. Regra que fica: quando um desassemblador caseiro
+diz algo estrutural surpreendente ("esta função usa um registo sem o
+inicializar"), imprimir os campos brutos antes de acreditar. O custo foi uma
+corrida; o benefício foi não escrever na próxima sessão que o jogo tem um bug de
+convenção de chamada.
+
+## Onde isto deixa a investigação
+
+`func_003A6740` é o primeiro elo da cadeia que produz o `arg`. Sondá-la — o que
+devolve, e o que está em `+0xC` e `+8` do resultado — é o próximo passo, e é do
+mesmo tamanho dos que fiz hoje.
