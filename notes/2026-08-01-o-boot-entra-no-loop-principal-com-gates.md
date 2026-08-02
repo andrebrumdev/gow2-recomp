@@ -573,3 +573,53 @@ convenção de chamada.
 `func_003A6740` é o primeiro elo da cadeia que produz o `arg`. Sondá-la — o que
 devolve, e o que está em `+0xC` e `+8` do resultado — é o próximo passo, e é do
 mesmo tamanho dos que fiz hoje.
+
+---
+
+# A cadeia do `arg` está sã — e é aí que a investigação encosta
+
+Sonda nas três indirecções (`PS3_TRACE_ARGCHAIN`), as duas linhas do walker:
+
+```
+r30=0x407806F0  +0xC=0x40008AF8  arg=0x4077AC10  w0=0x40030001  tag=1
+r30=0x40780720  +0xC=0x40008B04  arg=0x4077AD20  w0=0x40030001  tag=1
+```
+
+**Todos os três ponteiros são válidos.** Não há indirecção partida: nem
+`func_003A6740` devolve lixo, nem `+0xC` aponta para fora, nem o slot `+8` tem
+um número em vez de um ponteiro.
+
+> Ressalva de instrumento: a agulha `ctx->gpr[22] = vm_read32(ctx->gpr[9] + 0x8)`
+> é genérica e casou **20 sítios** no lift. Das 12 linhas da corrida, só as duas
+> acima são do walker (as outras têm `r30=1`/`r30=2` e vêm de fragmentos de
+> funções não relacionadas). Mesma classe de ressalva do `REGLOOKUP` de manhã:
+> agulha larga produz linhas verdadeiras sobre coisas erradas.
+
+## O impasse, formulado com precisão
+
+Tudo o que se mede está coerente:
+
+| | |
+|---|---|
+| `func_003A6740` | devolve ponteiro válido |
+| `*(r30+0xC)`, `*(+8)` | ponteiros válidos |
+| o `arg` | objecto com cabeçalho `0x40030001`, tag **1** |
+| o registry | tag 1 → fábrica `0x400C5048`, vtable viva, método `func_0039D428` |
+| o construtor do `arg` | `func_0024C1F8`, completo, matriz identidade em `+0x70` |
+| o consumidor | lê `+0x7C` como sentinela de lista |
+
+E `+0x7C` está **dentro** da matriz (`matriz[0][3]`).
+
+Portanto: ou **o cabeçalho mente** (o objecto diz ser tipo 1 e não é), ou **o
+método do tipo 1 não devia ler `+0x7C` como lista**. Não há terceira hipótese, e
+nenhuma das duas se decide com mais sondas de ponteiros — decide-se
+identificando as duas classes C++ envolvidas e comparando os seus layouts.
+
+## Onde isto fica
+
+Esta sessão levou o problema de *"o boot não chega ao menu"* — sem sujeito — até
+um conflito de layout entre duas classes, com endereços para as duas e com todos
+os elos intermédios medidos e excluídos. O que falta não é mais uma medição do
+mesmo tipo: é análise estrutural das classes, que é trabalho de outra natureza.
+
+**Não há menu, e não haverá enquanto este conflito não for resolvido pela raiz.**
