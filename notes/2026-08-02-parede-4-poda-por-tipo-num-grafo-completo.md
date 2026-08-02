@@ -174,3 +174,63 @@ Duas hipóteses concretas, ambas mediáveis:
 
 A #1 é a mais barata e decide-se sem correr nada: desmontar o epílogo de
 `func_0041F700` em `0x0041F7D8` e ver se há um `stb` no cursor.
+
+---
+
+# Quinta suspeita de bug do lifter — também refutada
+
+Desmontei `func_0041F700` inteira do EBOOT à procura de um `stb` no cursor que o
+lift tivesse perdido. **Todos os stores da função, do binário:**
+
+```
+0x0041F708  stdu r1,-144(r1)      prólogo
+0x0041F70C  std  r28,112(r1)
+0x0041F710  std  r29,120(r1)
+0x0041F714  std  r30,128(r1)
+0x0041F718  std  r31,136(r1)
+0x0041F71C  std  r0,160(r1)
+0x0041F73C  stb  r9,128(r11)      ← o ÚNICO store do cursor: o PUSH
+0x0041F7B0  std  r2,40(r1)        salvaguarda do TOC
+```
+
+E o epílogo, instrução a instrução:
+
+```
+0x0041F7D8  ld   r0,160(r1)
+0x0041F7DC  ld   r28,112(r1)
+0x0041F7E0  ld   r29,120(r1)
+0x0041F7E4  mtlr r0
+0x0041F7E8  ld   r30,128(r1)
+0x0041F7EC  ld   r31,136(r1)
+0x0041F7F0  addi r1,r1,144
+0x0041F7F4  blr
+```
+
+**Nenhum `stb`.** O lift é fiel: o jogo empurra sem desempilhar nesta função.
+
+Quinta suspeita de bug do lifter nesta investigação, quinta refutada por
+verificação contra o binário. *(Nota de instrumento: o meu desassemblador imprime
+`std r1,-143(r1)` para o `stdu` do prólogo — não mascara os 2 bits baixos da
+forma DS. Não afecta esta conclusão, mas fica registado.)*
+
+## O que isto muda
+
+A pilha de produtos **não é uma pilha de chamadas** — é um **acumulador**: o walk
+recolhe todos os nós alcançáveis e empurra-os. E um "recolher tudo o que é
+alcançável" **sem conjunto de visitados só é correcto num DAG ou numa árvore**.
+
+Logo a anomalia não é a falta de pop. É a **estrutura**: cada tipo ter os outros
+doze como filhos torna o grafo completo, e um acumulador sobre um grafo completo
+é exponencial por construção.
+
+## A pergunta final da parede 4
+
+> **Quem constrói a lista de 12 filhos em `objecto+0x7C`, e porque é que ela
+> contém todos os outros tipos?**
+
+Mede-se com `PS3_WATCH_STORE` na sentinela de um dos objectos (por exemplo
+`0x42F853B0`) para apanhar quem lá escreve a cabeça, e depois nos nós
+(`0x40007D0C..0x40007DE4`) para ver quem os encadeia.
+
+É a mesma técnica de dois passos que nomeou o culpado do stomp do pump e do
+paliativo TYPE15 — as duas correcções reais desta sessão.
