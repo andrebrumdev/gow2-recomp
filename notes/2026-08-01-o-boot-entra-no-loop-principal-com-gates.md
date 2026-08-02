@@ -980,3 +980,32 @@ Não há menu. Mas a frente mudou de natureza: já não é "porque é que o boot
 avança", é **"porque é que a lista de filhos em `node+0x80` não termina"** — com
 o push identificado, o consumidor identificado, e cinco consumidores a
 concordarem no offset.
+
+## O laço de `func_0041F700` é fiel — quarta suspeita de bug do lifter, refutada
+
+Ao ler o corpo vi `r9 = *(r31 + 0)` no fim do laço, com `r31` fixado antes dele,
+e pensei: **a variável do laço não é actualizada — bug do lifter.** Verifiquei
+antes de o escrever como facto:
+
+```c
+loc_0041F7C4:
+    r9  = *(r31 + 0);        // next
+    cmp  r30, r9;            // sentinela vs next
+    r31 = r9;                // ← AVANÇA. Está lá.
+    if (r30 != r9) goto loc_0041F774;
+```
+
+**Avança correctamente.** É uma travessia de lista circular fiel: segue
+`r31 = *(r31)` até `r31 == sentinela`. As 27,5 M de iterações não são um laço
+mal traduzido — são uma cadeia de `*(node)` que nunca passa pela sentinela,
+porque o campo não é uma lista.
+
+Quarta suspeita de bug do lifter desta sessão, quarta refutada por verificação.
+Desta vez verifiquei **antes** de afirmar — as três anteriores foram escritas
+primeiro e corrigidas depois.
+
+E o walk lê o tipo dos filhos de `*(child+4)` (não de `+2`, como o walker do
+WAD), com a mesma fórmula `idx = (t<<2) & 0x3FFFC`, e despacha `tab[idx]->vt[0x40]`.
+São três campos de tipo diferentes em jogo (`+2`, `+4`, `+6`), todos contra a
+mesma tabela — mais uma razão para o próximo passo ser análise de layout, não
+mais sondas.
