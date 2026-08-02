@@ -1,0 +1,158 @@
+# PATCH_MIGRATION.tsv -- ledger de migracao patch->mecanismo (Fase 16 / LEDG-01)
+# regenerar esqueleto: .venv/bin/python3 games/gow2/lift_baseline/gen_migration_ledger.py --merge games/gow2/lift_baseline/PATCH_MIGRATION.tsv -o games/gow2/lift_baseline/PATCH_MIGRATION.tsv
+# COLUNAS HUMANAS (nao sobrescrever no regen se --merge): alvo, prioridade, aceite, estado
+# COLUNAS DERIVADAS (recalculadas sempre): patch, classe, ea (heuristica, so' quando CONFIRMADA pelo corpo do script), ea_pista_nome (candidato lido do nome e NAO confirmado -- verificar antes de usar), subclasse_catalogo, so_no_build, marcador
+# baseline contagens (2026-08-02, medidas nesta corrida):
+#   patch_*.py monorepo (games/gow2/recomp_mid_v2) = 88
+#   patch_*.py build    (../gow2-recomp/recomp_mid_v2) = 139
+#   PATCH_CATALOG linhas de dados = 139
+#   linhas de dados deste ledger = 139 (CORRECTNESS=77 / PROBE=50 / OPD=10 / OBSOLETE=2)
+#   EA CONFIRMADA pelo corpo do script = 78/139; destas restantes, 14 trazem pista nao confirmada em ea_pista_nome (sem EA verificada nao ha' midasm/weak, logo nao ha' P0)
+#   divergencia build-monorepo = 139 - 88 = 51 (declarada; reconciliar o subtree e' divida do v1.0, FORA de escopo)
+#   1 patch(es) existem SO' no espelho monorepo e NAO tem linha (o build nao os aplica): patch_freelist_guard_262610.py
+# baseline verify/smoke: POR MEDIR (plano 16-03) -- rc=? st620_max=? sticky=? oob_pos_tls=? [nivel de evidencia: nao-exercitado]
+# dominio: classe in {CORRECTNESS,PROBE,OPD,BUILD,OBSOLETE} (BUILD reservado, hoje sem ocorrencias) | alvo in {midasm,weak,switch_table,invalid_insn,runtime,keep-probe,delete} | prioridade in {P0,P1,P2} | estado in {todo,migrated,wont}
+# mapa classe (derivado, ver 16-RESEARCH.md e o docstring de gen_migration_ledger.py):
+#   PROBE+orfao-sem-fonte->OBSOLETE | PROBE->PROBE | FUNCIONAL+opd->OPD | FUNCIONAL->CORRECTNESS
+# alvo/prioridade/aceite vazios = decisao humana pendente (plano 16-02).
+# aceite tem de ser executavel: grep:<padrao> | contract:<id CONTRACTS.tsv> | smoke:<metrica>. 'verificar manualmente' e' proibido.
+patch	classe	alvo	ea	prioridade	aceite	estado	ea_pista_nome	subclasse_catalogo	so_no_build	marcador
+patch_146cb8_autoload_creator_probe.py	PROBE	keep-probe	0x00146CB8			todo		diagnostico	1	
+patch_14a01c_opd.py	OPD		0x0014A01C			todo		opd	0	
+patch_14b1f0_opd.py	OPD		0x0014B1F0			todo		opd	0	[WADLD-BATCH]
+patch_17acc_enter_probe.py	PROBE	keep-probe	0x00017ACC			todo		diagnostico	0	[PS3_17ACC_FN_N]
+patch_1856a8_stream_opd.py	OPD		0x001856A8			todo		opd	0	[STREAM-OPD]
+patch_218340_pool_index_probe.py	PROBE	keep-probe	-			todo	0x00218340	diagnostico	1	
+patch_218364_pool_null_gate.py	CORRECTNESS		-			todo	0x00218364	misc	1	
+patch_220284_copyloop_probe.py	PROBE	keep-probe	0x00220284			todo		diagnostico	1	
+patch_227788_allocsrc_probes.py	CORRECTNESS		0x00227788			todo		misc	1	
+patch_227788_sizeclass_probe.py	PROBE	keep-probe	0x00227788			todo		diagnostico	1	
+patch_242c94_state_dispatch_probe.py	PROBE	keep-probe	0x00242C94			todo		diagnostico	1	
+patch_24d5bc_walker_probe.py	PROBE	keep-probe	0x0024D5BC			todo		diagnostico	1	
+patch_24e198_r21_origin_probe.py	PROBE	keep-probe	0x0024E198			todo		diagnostico	1	
+patch_24e22c_arg_chain_probe.py	PROBE	keep-probe	-			todo	0x0024E22C	diagnostico	1	
+patch_24e2d4_typetag_probe.py	PROBE	keep-probe	-			todo	0x0024E2D4	diagnostico	1	
+patch_24e3d0_null_product_gate.py	CORRECTNESS		0x0024E3D0			todo		misc	1	
+patch_2545b0_entry_probe.py	PROBE	keep-probe	0x002545B0			todo		diagnostico	1	
+patch_254610_empty_list_gate.py	CORRECTNESS		-			todo	0x00254610	misc	1	
+patch_254628_list_probe.py	PROBE	keep-probe	-			todo	0x00254628	diagnostico	1	
+patch_2547f8_empty_list_gate.py	CORRECTNESS		-			todo	0x002547F8	misc	1	[B71]
+patch_2547f8_walk_list_probe.py	PROBE	keep-probe	-			todo	0x002547F8	diagnostico	1	
+patch_256b64_insert_probe.py	PROBE	keep-probe	0x00256B64			todo		diagnostico	1	
+patch_25c680_loop_probe.py	PROBE	keep-probe	0x0025C680			todo		diagnostico	1	
+patch_263040_freelist_tag_guard.py	CORRECTNESS		0x00263040			todo		guard	1	[ALLOC-NULL-GUARD],[FREELIST-TAG-GUARD],[POSTINTRO]
+patch_263178_store_probe.py	PROBE	keep-probe	0x00263178			todo		diagnostico	1	
+patch_263554_freelist_head_probe.py	PROBE	keep-probe	0x00263554			todo		diagnostico	1	
+patch_263680_alloc_null_guard.py	CORRECTNESS		0x00263680			todo		guard	1	[ALLOC-NULL-GUARD],[POSTINTRO]
+patch_29af0_switch_probe.py	PROBE	keep-probe	0x00029AF0			todo		diagnostico	1	
+patch_2a4fe4_trace.py	PROBE	keep-probe	0x002A4FE4			todo		diagnostico	0	
+patch_2b0fb4_opd.py	OPD		0x002B0FB4			todo		opd	0	
+patch_2b0fb4_trace.py	CORRECTNESS		0x002B0FB4			todo		dispatch-fix	0	[WADLD-T1SZ],[WADLD-VT28R],[WADLD-VT28]
+patch_2b2e04_flag_probe.py	PROBE	keep-probe	0x002B2E04			todo		diagnostico	1	
+patch_2b3d1c_movie_io.py	CORRECTNESS		0x002B3D1C			todo		misc	0	[AREAD]
+patch_2b3d1c_probe.py	PROBE	keep-probe	0x002B3D1C			todo		diagnostico	0	[AREAD]
+patch_32e200_opd.py	OPD		0x0032E200			todo		opd	0	[CMP-ENTER],[CMP-VCALL]
+patch_39e5a8_product_probe.py	PROBE	keep-probe	0x0039E5A8			todo		diagnostico	1	
+patch_39e5d8_opd.py	OPD		0x0039E5D8			todo		opd	0	[WADLD-FIN]
+patch_39e6b4_null_entry_probe.py	PROBE	keep-probe	0x0039E6B4			todo		diagnostico	1	
+patch_41f774_sibling_cycle_probe.py	PROBE	keep-probe	-			todo	0x0041F774	diagnostico	1	
+patch_41f78c_prune_probe.py	PROBE	keep-probe	-			todo	0x0041F78C	diagnostico	1	
+patch_41f7a4_descent_cycle_probe.py	PROBE	keep-probe	-			todo	0x0041F7A4	diagnostico	1	
+patch_41fff0_outer_walk_probe.py	PROBE	keep-probe	-			todo	0x0041FFF0	diagnostico	1	
+patch_a1_chain_probe.py	CORRECTNESS		-			todo		dispatch-fix	0	[A1-30D54],[A1-32DF98],[A1-468-EX1],[A1-468-EX2],[A1-468C3C],[A1-CALL30D54B],[A1-CALL30D54]
+patch_autoload_chain_probes.py	CORRECTNESS		-			todo		misc	1	
+patch_b71_2f3f0_guard.py	CORRECTNESS		0x0002F3F0			todo		guard	0	[B71],[POSTINTRO]
+patch_b71_callsite_trace.py	PROBE	keep-probe	-			todo		diagnostico	1	[B71]
+patch_b71_cb56c_reuse_block.py	CORRECTNESS		0x000CB56C			todo		misc	0	[POSTINTRO],[TYPE15]
+patch_b71_skip_icallb_reuse.py	CORRECTNESS		-			todo		misc	0	
+patch_ba808_wadld_eof.py	CORRECTNESS		-			todo	0x000BA808	wadld	0	[BA808]
+patch_bbd74_autoload_gate_probe.py	CORRECTNESS		-			todo	0x000BBD74	dispatch-fix	1	
+patch_bctr_tail.py	CORRECTNESS		-			todo		dispatch	0	
+patch_cb56c_type_probe.py	PROBE	keep-probe	0x000CB56C			todo		diagnostico	1	
+patch_cbb2c_reentry_disc.py	CORRECTNESS		0x000CBB2C			todo		misc	0	[CB56C-DISC],[CBB2C-DISC],[POSTINTRO]
+patch_cc9d0_live_yield.py	PROBE	keep-probe	0x000CC9D0			todo		diagnostico	0	[TYPE15]
+patch_cd498_enter_probe.py	PROBE	keep-probe	0x000CD498			todo		diagnostico	0	
+patch_ce03c_introseq_block.py	CORRECTNESS		0x000CE03C			todo		misc	0	[INTROSEQ]
+patch_ce03c_movie_done_reset.py	CORRECTNESS		0x000CE03C			todo		misc	0	[INTROSEQ]
+patch_ce03c_pre_play_stop.py	OBSOLETE	delete	0x000CE03C			todo		orfao-sem-fonte	0	
+patch_ce03c_wait_idle_f2b_movie.py	OBSOLETE	delete	0x000CE03C			todo		orfao-sem-fonte	0	
+patch_comboprop_168350.py	CORRECTNESS		0x00168350			todo		misc	0	[COMBOPROP]
+patch_crc_lookup_probe.py	PROBE	keep-probe	0x001655F0			todo		diagnostico	0	[CRC-HASH],[CRC-LK]
+patch_f2b_multimb_install.py	CORRECTNESS		-			todo		misc	0	[FIOSOPEN],[WADLD-BODY],[WADLD-SM]
+patch_f2b_multimb_stream.py	CORRECTNESS		-			todo		misc	0	
+patch_f2ba9bc_stream_align_install.py	CORRECTNESS		0x002BA9BC			todo		misc	1	[FIOSOPEN],[FREELIST-TAG-GUARD]
+patch_factory_block_ty15_install.py	CORRECTNESS		0x0039E794			todo		factory	0	[FACTORY],[PS3_FACT_SNAP_MAX],[TYPE15]
+patch_factory_opd_gate.py	OPD		0x0039E6B4			todo		opd	0	
+patch_factory_snap_ty15_pin.py	CORRECTNESS		-			todo		factory	0	
+patch_fallthrough_2550c8.py	CORRECTNESS		0x002550C8			todo		misc	0	
+patch_fios_16c_selfheal.py	CORRECTNESS		-			todo		fios	1	[FIOSOPEN]
+patch_fios_42a1d4_empty.py	CORRECTNESS		0x0042A1D4			todo		fios	0	[FIOSOPEN]
+patch_fios_42b4_cancel_yield.py	CORRECTNESS		0x002B42B4			todo		fios	1	[FIOSOPEN]
+patch_fios_cancel_yield.py	CORRECTNESS		0x002B3F78			todo		fios	0	
+patch_fios_done_cancel_yield.py	CORRECTNESS		0x002B4274			todo		fios	0	[FIOSOPEN]
+patch_fios_done_yield.py	CORRECTNESS		0x00306534			todo		fios	1	
+patch_fios_f2a_f2b_wad.py	CORRECTNESS		-			todo		fios	0	
+patch_fios_f2b_fo_block.py	CORRECTNESS		0x0030D5CC			todo		fios	0	[FIOSOPEN]
+patch_fios_f2b_fo_ctor.py	CORRECTNESS		-			todo		fios	0	
+patch_fios_f2b_open_block_install.py	CORRECTNESS		-			todo		fios	0	[FIOSOPEN]
+patch_fios_f2b_open_success.py	CORRECTNESS		-			todo		fios	0	
+patch_fios_f2b_pump_ring_bounds.py	CORRECTNESS		-			todo		fios	1	[FIOSOPEN],[WADLD-VT28]
+patch_fios_f2b_pump_ring_bounds2.py	CORRECTNESS		-			todo		fios	1	[FIOSOPEN]
+patch_fios_freelist_rebuild.py	CORRECTNESS		-			todo		fios	1	[FIOSOPEN]
+patch_fios_host_pop.py	CORRECTNESS		-			todo		fios	1	[FIOSOPEN]
+patch_fios_open_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[AREAD],[FIOSOPEN],[INTROSEQ],[OOBARG],[SNDOPEN]
+patch_fios_play_already_active.py	CORRECTNESS		0x002C0498			todo		fios	0	
+patch_fios_sched_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[FIOSSCHED]
+patch_fios_sticky.py	CORRECTNESS		0x002B3F78			todo		fios	0	[FIOSSCHED]
+patch_fios_stop_yield.py	CORRECTNESS		-			todo		fios	0	[FIOSOPEN]
+patch_fios_stream_guards_install.py	CORRECTNESS		0x00262610			todo		guard	0	[ALLOC-NULL-GUARD],[FREELIST-TAG-GUARD]
+patch_fios_stream_pump.py	CORRECTNESS		-			todo		fios	0	[ALLOC-NULL-GUARD],[FREELIST-TAG-GUARD]
+patch_flip_path_enter_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[FLIPPATH],[PS3_FLIPP_FN_N]
+patch_groupend_opd.py	OPD		0x002B0AA8			todo		opd	0	[WADLD-GENDR],[WADLD-GEND]
+patch_host_res_inflate.py	CORRECTNESS		0x001E7B50			todo		host	0	[HOSTRES-ENTER]
+patch_icg_ctor_opd.py	OPD		-			todo		opd	0	[ICG-VCALL]
+patch_introseq_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[AREAD],[INTROSEQ],[OOBARG]
+patch_jumptable_2a209c.py	CORRECTNESS		0x002A209C			todo		jumptable	0	[OPDISP]
+patch_jumptable_2b11b8.py	CORRECTNESS		0x002B11B8			todo		jumptable	0	[TYDISP]
+patch_ldrsh_shadersrc_entry.py	CORRECTNESS		-			todo		shader	0	[LDRSH],[SHADERSRC]
+patch_mc_schedule_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	
+patch_menu_present_schedule_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[MENUPRESENT],[PS3_MP_FN_N]
+patch_oob_ra_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[OOBARG]
+patch_opdisp_entry.py	OPD		0x002A209C			todo		opd	0	[OPDISP-ENT]
+patch_postthr_pc_probe.py	PROBE	keep-probe	0x00147038			todo		diagnostico	0	[POSTTHR],[PS3_PT_FN_N]
+patch_postthr_spin_r12.py	CORRECTNESS		0x000B951C			todo		misc	0	[POSTTHR-DISC],[POSTTHR-ICALL]
+patch_present_loop_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[PRESENTLOOP],[PS3_PLP_FN_N]
+patch_sched_arm_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[PS3_SA_FN_N],[SCHEDARM]
+patch_shadersrc_loop.py	CORRECTNESS		0x003C8578			todo		shader	0	[SS-BIG],[SS-CAP],[SS-DONE2],[SS-DONE],[SS-EMPTY],[SS-GROW],[SS-INS2],[SS-INSFN],[SS-INS],[SS-REC2],[SS-REC],[SS-RESUME]
+patch_smpd_probe.py	PROBE	keep-probe	0x002C05F8			todo		diagnostico	0	[EOSGATE],[ST3],[STOPENTRY],[STOP]
+patch_snd_open_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[AREAD],[INTROSEQ],[OOBARG],[SNDOPEN]
+patch_st3_audio_done_force.py	CORRECTNESS		0x002C0FA0			todo		misc	0	
+patch_st3_audio_gate.py	CORRECTNESS		0x002C0FA0			todo		misc	0	[AUDGATE]
+patch_st3_probe.py	PROBE	keep-probe	0x002C05F8			todo		diagnostico	0	[ST3]
+patch_stdlib_getenv.py	CORRECTNESS		-			todo		misc	0	
+patch_tydisp_lr.py	CORRECTNESS		-			todo		tymap	0	[TYDISP]
+patch_tymap_18e814.py	CORRECTNESS		0x0018E814			todo		tymap	0	[TYMAP-HIT],[TYMAP-LK],[TYMAP-RET],[TYMAP-VT]
+patch_tymap_probes2.py	CORRECTNESS		0x00171244			todo		tymap	0	[TYDISP],[TYMAP-171],[TYMAP-GS]
+patch_type15_cb56c_highbit.py	CORRECTNESS		0x000CB56C			todo		type15	0	[POSTINTRO],[TYPE15]
+patch_type15_cb56c_prefer_product_install.py	CORRECTNESS		0x000CB56C			todo		type15	0	[POSTINTRO],[TYPE15]
+patch_type15_cb56c_product.py	CORRECTNESS		0x000CB56C			todo		type15	0	
+patch_type15_cc9d0_base_blocks.py	CORRECTNESS		0x000CC9D0			todo		type15	0	[CC9D0],[POSTINTRO],[TYPE15]
+patch_type15_cc9d0_disc.py	CORRECTNESS		0x000CC9D0			todo		type15	0	[CB56C-DISC],[CC9D0-DISC],[CC9D0],[POSTINTRO],[TYPE15]
+patch_type15_fl_rehome_fixup.py	CORRECTNESS		-			todo		type15	1	
+patch_type15_fl_shell_rehome.py	CORRECTNESS		-			todo		type15	1	[TYPE15]
+patch_type15_fl_slot_probe.py	PROBE	keep-probe	0x0039E794			todo		diagnostico	1	
+patch_type15_list_close_preserve_install.py	CORRECTNESS		-			todo		type15	0	[POSTINTRO],[TYPE15]
+patch_type15_list_preserve.py	CORRECTNESS		-			todo		type15	0	[TYPE15]
+patch_type15_rehome_gate.py	CORRECTNESS		-			todo		type15	1	[TYPE15]
+patch_type15_shell_probe.py	CORRECTNESS		0x0039E794			todo		dispatch-fix	1	
+patch_type15_unstick_skip.py	CORRECTNESS		0x000CC9D0			todo		type15	1	[TYPE15]
+patch_type1_name.py	CORRECTNESS		-			todo		misc	0	
+patch_type1_result.py	CORRECTNESS		-			todo		misc	0	[WADLD-T1R]
+patch_typeslot_null_probe.py	PROBE	keep-probe	-			todo		diagnostico	1	[WADLD-VT28]
+patch_typeslot_null_probe2.py	CORRECTNESS		-			todo		misc	1	
+patch_vt64_dispatch_probe.py	PROBE	keep-probe	-			todo		diagnostico	1	
+patch_wad_state_machine.py	CORRECTNESS		0x002BA76C			todo		misc	0	[WADLD-BODY],[WADLD-CALL],[WADLD-OPD],[WADLD-SM]
+patch_wad_tex_capture.py	CORRECTNESS		-			todo		misc	0	[WADLD-T1R]
+patch_wadld_alloc_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[B71],[BA808],[WADLD-ALLOC]
+patch_wavdrv_probe.py	PROBE	keep-probe	-			todo		diagnostico	0	[FIOSOPEN],[SNDOPEN],[WAVDRV]
+patch_zz_host_api_decls.py	CORRECTNESS		-			todo		host	0	

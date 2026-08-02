@@ -159,10 +159,32 @@ def check_heuristica_de_ea() -> None:
     for name, r in rows.items():
         assert padrao.match(r["ea"]), f"{name}: ea fora do formato: {r['ea']!r}"
     com_ea = sum(1 for r in rows.values() if r["ea"] != "-")
+
+    # `ea` so' aceita EA CONFIRMADA pelo corpo do script. Quando o nome sugere
+    # um endereco que o corpo nunca menciona, isso vai para `ea_pista_nome`
+    # como pista NAO confirmada -- inventar a EA na coluna `ea` seria forjar
+    # um numero (regra 4 do CLAUDE.md).
+    r = rows["patch_254610_empty_list_gate.py"]
+    assert r["ea"] == "-", r
+    assert r["ea_pista_nome"] == "0x00254610", r
+    # Onde a EA esta' confirmada, a pista nao se repete (ruido zero).
+    assert rows["patch_fallthrough_2550c8.py"]["ea_pista_nome"] == "", rows[
+        "patch_fallthrough_2550c8.py"
+    ]
+    padrao_pista = re.compile(r"^(|0x[0-9A-F]{8})$")
+    for name, r in rows.items():
+        assert padrao_pista.match(r["ea_pista_nome"]), (
+            f"{name}: ea_pista_nome fora do formato: {r['ea_pista_nome']!r}"
+        )
+        if r["ea"] != "-":
+            assert r["ea_pista_nome"] == "", f"{name}: pista redundante: {r}"
+    com_pista = sum(1 for r in rows.values() if r["ea_pista_nome"])
     print(
         f"[PASS] heuristica de EA: {len(ancoras)} ancoras verificadas batem "
         f"(2550C8, 32E200, 1E7B50, CE03C, 14B1F0); {com_ea}/{len(rows)} linhas "
-        "com EA resolvida, todas no formato 0xXXXXXXXX ou '-'"
+        "com EA confirmada pelo corpo, todas no formato 0xXXXXXXXX ou '-'; "
+        f"{com_pista} linhas sem EA confirmada trazem pista do nome "
+        "(nao confirmada, declarada como tal)"
     )
 
 
