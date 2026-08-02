@@ -1053,3 +1053,47 @@ Distinguir os dois é uma medição concreta: contar a profundidade e detectar
 revisita de nós (um conjunto de vistos, com cap). Isso cabe numa sonda, ao
 contrário da análise de layout que eu tinha dado como próximo passo — este ramo
 não precisa dela.
+
+---
+
+# A lista termina. O que não termina é quem a manda percorrer.
+
+Sonda na cadeia de irmãos (`PS3_TRACE_SIBLING`, cap 24):
+
+```
+#1   no=0x40007DE4  proximo=0x40007DD8  sent=0x42F853B0
+...
+#12  no=0x40007D0C  proximo=0x42F853B0  sent=0x42F853B0   ← TERMINA na sentinela
+#13  no=0x40007DE4  proximo=0x40007DD8  sent=0x42F853B0   ← recomeça do início
+```
+
+**A lista tem 12 irmãos e fecha correctamente na sentinela.** O walk de
+`func_0041F700` está certo do princípio ao fim: lista bem formada, travessia
+fiel, terminação correcta.
+
+O `#13` é a repetição — a mesma lista percorrida outra vez. As 27,5 M de
+iteracões são ~2,3 M de **chamadas** a `func_0041F700`, cada uma a percorrer os
+mesmos 12 nós.
+
+## Sexta vez, e a mais embaraçosa
+
+Eu tinha escrito que `func_0041F700` só é chamada **40 vezes**, e construí sobre
+isso a conclusão de que "o ciclo não está na profundidade". Estava errado: **a
+minha sonda de entrada tinha `if(_n++<40)` — cap fixo, escrito por mim hoje**,
+depois de eu próprio ter escrito, nesta mesma nota, que cap fixo é mentiroso por
+omissão e que toda a sonda nova leva cap por env var.
+
+Escrevi a regra e violei-a na sonda seguinte. Corrigido:
+`PS3_TRACE_B71_ENTRY_CAP`.
+
+## Onde isto deixa a frente
+
+O defeito **não** está na estrutura de dados nem no walk. Está em **quem
+re-invoca o walk ~2,3 milhões de vezes**. Como o walk desce aos filhos por
+`*(nó+8)` e despacha `tab[*(filho+4)]->vt[0x40]`, a hipótese natural é uma
+**aresta que volta a um antepassado** — a árvore tem um ciclo entre níveis, e
+cada volta re-percorre os mesmos 12 irmãos.
+
+Isso mede-se com um conjunto de nós já visitados **na descida** (não nos irmãos,
+que já se sabe estarem certos): se um filho já foi visitado, imprime-se a aresta
+que fecha o ciclo. É a próxima medição, e é pequena.
