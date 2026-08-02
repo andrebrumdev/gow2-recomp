@@ -404,3 +404,55 @@ E há um caminho barato para a resposta: o objecto está encadeado (`+0x0` apont
 para o irmão `0x4077AD20`) e o walker percorre registos por tag. Ou o walker
 apanha o nó errado da cadeia, ou o `arg` que ele passa devia ser outro campo do
 nó — e isso lê-se em `func_0024E270` com o `arg` já conhecido.
+
+---
+
+# A cadeia fecha em círculo: o `arg` é o produto corrente da fábrica
+
+Entrada real do walker: `func_0024E198` (achada por xref de alvos de `bl`; os
+`func_0024E1E8`/`func_0024E270` são fragmentos). O prólogo guarda `r21` mas não
+o define, e em `0x0024E268` só o trunca (`clrldi r21,r21,32`). Portanto `r21`
+nasce num dos fragmentos trampolinados do laço — e o rasto identifica-o:
+
+```
+[B71] func_0024E3D0 #001 -> ps3_indirect_call r3=0x400C6210 ctr=0x0039E5A8
+[B71] func_0024E3D0 #001 -> ps3_indirect_call r3=0x403008E8 ctr=0x0039E5A8
+```
+
+`func_0039E5A8` é a primeira função que decodifiquei nesta sessão:
+
+```c
+cursor = *(int8_t*)(fab + 0xC8);
+if (cursor < 0) return NULL;
+return *(uint32_t*)(fab + 0x48 + cursor*4);      // "dá-me o produto corrente"
+```
+
+**O `arg` que chega a `func_002545B0` é o produto corrente de uma fábrica.**
+
+## O que isto amarra
+
+A sessão fecha exactamente no item que estava aberto quando começou — *"o walker
+do WAD pede à fábrica o produto corrente sem nunca ter feito push"* — mas agora
+com tudo o que estava por medir, medido:
+
+| elo | estado |
+|---|---|
+| o registry de tipos | **funciona** (`tab=0x00868D48`, tag→fábrica com vtable viva) |
+| o objecto entregue | **bem construído** (cabeçalho + matriz identidade em `+0x70`) |
+| o `+0x7C` que o walker lê | **`matriz[0][3]`**, provado por desmontagem do construtor |
+| quem o entrega | `func_0039E5A8`, o "produto corrente" da fábrica |
+| o consumidor | `func_002545B0`, que o trata como contentor com lista em `+0x7C` |
+
+Logo o defeito está entre o **cursor da fábrica** (`fab+0xC8`) e o **array de
+produtos** (`fab+0x48`): ou o cursor aponta para uma ranhura errada, ou o array
+tem lá um produto de outro tipo.
+
+E isso é medível com uma sonda em `func_0039E5A8` — cursor, ranhura, produto
+devolvido, e o tag do produto — cruzada com o tipo que o consumidor assume.
+
+## Estado final da sessão
+
+Não há menu. O boot só entra no loop principal com três gates de diagnóstico.
+
+O que fica é a cadeia inteira, do `main()` ao campo, medida degrau a degrau, com
+a pergunta reduzida a duas palavras: **cursor ou array.**
