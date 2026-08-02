@@ -105,3 +105,69 @@ ponteiro não-comprometido, e o ciclo de stream FIOS.
 Não cheguei ao menu. Mas a parede deixou de ser "o boot não chega ao AUTO_LOAD"
 (um elo que se provou ser código de encerramento) e passou a ser **uma função
 nomeada, com a cadeia inteira desde o `main()` medida degrau a degrau**.
+
+---
+
+# A cadeia fecha: do `main()` até ao objecto de Julho
+
+Rasto de cada chamada dentro do B71 (`PS3_TRACE_B71`, 147 pontos de passagem,
+uma reconstrução). O último número impresso é a chamada que não voltou:
+
+```
+[B71] func_000B71B8 #041 -> func_0010F5E8
+[B71] func_0010F5E8 #001 -> func_0024F24C      ✅ volta
+[B71] func_0010F5E8 #002 -> func_0024C878      ✅ volta
+[B71] func_0010F5E8 #003 -> ps3_indirect_call  this=0x400C5048  ctr=0x0039D51C
+[B71] func_0039D51C #001 -> ps3_indirect_call  this=0x400C5048  ctr=0x0039D3C4  ✅ volta
+[B71] func_0039D51C #002 -> ps3_indirect_call  this=0x400C61C8  ctr=0x0039E40C
+                                                     ^^^^^^^^^^ (silêncio a partir daqui)
+```
+
+`func_0010F5E8` é um **lookup no registry de tipos**:
+
+```c
+r0  = rlwinm(*(uint16*)(obj+2), 2, 14, 29);   // (tipo << 2) & 0x3FFFC
+r11 = *(TOC-0x4D94 + r0);                      // fabrica = tab[idx]  -> 0x400C5048
+ps3_indirect_call(*(vt+0x20));                 // -> func_0039D51C
+```
+
+`idx = (tipo<<2) & 0x3FFFC` é a fórmula do registry de tipos que o CLAUDE.md
+documenta. É a Parede D, alcançada pelo caminho natural.
+
+E `this = 0x400C61C8` no último salto é **o mesmo objecto** das sondas de
+Julho:
+
+```
+[E545B0] #1 this=0x400C61C8 arg=0x4063858C sent=0x40638608 head=0x40007F34  <- lista válida
+[E545B0] #2 this=0x400C61C8 arg=0x407790D0 sent=0x4077914C head=0x00000000  <- laço infinito
+```
+
+## A cadeia inteira, medida ponta a ponta
+
+```
+main() func_0025C838
+  └─ func_002B2E74                       (7ª de 9 chamadas)
+       └─ func_000B71B8  = B71           (9ª de 11)
+            └─ #41 func_0010F5E8         lookup no registry de tipos
+                 └─ #03 → func_0039D51C  this=0x400C5048 (fábrica)
+                      └─ #02 → func_0039E40C  this=0x400C61C8
+                           └─ … → func_002545B0 com head=0
+                                └─ despacho virtual sobre NULL, em ciclo
+                                     └─ breaker aos 2000 → exit(3)
+  ✗ func_002B2E04  (8ª) — NUNCA ALCANÇADA
+       └─ func_00242C94 — O LOOP PRINCIPAL DO JOGO, nunca corre
+```
+
+Cada seta desta cadeia foi **medida**, não inferida. As duas hipóteses de bug
+do lifter que levantei pelo caminho foram ambas refutadas contra o binário.
+
+## O que isto vale
+
+O trabalho de Julho tinha nomeado o objecto (`0x400C61C8`) e o sintoma
+(`head=0`), mas não sabia **onde na execução** isso acontecia nem **o que
+bloqueava**. Agora sabe-se as duas coisas: bloqueia o `main()` na sétima
+chamada, e por isso o jogo nunca entra no loop principal.
+
+A pergunta operacional deixa de ser "porque é que o boot não avança" e passa a
+ser uma pergunta com sujeito: **porque é que `func_0039E40C`, chamada sobre
+`0x400C61C8`, entrega a `func_002545B0` um objecto cuja lista tem `head=0`.**
