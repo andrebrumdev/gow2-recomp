@@ -43,11 +43,17 @@ extern "C" {
 #endif
 
 /* CE03C wait-idle da intro (EA guest 0x000CE03C, piloto da Fase 17).
- * P0 no ledger games/gow2/lift_baseline/PATCH_MIGRATION.tsv, hoje ainda
- * instalado por recomp_mid_v2/patch_ce03c_introseq_block.py.
- * NO-OP no plano 17-02 (so' se prova que liga); o corpo -- pump ate' ao
- * MovieStop natural, arm do +0x714 e limpeza do sticky EOS -- entra no 17-03,
- * junto com a entrada [[midasm_hook]] no TOML. */
+ * P0 no ledger games/gow2/lift_baseline/PATCH_MIGRATION.tsv; ate' ao plano
+ * 17-03 era TEXTO INJECTADO no lift por
+ * recomp_mid_v2/patch_ce03c_introseq_block.py, que um re-lift limpo apagava.
+ * Desde o 17-03 o corpo -- pump ate' ao MovieStop natural, arm do +0x714,
+ * limpeza do sticky EOS e movie_done_timebased_reset -- vive no .cpp ao lado,
+ * e a entrada [[midasm_hook]] address = 0x000CE03C esta' em
+ * games/gow2/config/gow2_recomp.toml.
+ *
+ * NAO cobre o pad de setjmp/longjmp (g_ce03c_play_abort) que o patch punha a'
+ * volta do corpo natural: um mid-asm corre AO LADO de uma instrucao, nao
+ * ENVOLVE a funcao. Ver o comentario do corpo no .cpp e o 17-03-SUMMARY.md. */
 void gow2_midasm_Ce03cWaitIdle(ppu_context* ctx);
 
 #ifdef __cplusplus

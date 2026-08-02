@@ -1,14 +1,49 @@
 # gow2_recomp.toml -- recomp config do GoW2 (schema Xenon-style, tools/recomp_config.py)
 #
-# Consumido por ../ps3recomp/tools/recomp_config.py (Task A1). Ainda NAO ligado
-# ao ppu_lifter.py (isso e a Task A2: --recomp-config). Por agora so declara
-# main/optimizations; midasm_hook entra na Task A3 (migracao do CE03C wait-idle).
+# Consumido por ../ps3recomp/tools/recomp_config.py e JA' ligado ao
+# ppu_lifter.py pela flag --config (Fase 17 plano 01): uma seccao
+# [[midasm_hook]] aqui faz o lifter emitir `gow2_midasm_<Name>(ctx);` ao lado da
+# instrucao ancorada. O corpo desse simbolo vive em codigo host versionado,
+# ../hooks/gow2_midasm_hooks.{h,cpp}, compilado e ligado ao boot_gow2 pelo
+# build_macos.sh (Fase 17 plano 02; provado por `nm boot_gow2 | grep
+# gow2_midasm` -> T _gow2_midasm_Ce03cWaitIdle).
+#
+# REGRA ao acrescentar uma entrada aqui: todo o hook declarado precisa de corpo
+# em ../hooks/gow2_midasm_hooks.cpp, no MESMO commit -- sem corpo o link parte
+# (falha alta, de proposito), e o principio G2 do marco exige que um hook nao
+# implementado seja no-op e nao um build partido.
+#
+# NOTA: `jump_address` do [[midasm_hook]] NAO esta implementado -- o lifter
+# recusa com rc=2 em vez de emitir a chamada sem o salto (17-01). Nao usar.
 
 [main]
 elf_path = "../EBOOT.ELF"                     # local only; nunca commitar o ELF
 functions_json = "../functions.json"
 out_directory = "../recomp_macos_v2"
 switch_table_file = "gow2_switch_tables.toml" # ainda nao existe -- chega na Task B1
+
+# ---------------------------------------------------------------------------
+# Mid-asm hooks
+# ---------------------------------------------------------------------------
+# PILOTO DA FASE 17 (plano 17-03). O bloco "wait-idle" do CE03C vivia como 116
+# linhas de texto injectadas dentro do lift gitignored por
+# ../recomp_mid_v2/patch_ce03c_introseq_block.py -- func_000CE03C tem 143 linhas
+# no lift de producao e o lifter gera 27. Um re-lift limpo deixava a funcao nas
+# 27 geradas, e ate' 2026-07-25 NENHUM script repunha a diferenca. Declarado
+# aqui, a chamada passa a ser EMITIDA pelo lifter e o corpo vive em codigo host
+# versionado (../hooks/gow2_midasm_hooks.cpp) -- e sobrevive ao re-lift.
+#
+# `address` e' o EA da PRIMEIRA instrucao de func_000CE03C, logo a chamada sai
+# no topo do corpo, antes da instrucao traduzida (default: antes; nao se declara
+# `after_instruction`). Sem `return`: o corpo natural do guest TEM de continuar.
+#
+# LIMITE CONHECIDO, declarado e nao escondido: o patch tambem envolvia o corpo
+# natural num pad de setjmp/longjmp (g_ce03c_play_abort). Isso NAO cabe num
+# mid-asm (que corre ao lado de uma instrucao, sem a envolver) e fica para os
+# weak overrides da Fase 19.
+[[midasm_hook]]
+name = "Ce03cWaitIdle"
+address = 0x000CE03C
 
 [optimizations]
 skip_lr = false
