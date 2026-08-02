@@ -456,3 +456,56 @@ Não há menu. O boot só entra no loop principal com três gates de diagnóstic
 
 O que fica é a cadeia inteira, do `main()` ao campo, medida degrau a degrau, com
 a pergunta reduzida a duas palavras: **cursor ou array.**
+
+---
+
+# CORRECÇÃO (20.ª): o `arg` NÃO vem de `func_0039E5A8`
+
+Escrevi na secção anterior, com confiança, que *"o `arg` que chega a
+`func_002545B0` é o produto corrente de uma fábrica"*. **Está errado.**
+
+Sonda em `func_0039E5A8` (`PS3_TRACE_PRODUCT`), 253 consultas numa corrida,
+todas sãs:
+
+```
+179  fab=0x40300E80 cursor=0 ranhura=0x40300EC8 produto=0x40638B70 hdr=0x00516AA8
+ 45  fab=0x40300E80 cursor=1 ranhura=0x40300ECC produto=0x40638B70 hdr=0x00516AA8
+ 12  fab=0x403008E8 cursor=0 ranhura=0x40300930 produto=0x40638AD8 hdr=0x005168C8
+ ... 20 fábricas distintas, cursores 0/1/2, todos os produtos válidos
+```
+
+Os `hdr` são todos `0x0051xxxx` — **vtables reais**. Estes produtos são objectos
+polimórficos bem formados. (O campo que a sonda imprime como `tag` é, nestes,
+o half baixo do ponteiro de vtable — não um tag de tipo, porque estes objectos
+*têm* vtable.)
+
+E **nenhum** produto devolvido é `0x4077ACxx` — o objecto que o walker de facto
+despacha:
+
+```
+[TYPETAG] obj=0x4077AC20 objvt=0x40030001 tag=1 ...
+```
+
+## O erro, e é o mesmo de sempre
+
+Vi no rasto `func_0024E3D0 #001 -> ps3_indirect_call ctr=0x0039E5A8`, vi que
+`r21` não era definido no fragmento que eu tinha lido, e **inferi** que vinha
+dali. Não medi. A medição custou uma corrida e refutou-o.
+
+É a mesma classe de erro que já cometi hoje com o `lr` do guest, com o `ra1` do
+host, e com o xref de `bl` que não vê despachos indirectos: **usar a estrutura
+para adivinhar o dado, em vez de medir o dado.**
+
+## O que fica de pé
+
+- O registry funciona (medido).
+- O objecto entregue está bem construído e o seu `+0x7C` é `matriz[0][3]`
+  (provado por desmontagem).
+- O consumidor lê `+0x7C` como sentinela de lista.
+- **A origem do `arg` continua por medir.** `func_0039E5A8` está excluída.
+
+O caminho certo para a próxima sessão é sondar `r21` em cada fragmento de
+`func_0024E198` (a entrada real do walker: `func_0024E1E8`, `func_0024E270`,
+`func_0024E354`, `func_0024E3D0`, `func_0024E414`, `func_0024E430`) e ver em
+qual ele passa a valer `0x4077ACxx`. É o mesmo padrão da bissecção que
+funcionou hoje — e desta vez com o dado medido, não inferido.
