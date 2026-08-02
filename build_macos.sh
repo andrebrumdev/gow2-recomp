@@ -222,6 +222,51 @@ if [ -f "$HERE/host_gow2_f2b.c" ]; then
         echo "  host_gow2_f2b: compilado"
     fi
 fi
+# gow2_midasm_hooks: corpos HOST dos mid-asm hooks da Fase 17 (XEN-02). Um
+# [[midasm_hook]] no config/gow2_recomp.toml faz o ppu_lifter.py emitir
+# `gow2_midasm_<Name>(ctx);` ao lado da instrucao ancorada (17-01); a definicao
+# do simbolo vem deste objecto. No plano 17-02 os corpos sao NO-OP -- o que se
+# liga aqui e' o caminho de link, nao comportamento.
+#
+# GUARD ANTI-DUPLICATE-SYMBOL -- porque nao e' o mesmo grep dos dois blocos
+# acima. Duas diferencas MEDIDAS (2026-08-02), nao assumidas por analogia:
+#
+#  (1) O lifter emite, no PREAMBULO da TU gerada, uma DECLARACAO por hook:
+#      `void gow2_midasm_<Name>(ppu_context* ctx);` (ppu_lifter.py,
+#      _preamble_lines). Um guard que casasse com o nome do simbolo -- como
+#      `grep -q gow2_midasm` -- passaria a saltar a compilacao assim que o
+#      primeiro lift com --config existisse, e o link morreria em "undefined
+#      symbol" sem ninguem perceber porque. O guard tem de casar com a
+#      DEFINICAO (assinatura + chaveta), nunca com o prototipo nem com a
+#      chamada `gow2_midasm_X(ctx);` (essa acaba em `;`).
+#
+#  (2) Licao do host_gow2_f2b (marco v1.0): 5 das 7 funcoes F2B eram `static`
+#      no lift real, e um guard so'-`extern "C"` teria deixado ESTADO
+#      DUPLICADO EM SILENCIO em vez de um erro de link. Por isso as duas
+#      expressoes abaixo nao ancoram em prefixo de linkagem NENHUM: apanham
+#      `static`, `extern "C"` ou nada. A segunda cobre a definicao com a
+#      chaveta na linha seguinte (estilo de codigo host colado a mao; o lifter
+#      poe sempre na mesma linha, mas o corpo do CE03C hoje e' texto injectado
+#      por patch e nao tem de seguir o estilo do lifter).
+#
+# Estado medido do lift de producao nesta corrida: ZERO ocorrencias de
+# gow2_midasm_ em recomp_macos_v2/ppu_recomp_*.cpp -- logo o guard nao dispara
+# e o objecto e' compilado. E' isso que faz o `nm` do aceite XEN-02 ter algo
+# para encontrar.
+if [ -f "$HERE/hooks/gow2_midasm_hooks.cpp" ]; then
+    _midasm_def_same_line='(^|[^A-Za-z0-9_])gow2_midasm_[A-Za-z0-9_]+[[:space:]]*\([^;]*\)[[:space:]]*\{'
+    _midasm_def_next_line='(^|[^A-Za-z0-9_])gow2_midasm_[A-Za-z0-9_]+[[:space:]]*\([^;]*\)[[:space:]]*$'
+    if grep -Eq "$_midasm_def_same_line" "$LIFT"/ppu_recomp_*.cpp 2>/dev/null || \
+       grep -Eq "$_midasm_def_next_line" "$LIFT"/ppu_recomp_*.cpp 2>/dev/null; then
+        echo "  gow2_midasm_hooks: DEFINICAO (static ou extern) ja' no lift -- nao compilar"
+        echo "                     (evita duplicate symbol OU estado duplicado em silencio)"
+        rm -f "$LIFT/gow2_midasm_hooks.o"
+    else
+        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$HERE/hooks" \
+            "$HERE/hooks/gow2_midasm_hooks.cpp" -o "$LIFT/gow2_midasm_hooks.o"
+        echo "  gow2_midasm_hooks: compilado"
+    fi
+fi
 # host_res_inflate: runtime/ppu is excluded from libps3recomp_runtime.a (same as
 # ppu_loader). Required for EBOOT gzip HOSTRES (gowshader.cfx, *.ctxr) after
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
@@ -321,6 +366,7 @@ clang++ -std=c++20 $HOST_OPT \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
     $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
     $([ -f "$LIFT/host_gow2_f2b.o" ] && echo "$LIFT/host_gow2_f2b.o") \
+    $([ -f "$LIFT/gow2_midasm_hooks.o" ] && echo "$LIFT/gow2_midasm_hooks.o") \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
