@@ -1097,3 +1097,50 @@ cada volta re-percorre os mesmos 12 irmãos.
 Isso mede-se com um conjunto de nós já visitados **na descida** (não nos irmãos,
 que já se sabe estarem certos): se um filho já foi visitado, imprime-se a aresta
 que fecha o ciclo. É a próxima medição, e é pequena.
+
+---
+
+# A aresta do ciclo, medida — e o walk exterior que o alimenta
+
+Sonda da descida (`PS3_TRACE_DESCENT`, janela 2048):
+
+```
+[DESCENT] CICLO: pai=0x40007DE4 -> filho=0x42F86ADC (já visto na descida #1 de 12)
+```
+
+**Doze descidas distintas, e a décima terceira repete a primeira.** Não é um
+ciclo entre níveis da árvore: é o walk inteiro a **reiniciar do topo**.
+
+E o reinício vem do chamador. `func_0041FF70`:
+
+```c
+r29 = *(this + 0x24)              // cabeça de uma segunda lista
+loc_0041FFE8:
+    if (r29 == 0) goto fim;
+loc_0041FFF0:
+    r31 = r29 - 8                 // container_of
+    ... para cada entrada, chama func_0041F700 (o walk + push) ...
+```
+
+Ou seja há **dois** walks encaixados: `func_0041FF70` percorre uma lista em
+`*(this+0x24)` e, para cada entrada, `func_0041F700` percorre os 12 irmãos e
+empurra cada um para a pilha de produtos da fábrica.
+
+O interior está provado correcto (12 irmãos, termina na sentinela). Portanto o
+que não termina é o **exterior**: a lista em `*(this+0x24)`.
+
+## Estado da frente
+
+Cada camada que abri esta noite estava correcta, e empurrou a pergunta uma
+camada para fora:
+
+| camada | veredicto |
+|---|---|
+| `cellPadSetActDirect` | **bug nosso** — corrigido (EA guest desreferenciado) |
+| laço de irmãos de `func_0041F700` | fiel (4ª suspeita de lifter, refutada) |
+| listas de irmãos | bem formadas, `head == sentinela`, 12 nós, terminam |
+| descida da árvore | 12 descidas distintas, sem ciclo entre níveis |
+| **walk exterior `func_0041FF70`** | **por medir** — é aqui que o reinício nasce |
+
+A próxima medição é a mesma técnica, um nível acima: listar os nós da lista de
+`*(this+0x24)` e ver se ela termina. É pequena e é o passo seguinte.
