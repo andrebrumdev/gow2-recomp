@@ -90,6 +90,32 @@ measure_one() {
 # ps3recomp `[SYS] sys_ppu_thread end name="AUTO_LOAD"`, simetrico ao de
 # create) e thr_created e' devolvido a' parte para os dois estados serem
 # distinguiveis no relatorio.
+#
+# AVISO MAIOR (medido no mesmo dia, depois do acima)
+# --------------------------------------------------
+# **O elo AUTO_LOAD nao pertence a esta cadeia.** A thread so' pode ser criada
+# por `func_00146CB8`, chamada de dois sitios (0x000BB1E4 e 0x000BBD70). Ambos
+# ficam a jusante de:
+#
+#     0x002B2E14   bl 0x00242C94        <- o LOOP PRINCIPAL do jogo
+#     0x002B2E18   (codigo pos-loop, onde a cadeia do AUTO_LOAD comeca)
+#
+# e `func_00242C94` so' retorna em REQUEST_EXITGAME. Medido numa corrida
+# saudavel (`PS3_TRACE_2B2E04` + `PS3_TRACE_ALCHAIN`, com CONTROLO):
+#
+#     SetFlipCommand ................ 2619   (o loop corre e desenha)
+#     linhas apos o loop principal ..    0   (nunca retorna)
+#     degraus da cadeia AUTO_LOAD ...    0
+#     sonda de CONTROLO .............    2   (o instrumento funciona)
+#
+# Ou seja: **"AUTO_LOAD nunca criada" e' o comportamento CORRECTO de um jogo
+# que ainda esta a correr.** Nao e' uma parede; e' a prova de que o loop nao
+# terminou. Um binario que "passasse" este elo teria saido do jogo.
+#
+# Nao mexo aqui na ordem dos elos porque isso e' uma decisao de desenho do
+# marco (v1.1 chama-se "o boot volta a chegar ao AUTO_LOAD"), mas quem vier a
+# seguir NAO deve perseguir este elo: o caminho para o menu passa pelo despacho
+# indirecto do loop principal (`*(r30+0x460C)` em func_00242C94), nao por aqui.
 extract_counts() {
   local log_path="$1"
   local log_lines startseq thr_end thr_created r_perma nopic
