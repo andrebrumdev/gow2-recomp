@@ -171,3 +171,77 @@ chamada, e por isso o jogo nunca entra no loop principal.
 A pergunta operacional deixa de ser "porque é que o boot não avança" e passa a
 ser uma pergunta com sujeito: **porque é que `func_0039E40C`, chamada sobre
 `0x400C61C8`, entrega a `func_002545B0` um objecto cuja lista tem `head=0`.**
+
+---
+
+# A ponta da cadeia: `table[0]` vale 5, e é lido como ponteiro
+
+## Onde pendura, exactamente
+
+`vt[0x60]` de `0x400C61C8` é **`func_00254788`** (o mesmo `func_002547AC` que o
+histórico já marcava como terceira parede). Dentro do ciclo terminal repetem-se
+16 escritas por volta:
+
+```
+[vm] UNCOMMITTED write32 ... ra=func_00220284+0x1244/0x1274/0x12A4/0x12D4
+```
+
+— escreve-se 16 words através de um ponteiro vindo do pop da free-list.
+
+## O pop recebe o número 5 como pool
+
+```
+[FLHEAD] TEXTO pool=0x00000005 pool+4=0x00000009 head=0x726D612E lr=0x00218364
+```
+
+**O `lr` mentiu.** Só existe um sítio no lift inteiro que põe `lr=0x00218364`, e
+a sonda que lá pus nunca viu o pool mau. O `lr` do guest fica congelado no
+último `bl` — num despacho indirecto aponta para o chamador errado. Foi preciso
+a cadeia do **host** (`__builtin_return_address` + `dladdr`) para nomear o
+chamador real:
+
+```
+host#0 func_002182A4+0x99C
+host#1 ps3_indirect_call+0xB10
+host#2 func_00227528+0x1E0
+```
+
+## E o índice está correcto
+
+```
+[POOLIDX] MAU pool=0x00000005 slot=0x4007FCE8 base=0x4007FCE8 idx=0
+          divisor=130 r28=0x00000004 r30=0x00000001 obj=0x400C6C68
+[POOLIDX] ok  pool=0x40773748 slot=0x40773630 base=0x40773630 idx=0
+          divisor=128 r28=0x00000005 r30=0x00000001 obj=0x406388F8
+```
+
+`idx = 0` nos dois casos. Não é índice fora de alcance. **A tabela do objecto
+`0x400C6C68` tem o número 5 na entrada [0]; a do `0x406388F8` tem um ponteiro
+válido no mesmo sítio.**
+
+## Quem escreve o 5
+
+```
+[WATCHSTORE] w32 [0x400C6C7C]=0x4007FCE8  ra0=func_00263178+0x9CC   <- instala a tabela em obj+0x14
+[WATCHSTORE] w32 [0x4007FCE8]=0x00000005  ra0=func_00263178+0x9E8   <- escreve 5 em table[0]
+```
+
+Ambas de `func_00263178`, a 0x1C de distância, no mesmo bloco de inicialização.
+**O 5 não é corrupção — é o que o alocador escreve de propósito.**
+
+Logo o defeito é um desacordo de layout: `func_00263178` põe um inteiro pequeno
+em `table[0]`, e `func_002182A4` lê `table[0]` como ponteiro de pool. Para o
+objecto são o mesmo slot tem um ponteiro — os dois objectos foram construídos
+por caminhos diferentes (`divisor` 128 vs 130).
+
+## Quinta vez, e desta vez o limite fui eu
+
+O `[POOLIDX] MAU` estava no log desde a primeira corrida. Eu vi 13 linhas, fiz
+`head -8`, li "todas ok" e escrevi que a sonda não tinha visto o evento —
+chegando a inventar uma explicação (fragmentos duplicados) para uma contradição
+que não existia.
+
+As quatro anteriores foram caps hard-coded em sondas. **Esta foi um `head` meu
+na linha de comandos.** A regra que escrevi de manhã — cap fixo é mentiroso por
+omissão — vale igual para o `head`/`tail` com que se lê o log. Contar primeiro
+(`grep -c`), truncar depois.

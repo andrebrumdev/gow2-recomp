@@ -69,9 +69,24 @@ REPL = NEEDLE + (
     "          if(_on){ uint32_t _h=(uint32_t)ctx->gpr[3];\n"
     "            int _mau = (_h!=0u) && (_h<0x10000u || _h>=0x50000000u);\n"
     "            if(_all || _mau){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
-    "              fprintf(stderr,\"[FLHEAD] %s pool=0x%08X pool+4=0x%08X head=0x%08X\\n\",\n"
+    "              fprintf(stderr,\"[FLHEAD] %s pool=0x%08X pool+4=0x%08X head=0x%08X lr=0x%08X\\n\",\n"
     "                _mau?\"TEXTO\":\"ok   \", (uint32_t)ctx->gpr[31],\n"
-    "                (uint32_t)(ctx->gpr[31]+4u), _h);\n"
+    "                (uint32_t)(ctx->gpr[31]+4u), _h, (uint32_t)ctx->lr);\n"
+    "              /* O ctx->lr do guest fica CONGELADO no ultimo `bl`: num\n"
+    "               * despacho indirecto aponta para o chamador errado. Medido\n"
+    "               * 2026-08-01: o lr dizia 0x00218364 e a sonda nesse sitio\n"
+    "               * (unico no lift) nunca viu o pool mau. A cadeia HOST nao\n"
+    "               * mente -- e' a mesma tecnica do ICALL-BAD simbolizado. */\n"
+    "              { struct { const char* fn;\n"
+    "                  void* fb; const char* sn; void* sa; } _di;\n"
+    "                void* _ra[3] = { __builtin_return_address(0),\n"
+    "                                 __builtin_return_address(1),\n"
+    "                                 __builtin_return_address(2) };\n"
+    "                for(int _i=0;_i<3;_i++){\n"
+    "                  if(_ra[_i] && dladdr(_ra[_i], &_di) && _di.sn)\n"
+    "                    fprintf(stderr,\"          host#%d %s+0x%lX\\n\", _i, _di.sn,\n"
+    "                      (unsigned long)((char*)_ra[_i]-(char*)_di.sa));\n"
+    "                } }\n"
     "              fflush(stderr); } } } }\n"
 )
 
@@ -82,7 +97,13 @@ def patch_text(t):
     n = t.count(NEEDLE)
     if not n:
         return t, "MISSING", 0
-    return t.replace(NEEDLE, REPL), "APPLIED", n
+    # `extern "C"` so' e' valido em ambito de namespace, nunca dentro de uma
+    # funcao -- daqui a declaracao no topo do ficheiro, uma vez por chunk.
+    DECL = 'extern "C" int dladdr(const void*, void*);\n'
+    out = t.replace(NEEDLE, REPL)
+    if DECL not in out:
+        out = DECL + out
+    return out, "APPLIED", n
 
 
 def main():

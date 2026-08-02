@@ -56,8 +56,15 @@ MARKER = "B71-CALLSITE-TRACE"
 #                     despacha vt[0x20] -- territorio da Parede D.
 #   func_0039D51C  -- o alvo desse despacho (this=0x400C5048), que tambem
 #                     nao retorna (medido). Familia das fabricas 0x0039Dxxx.
+#   func_0039E40C  -- o alvo seguinte (this=0x400C61C8, o objecto de Julho).
+#                     Pendura no PRIMEIRO despacho dela, vt[0x60].
+#   func_002545xx / func_0024Exxx / func_0024D5BC -- a familia do walker de
+#                     registos do WAD, instrumentada em bloco para nao gastar
+#                     uma reconstrucao (~5 min) por degrau.
 HEAD_RE = re.compile(
-    r'^void (func_000B7[0-9A-F]{3}|func_0010F5E8|func_0039D51C)\(ppu_context\* ctx\) \{$', re.M)
+    r'^void (func_000B7[0-9A-F]{3}|func_0010F5E8|func_0039D51C|func_0039E40C'
+    r'|func_002545[0-9A-F]{2}|func_0024E[0-9A-F]{3}|func_0024D5BC)'
+    r'\(ppu_context\* ctx\) \{$', re.M)
 # uma chamada directa a outra funcao liftada, ou o despacho indirecto
 CALL_RE = re.compile(
     r'^(        )(?:ctx->lr = 0x[0-9A-F]+; )?'
