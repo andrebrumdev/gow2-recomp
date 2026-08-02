@@ -735,3 +735,62 @@ layout **bata** com a assinatura do consumidor (`+0x78` a variar como contador,
 tabela.
 
 Isso é uma medição, e cabe numa sonda.
+
+---
+
+# Nenhum construtor auto-liga uma lista no offset que o consumidor testa
+
+O teste de vazio do consumidor é `*(sentinela) == sentinela` — a assinatura de
+uma lista circular intrusiva correctamente inicializada. Esse padrão tem uma
+forma de código distintiva:
+
+```asm
+addi rD, rA, IMM
+stw  rD, IMM(rA)        ; *(X+IMM) = X+IMM
+```
+
+Varrimento do EBOOT inteiro à procura desse par:
+
+```
+31 auto-ligações encontradas, em vários offsets
+   +0x070   5 sítios      <- o mais comum
+   +0x178   3 sítios
+   +0x004   2 sítios
+   ...
+   +0x080   0 sítios      <- o offset que o consumidor testa
+   +0x07C   0 sítios
+```
+
+**Nenhum construtor, em todo o binário, auto-liga uma lista em `+0x80` ou
+`+0x7C`.**
+
+> Limitação honesta do varrimento: só apanha a forma `addi rD,rA,IMM` seguida de
+> `stw rD,IMM(rA)` com o mesmo par (rA, IMM). Um construtor que calcule o
+> endereço por outro caminho (`mr` + `addi` em dois passos, ou base num registo
+> diferente) escapa. **Isto é evidência forte, não prova.**
+
+## O que isto sugere, e o que não prova
+
+Sugere que a classe que o consumidor assume **nunca é construída** — pelo menos
+não com uma lista em `+0x80`. Combinado com os 5 construtores que auto-ligam em
+`+0x70`, a hipótese natural é que o offset real da lista nesta família de
+classes seja `+0x70`, e que o consumidor esteja a operar com uma base
+deslocada — mas a aritmética não fecha limpa (`arg-4+0x80` = `arg+0x7C`, e para
+dar `objecto+0x70` seria preciso `arg = objecto+0xC`), por isso **não afirmo
+isso**.
+
+O que se pode afirmar: o par (consumidor, objecto) que o walker junta não tem
+nenhum construtor no jogo que satisfaça o teste de vazio do consumidor. Isso
+reforça — sem fechar — a hipótese de que a entrada `tab[1]` do registry aponta
+para a fábrica errada.
+
+## Fecho
+
+Esta sessão termina sem menu, e com o problema reduzido a uma pergunta que cabe
+numa frase, com todos os elos intermédios medidos, excluídos ou refutados:
+
+> **`tab[1]` do registry de tipos aponta para a fábrica certa?**
+
+Tudo o resto foi verificado: o registry responde, o objecto está bem construído,
+o `arg` chega por três indirecções válidas, o lift é fiel ao binário nos três
+sítios onde suspeitei dele, e os dois layouts em conflito estão extraídos.
