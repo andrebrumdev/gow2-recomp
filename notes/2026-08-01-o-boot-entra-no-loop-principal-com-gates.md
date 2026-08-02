@@ -144,3 +144,62 @@ que se chegou a `func_00254788`.
 Medição sugerida (uma corrida, sem reconstrução): `PS3_WATCH_STORE` na word 0
 dos objectos `0x400C61C8` e `0x400C3D48`, para ver quem lhes escreve a vtable e
 se essa vtable é a da classe que os walkers assumem.
+
+---
+
+# O diagnóstico fecha: o objecto não tem vtable nenhuma
+
+`PS3_WATCH_STORE` na word 0 (a vtable) dos três objectos-chave, corrida inteira,
+sem cap:
+
+**Os dois objectos de fábrica estão sãos** — cadeia de construtores C++ normal:
+
+```
+[0x400C3D48]=0x40004020 -> 0x511628 -> 0x516618 -> 0x516F70   (func_002B28BC)
+[0x400C61C8]=0x40004020 -> 0x511628 -> 0x5115B0 -> 0x515D60 -> 0x515B08
+                                                    (func_0041EDE4)
+```
+
+**O objecto cuja lista é percorrida recebe UMA escrita, e é zero:**
+
+```
+[0x4077AC10]=0x0   ra0=func_0024CADC+0x338   ra1=func_00252A48+0x208
+```
+
+E é o mesmo `func_0024CADC` que chama o inicializador de matriz
+(`func_0024C1F8+0x218 ← func_0024CADC+0x25C`).
+
+## O que isto resolve
+
+Eu tinha suspeitado de **vtable errada**. Não é: **não há vtable nenhuma.**
+`func_0024CADC` zera a word 0 e escreve uma matriz identidade. `0x4077AC10` é um
+**struct simples, não-polimórfico** — uma matriz. Não é um contentor mal
+inicializado; nunca foi um contentor.
+
+Portanto o defeito não está no objecto nem na sua construção, que é correcta e
+completa para o que ele é. Está em **quem passa um ponteiro para esse struct a
+um método que espera um contentor**.
+
+E esse sítio já está nomeado desde Julho, agora confirmado:
+
+```
+[E545B0] #2 this=0x400C61C8 arg=<o struct> lr=0x0024E2D4
+```
+
+`0x0024E2D4` cai em `func_0024E1E8`/`func_0024E270` — **o walker de registos do
+WAD**. É ele que produz o argumento errado.
+
+## Estado final desta sessão
+
+A pergunta passou de *"porque é que o boot não avança"* — sem sujeito, sem
+endereço — para:
+
+> **porque é que o walker de registos do WAD (`func_0024E270`, sítio
+> `0x0024E2D4`) entrega a `func_002545B0` um ponteiro para um struct de matriz
+> em vez de um contentor?**
+
+Uma função, um sítio, um argumento. E com quatro consumidores independentes a
+testemunhar o mesmo erro a jusante.
+
+Não há menu, e não haverá enquanto isto não cair pela raiz — mas já não é uma
+caça: é uma leitura de `func_0024E270` com um `arg` conhecido.
