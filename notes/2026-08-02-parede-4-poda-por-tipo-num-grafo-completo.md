@@ -84,3 +84,93 @@ Se for "subtipos directos", a lista está mal populada — e quem a popula é o
 **Medição que decide, e é pequena:** listar a lista de `+0x7C` de dois tipos
 diferentes (o 1 e, digamos, o 3). Se forem idênticas, é a lista global e a
 resposta é a primeira. Se diferirem, são subtipos e a resposta é a segunda.
+
+---
+
+# A medição que decide: as listas são POR OBJECTO, e o push não tem pop
+
+## As listas são distintas
+
+Sonda de irmãos com cap 200, agrupada por sentinela (a sentinela identifica o
+objecto):
+
+```
+sent=0x42F853B0  →  12 nós em 0x40007D0C..0x40007DE4
+sent=0x40638608  →  12 nós em 0x40007E5C..0x40007F34
+sent=0x4073DBF8  →  12 nós em 0x40008738..0x400087BC
+```
+
+**Três objectos, três listas próprias, em blocos de memória distintos.** Não é
+uma lista global partilhada: cada tipo tem os seus 12 filhos. Logo são subtipos,
+e o grafo de tipos é genuinamente completo — 12 tipos, cada um a apontar para os
+outros.
+
+## O push não tem pop
+
+Varrimento das escritas ao cursor (`fab+0x48+0x80` = `fab+0xC8`) na família:
+
+| função | escreve o cursor | decrementa |
+|---|---|---|
+| `func_0041F700` (o walk) | sim | **não** |
+| `func_0041F7F8` | sim | não |
+| **`func_0041F924`** | sim | **sim** ← o POP |
+| `func_0041FF70` | não | não |
+
+E `func_0041F924` opera no mesmo campo:
+
+```c
+r3 = fab + 0x48
+r9 = *(uint8*)(r3 + 0x80)       // = *(fab + 0xC8), o MESMO cursor
+r0 = (int8)r9
+if (r0 < 0) -> vazio
+r9 = r9 - 1                      // cursor--
+```
+
+No rasto: **27 539 083 passagens pelo walk contra 2 088 pops.**
+
+## A cadeia causal, agora completa
+
+O cursor é um **byte com sinal** (`vm_read8` seguido de `(int8_t)`), logo satura
+aos 127 e passa a negativo. E:
+
+1. o grafo de tipos é completo (12 tipos, 12 filhos cada)
+2. a poda só salta filhos **do mesmo tipo** e não há conjunto de visitados
+   → travessia exponencial, 12⁷ ≈ 35 M
+3. cada visita faz `cursor++` e empurra, **sem pop no mesmo walk**
+4. o cursor transborda os 127 e fica **negativo**
+5. `func_0039E5A8` devolve **NULL** quando `cursor < 0`:
+   ```c
+   cursor = *(int8_t*)(fab + 0xC8);
+   if (cursor < 0) return NULL;
+   return *(uint32_t*)(fab + 0x48 + cursor*4);
+   ```
+
+E o passo 5 é **exactamente o sintoma que Julho registou** — *"o walker pede à
+fábrica o produto corrente e não há push"*. Havia push: havia push a mais, e o
+cursor tinha transbordado para negativo.
+
+## O que isto explica de uma vez
+
+| observação | explicação |
+|---|---|
+| Julho: "produto corrente é NULL, nunca houve push" | cursor negativo por transbordo |
+| hoje: 253 consultas sãs em 20 fábricas | as outras fábricas não sofrem o walk exponencial |
+| parede 1: lista mistura as duas famílias | o push empurra cada nó visitado, sem discriminar |
+| parede 4: 27,5 M de iterações | a travessia exponencial em si |
+
+## A pergunta que fecha a parede 4
+
+> **O walk devia parar antes — e o que o devia parar?**
+
+Duas hipóteses concretas, ambas mediáveis:
+
+1. **Falta um pop.** Se `func_0041F700` devia desempilhar ao sair, a ausência é um
+   defeito de tradução — e verifica-se desmontando o epílogo dela contra o EBOOT.
+   *(Aviso: quatro suspeitas de bug do lifter nesta sessão, quatro refutadas.
+   Verificar ANTES de afirmar.)*
+2. **A poda devia ser por nó visitado, não por tipo.** Se o jogo carimba os nós
+   noutro sítio, esse carimbo não está a ser escrito — e nesse caso o defeito
+   está a montante, em quem devia carimbar.
+
+A #1 é a mais barata e decide-se sem correr nada: desmontar o epílogo de
+`func_0041F700` em `0x0041F7D8` e ver se há um `stb` no cursor.
