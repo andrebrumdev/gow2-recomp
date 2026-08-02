@@ -203,3 +203,73 @@ testemunhar o mesmo erro a jusante.
 
 Não há menu, e não haverá enquanto isto não cair pela raiz — mas já não é uma
 caça: é uma leitura de `func_0024E270` com um `arg` conhecido.
+
+---
+
+# O registry FUNCIONA. A medição que eu não esperava.
+
+Sonda no despacho do walker (`PS3_TRACE_TYPETAG`), o sítio `0x0024E2D4`:
+
+```
+[TYPETAG] obj=0x4077AC10 objvt=0x40030001 tag=1 idx=0x00004
+          tab=0x00868D48 fab=0x400C5048 fabvt=0x00515AA0 code=0x0039D428
+```
+
+Ponto por ponto:
+
+- **`tab = 0x00868D48`** — é exactamente a tabela do registry de tipos que o
+  CLAUDE.md documenta. Confirmada no caminho natural.
+- **`tag = 1` → `idx = 0x4`** — o índice bate com a fórmula `(tipo<<2)&0x3FFFC`.
+- **`fab = 0x400C5048`, `fabvt = 0x00515AA0`, `code = 0x0039D428`** — fábrica
+  real, vtable viva, método real.
+
+**O registry de tipos funciona neste sítio.** Não está vazio, não devolve lixo,
+não devolve a fábrica errada. Isto contraria a suposição de longa data de que a
+Parede D é "o registry não populado" — pelo menos neste caminho, ele responde
+correctamente.
+
+## E o `objvt` não é uma vtable
+
+`0x40030001` decompõe-se em `0x4003` / `0x0001`, e o `0x0001` é **o mesmo valor**
+que o `tag` lido de `+0x2`. Não é um ponteiro de vtable: é um **cabeçalho de
+registo WAD** (tamanho/tipo). O `0x4077AC10` não é um objecto de heap — é um
+**registo dentro dos dados do WAD**.
+
+### Hipótese minha, refutada na mesma corrida
+
+Vi `0x4077AC10` e o prefixo `0x4077` e pensei: está dentro do ring de stream, é
+outro stomp como o do pump que corrigi de manhã. **Não é.** O ring mede-se no
+mesmo log:
+
+```
+F2B-STREAM-FILL stream=0x4007FCD0 base=0x40083D40
+```
+
+`0x40083D40` está a mais de 7 MB de `0x4077AC10`. A hipótese cai.
+
+## O que fica, e o que muda
+
+A cadeia é toda coerente e, até este ponto, **correcta**: o walker lê o tag de um
+registo WAD, o registry devolve a fábrica certa, a fábrica é chamada com o
+registo. O defeito está **a jusante** — algures entre `func_0039D428` e
+`func_002545B0`, alguém pega no registo e trata-o como um contentor com lista
+intrusiva em `+0x7C`.
+
+E há um facto por explicar que só a medição revelou: a mesma morada
+`0x4077AC10` recebeu, do guest, uma matriz identidade
+(`func_0024CADC`/`func_0024C1F8`, escrita única vista pela vigia) e contém agora
+um cabeçalho de registo WAD escrito **sem passar por `vm_write32`** — uma escrita
+host em bloco, invisível à vigia. Memória reutilizada para dois tipos, ou uma
+cópia em bloco por cima de um objecto vivo. Distinguir os dois é a próxima
+medição, e faz-se com `ps3_watch_store_bulk` no caminho de cópia do WAD.
+
+## Estado final honesto
+
+Não há menu. O boot só entra no loop principal com três gates de diagnóstico,
+e o primeiro handler de estado não retorna.
+
+O que esta última ronda entregou não foi um passo em frente — foi **eliminar
+uma suspeita cara**. O registry de tipos estava sob suspeita desde Julho como
+"não populado"; neste caminho, está medido a funcionar. Quem continuar não
+precisa de o reconstruir: precisa de perceber quem, a jusante de
+`func_0039D428`, decide que um registo WAD é um contentor.
