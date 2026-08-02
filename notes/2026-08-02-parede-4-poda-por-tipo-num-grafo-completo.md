@@ -234,3 +234,73 @@ Mede-se com `PS3_WATCH_STORE` na sentinela de um dos objectos (por exemplo
 
 É a mesma técnica de dois passos que nomeou o culpado do stomp do pump e do
 paliativo TYPE15 — as duas correcções reais desta sessão.
+
+---
+
+# Quem constrói as listas: o gestor insere TODOS os tipos em CADA objecto
+
+## Os três construtores, nomeados
+
+`PS3_WATCH_STORE` na sentinela e nos nós, e depois xref de `bl` no EBOOT para
+resolver os fragmentos:
+
+| escrita | função (fragmento → real) | chamada de |
+|---|---|---|
+| encadeia os nós | `func_0026372C` → `0x00263680` | o alocador (`func_0025C680`) |
+| **auto-ligação** `[sent]=sent` | `func_00253BAC` (é real) | `0x0041FA60` |
+| **inserção** na lista | `func_00256B64` → `0x00256254` | `0x00256E38` |
+
+E `func_0041FA30` → `0x0041B7AC`, chamada de **`0x0024E874`** — dentro do walker
+do WAD. **As listas de filhos são construídas durante o walk do WAD.**
+
+## A contagem
+
+Sonda na entrada da inserção (`PS3_TRACE_INSERT`): **3 chamadas**, todas com o
+mesmo `r3`:
+
+```
+#1 r3=0x400C61C8  r4=0x42F85334  r5=0x42F84A20
+#2 r3=0x400C61C8  r4=0x4063858C  r5=0x40637C78
+#3 r3=0x400C61C8  r4=0x4073DBBC  r5=0x4073D738
+```
+
+`r3 = 0x400C61C8` é o **gestor** (o mesmo `this` que aparece em toda a cadeia
+desde `func_0039E40C`). Os `r4` são exactamente os três objectos cujas listas
+foram medidas — e cada chamada insere os 12 nós num laço interno (as escrituras
+apanhadas estavam em `+0x1064/+0x10FC/+0x111C`, dentro da função).
+
+**Portanto: o gestor insere os doze tipos em cada um dos três objectos.** É a
+estrutura que o jogo constrói, não corrupção.
+
+## O que a parede 4 fica a saber
+
+```
+  gestor 0x400C61C8
+    └─ insere 12 filhos (todos os tipos) em cada objecto
+         └─ func_0041F700 percorre-os recursivamente
+              └─ poda só salta filhos do MESMO tipo
+                   └─ sem conjunto de visitados
+                        └─ grafo completo → 12⁷ ≈ 35 M
+                             └─ cursor (byte com sinal) transborda → negativo
+                                  └─ func_0039E5A8 devolve NULL
+                                       └─ o sintoma que Julho registou
+```
+
+Cada elo desta cadeia foi **medido**, e cinco suspeitas de bug do lifter foram
+refutadas contra o binário pelo caminho.
+
+## A pergunta que resta, e é a última desta parede
+
+> **`func_0041F700` deve mesmo ser invocada recursivamente sobre uma lista que
+> contém todos os tipos?**
+
+Se sim, falta-lhe um conjunto de visitados que o jogo teria noutro sítio — e
+então o defeito é nosso, num estado partilhado que não estamos a manter.
+
+Se não, quem a invoca em cadeia está a tratar uma lista de registo como se fosse
+uma árvore de composição — e o defeito está no chamador.
+
+**Medição que decide:** instrumentar a entrada de `func_0041F700` com o cap agora
+configurável (`PS3_TRACE_B71_ENTRY_CAP=-1`) e ver se as chamadas vêm todas do
+mesmo sítio (uma cadeia recursiva) ou de sítios diferentes (invocações
+independentes). Custa uma corrida.
