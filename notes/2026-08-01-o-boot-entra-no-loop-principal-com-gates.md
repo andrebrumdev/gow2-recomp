@@ -1144,3 +1144,48 @@ camada para fora:
 
 A próxima medição é a mesma técnica, um nível acima: listar os nós da lista de
 `*(this+0x24)` e ver se ela termina. É pequena e é o passo seguinte.
+
+---
+
+# O walk exterior também termina — e o padrão da noite fica claro
+
+Sonda do walk exterior (`PS3_TRACE_OUTER`):
+
+```
+#1 no=0x40638594  proximo=0x4077AD28  flags=0x0024
+#2 no=0x4077AD28  proximo=0x00000000  flags=0x0024   ← termina em NULL
+```
+
+**Duas entradas, termina correctamente.** Como o interior tem 12 irmãos, são
+24 despachos por chamada — e os 27 539 083 implicam **~1,15 milhões de chamadas
+a `func_0041FF70`**, vindas de `func_002546FC` (o walk que já está gated).
+
+Reparo com valor: a lista exterior **mistura as duas famílias** — `0x40638594`
+(família de listas, `w0=0xC0010001`) e `0x4077AD28` (família WAD, `w0=0x40030001`,
+a que tem matriz em `+0x70`). O mesmo contentor guarda objectos dos dois tipos.
+
+## O padrão desta noite, dito às claras
+
+Abri seis camadas. **Todas correctas menos uma, que era nossa:**
+
+| camada | veredicto |
+|---|---|
+| `cellPadSetActDirect` | **bug nosso** — corrigido |
+| laço de irmãos de `func_0041F700` | fiel (4ª suspeita de lifter, refutada) |
+| listas de irmãos | bem formadas, terminam na sentinela |
+| descida da árvore | 12 descidas distintas, sem ciclo entre níveis |
+| walk exterior `func_0041FF70` | **termina**, 2 entradas |
+| quem chama `func_0041FF70` ~1,15 M vezes | por medir |
+
+Cada medição empurrou a pergunta uma camada para fora, e cada camada estava
+certa. Isso não é trabalho perdido: é a eliminação sistemática que deixa o
+suspeito sozinho — e o suspeito é agora `func_002546FC`, que está **atrás de um
+gate meu** (`PS3_LIST547_EMPTY_IF_BAD`).
+
+**Hipótese que se impõe:** o gate trata `head` implausível como lista vazia, mas
+não trata `head` **plausível e cíclico**. Se a lista de `func_002547AC` for
+cíclica em vez de nula, o gate deixa-a passar e o walk repete — o que produz
+exactamente ~1,15 M de re-invocações.
+
+Isso mede-se com a mesma sonda de listagem, aplicada a `func_002547AC`. É o
+passo seguinte, e é o mesmo tamanho dos outros cinco.
