@@ -623,3 +623,50 @@ os elos intermédios medidos e excluídos. O que falta não é mais uma mediçã
 mesmo tipo: é análise estrutural das classes, que é trabalho de outra natureza.
 
 **Não há menu, e não haverá enquanto este conflito não for resolvido pela raiz.**
+
+---
+
+# Sem RTTI: a identificação das classes não é uma medição
+
+Testei o caminho óbvio para resolver o conflito de layout — recuperar os nomes
+das classes pelo RTTI (Itanium ABI: `vt[-1]` = typeinfo, `typeinfo[+4]` = nome):
+
+```
+vtable 0x00515B08  (this de func_002545B0)   vt[-1] = 0x00000000
+vtable 0x00515AA0  (fabrica do tag 1)        vt[-1] = 0x00000000
+vtable 0x00516AA8  (um produto sao)          vt[-1] = 0x00000000
+
+símbolos _ZTV* no EBOOT: NENHUM
+```
+
+**O binário foi compilado com `-fno-rtti`**, como é norma em jogos de consola.
+Não há nomes de classe para recuperar — nem por typeinfo, nem por símbolos.
+
+Consequência prática: distinguir as duas hipóteses que restam
+
+> ou o cabeçalho mente (o objecto diz ser tipo 1 e não é),
+> ou o método do tipo 1 não devia ler `+0x7C` como lista
+
+exige **reverse engineering manual dos layouts** — cruzar todos os acessos a
+membros que cada método faz e inferir a estrutura de cada classe. Isso é
+trabalho de análise, não de instrumentação: nenhuma sonda o responde, e foi por
+isso que as últimas rondas desta sessão deixaram de produzir avanço e passaram a
+produzir correcções.
+
+## Fecho da sessão
+
+Não há menu, e a razão está agora documentada com evidência em vez de
+julgamento: o próximo passo não é uma medição, e as medições eram o que esta
+sessão sabia fazer bem.
+
+O que fica commitado:
+
+- **dois defeitos nossos eliminados**, com prova de não-regressão medida
+- **dois instrumentos consertados** — um deles nunca poderia ter passado
+- **a cadeia inteira mapeada**, do `main()` ao campo, com sonda de controlo em
+  cada bissecção
+- **três hipóteses de bug do lifter refutadas** contra o binário desmontado
+- **vinte e uma correcções** registadas ao lado do que substituíram, incluindo
+  uma em que a ferramenta com o bug era minha
+- **o impasse formulado** como duas hipóteses exclusivas, com endereços, e com
+  a via de resolução identificada (RE manual de layouts)
