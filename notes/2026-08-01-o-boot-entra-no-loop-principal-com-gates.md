@@ -273,3 +273,72 @@ uma suspeita cara**. O registry de tipos estava sob suspeita desde Julho como
 "não populado"; neste caminho, está medido a funcionar. Quem continuar não
 precisa de o reconstruir: precisa de perceber quem, a jusante de
 `func_0039D428`, decide que um registo WAD é um contentor.
+
+---
+
+# CORRECÇÃO (18.ª): o objecto NÃO é uma matriz alheia — é o seu próprio tipo
+
+Escrevi acima, e com ênfase, que `0x4077AC10` "é um struct simples,
+não-polimórfico — uma matriz", que "nunca foi um contentor", e que o defeito
+estava em quem lhe passava o ponteiro. **Está errado**, e o erro veio de comparar
+duas corridas diferentes em vez de uma.
+
+Vigia e sonda na **mesma** corrida:
+
+```
+[0x4077AC10]=0x4077AD20  ra0=func_002635A4+0xDA8  ra1=func_00252A48+0x170
+[0x4077AC10]=0x40030001  ra0=func_0024BC78+0x1F4  ra1=func_0024C1F8+0xD4
+[TYPETAG] obj=0x4077AC10 objvt=0x40030001 tag=1 ...
+```
+
+Duas escritas, ambas **legítimas e do guest**:
+
+1. `0x4077AD20` — um **elo de lista**: aponta para o outro objecto do mesmo tipo
+   que aparece na sonda. Vem de `func_002635A4` (alocador/pool), via
+   `func_00252A48`.
+2. `0x40030001` — o **cabeçalho**, escrito por `func_0024BC78`, chamado de
+   **dentro de `func_0024C1F8`**.
+
+Portanto `func_0024C1F8` não é um "inicializador de matriz identidade alheio"
+que calhou escrever ali — é o **construtor deste tipo**. Escreve o cabeçalho
+(`0x4003` / tag `0x0001`) e depois inicializa a matriz embutida em `+0x70`.
+
+O `objvt = 0x40030001` também não é uma vtable ausente: é o cabeçalho, e o seu
+half baixo é exactamente o `tag` que o registry usa. A classe não guarda vtable
+em `+0`.
+
+## O que cai e o que fica
+
+**Cai:** "o objecto é uma matriz", "nunca foi um contentor", "o defeito é quem
+lhe passa o ponteiro". E cai a generalização de que as quatro paredes são
+"objecto do tipo errado" — pelo menos esta não é: o objecto é do tipo certo,
+construído pelo seu próprio construtor, e o registry escolhe-lhe a fábrica
+certa.
+
+**Fica, e é sólido:**
+
+- O registry de tipos funciona (`tab=0x00868D48`, tag=1, fábrica com vtable viva).
+- O objecto é de tipo 1, correctamente construído, e está **encadeado numa
+  lista** (`+0x0` aponta para o irmão).
+- A sentinela lida em `+0x7C` recebe **uma única escrita em toda a corrida**:
+  `0`, do próprio construtor (`func_0024C1F8+0x218`).
+
+## A pergunta certa, finalmente
+
+O construtor deixa `+0x7C` a zero. Os walkers testam vazio com
+`head == sentinela` — um teste que um zero nunca satisfaz. Ou seja:
+
+> **ou o construtor devia auto-ligar `*(obj+0x7C) = obj+0x7C` e não o faz, ou
+> aquele campo não é uma lista e os walkers não deviam lá tocar.**
+
+São duas hipóteses concretas, mutuamente exclusivas, e distinguem-se lendo o
+construtor `func_0024C1F8` inteiro contra o EBOOT — se ele escrever a
+auto-ligação nalgum ramo que o boot não toma, é a primeira; se nunca a
+escrever, é a segunda.
+
+## Lição, outra vez a mesma
+
+Comparei o `objvt` de uma corrida com a vigia de outra e construí uma teoria
+inteira — "matriz percorrida como lista" — sobre a diferença. **Duas corridas
+não são uma medição.** Bastou pôr as duas sondas juntas para a teoria cair em
+dois minutos.
