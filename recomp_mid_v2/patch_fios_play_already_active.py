@@ -22,6 +22,25 @@ return to the caller without teardown/re-open, preserving the in-flight
 open for the state-1 poller.
 
 Marker: FIOS-PLAY-ALREADY-ACTIVE. Idempotent.
+
+MIGRADO PARA WEAK OVERRIDE (Fase 19, plano 19-03) -- ler antes de mexer
+-----------------------------------------------------------------------
+Este corpo deixou de ser a fonte de verdade. Vive agora em codigo host
+VERSIONADO, `games/gow2/hooks/gow2_func_overrides.cpp` (`func_002C0498`),
+declarado como `[[functions_override]] address = 0x002C0498` em
+`games/gow2/config/gow2_recomp.toml`. Num lift feito com `--config` +
+`emit_weak_wrappers` o simbolo `func_002C0498` que o jogo chama e' o do host --
+sem correr patch nenhum.
+
+E' o unico dos tres overrides da Fase 19 em que o host NAO chama `__imp_`: o
+fix e' precisamente nao correr as duas instrucoes naturais (teardown + salto de
+volta ao Play). Chamar o corpo original reporia o bug.
+
+O ficheiro NAO foi apagado (politica A do 17-03): a producao ainda corre lifts
+ANTIGOS, gerados sem `--config`, e esses continuam a precisar do texto
+injectado. Sem a deteccao WEAK abaixo o script devolveria
+"SKIP: func_002C0498 not found" e rc=1 -- vermelho FALSO, porque o fix esta'
+la', vindo do host.
 """
 from pathlib import Path
 import re
@@ -52,8 +71,17 @@ void func_002C0498(ppu_context* ctx) {
 ''' % MARKER
 
 
+# Forma que o lifter emite quando a funcao esta' declarada em
+# [[functions_override]] com [main].emit_weak_wrappers = true (Fase 19).
+# Testada ANTES do "void func_002C0498", porque essa string tambem casa com a
+# DECLARACAO que o lifter escreve no preambulo de todas as TUs.
+WEAK_IMPL = "PPC_FUNC_IMPL(func_002C0498)"
+
+
 def patch_file(p: Path) -> str:
     t = p.read_text(encoding="utf-8", errors="replace")
+    if WEAK_IMPL in t:
+        return "WEAK"
     if MARKER in t:
         return "ALREADY"
     if "void func_002C0498" not in t:
@@ -79,11 +107,19 @@ def main() -> int:
         print("nenhum ppu_recomp_*.cpp em %s" % ROOT)
         return 1
     any_hit = False
+    weak = False
     for p in files:
         r = patch_file(p)
-        if r != "SKIP":
+        if r == "WEAK":
+            weak = any_hit = True
+            print("%s: WEAK (override host -- nada a injectar)" % p.name)
+        elif r != "SKIP":
             any_hit = True
             print("%s: %s" % (p.name, r))
+    if weak:
+        print("[fios-play-already-active] SKIP: weak override e' a fonte de "
+              "verdade neste lift (games/gow2/hooks/gow2_func_overrides.cpp)")
+        return 0
     if not any_hit:
         print("SKIP: func_002C0498 not found")
         return 1

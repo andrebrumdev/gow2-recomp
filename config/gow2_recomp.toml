@@ -149,6 +149,30 @@ size = 0x64
 address = 0x0002F3F0
 size = 0x4C
 
+# MIGRACAO 3 DA FASE 19 (plano 19-03): o Play re-entrado com st620 != 0, que
+# ../recomp_mid_v2/patch_fios_play_already_active.py escrevia no lift.
+#
+# UNICA das tres que e' SUBSTITUICAO TOTAL (o override NAO chama __imp_): o fix
+# consiste em NAO correr o corpo natural. As duas instrucoes que o lifter gera
+# aqui -- `bl 0x002BFF88` (teardown do container) e `b 0x002C0124` (re-entrar
+# no Play, re-abrindo o m2v) -- SAO o defeito no recompilador, porque o
+# teardown/re-open corre sob o giant lock e perde a corrida com o pool de ops
+# do FIOS. Chamar __imp_ reporia o bug. O corpo host e' o epilogo do proprio
+# Play (o mesmo de 0x002C03FC), copiado verbatim do patch legado.
+#
+# `address` = 0x002C0498. Como o 0x000CE03C, NAO e' uma linha do
+# functions.json -- e' uma funcao criada pelas passagens de mid-function entry
+# do lifter, e por isso esta' em `lifter.functions`, que e' o conjunto contra o
+# qual o check_weak_override_coverage valida.
+#
+# `size` = 0x8, DERIVADO do corpo natural medido num lift sem patch e sem
+# --config: `ctx->lr = 0x002C049C; func_002BFF88(...)` (o bl esta' em
+# 0x002C0498) seguido do salto para func_002C0124 em 0x002C049C -- duas
+# instrucoes, fim em 0x002C04A0. Campo registado e nao consumido (19-01).
+[[functions_override]]
+address = 0x002C0498
+size = 0x8
+
 [optimizations]
 skip_lr = false
 skip_msr = false

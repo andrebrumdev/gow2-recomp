@@ -403,3 +403,54 @@ GOW2_FUNC_OVERRIDE(func_0002F3F0)
     ctx->gpr[4] = (uint64_t)(sp + 256u);   /* onde o cursor do guest ficaria */
     ctx->gpr[3] = (uint64_t)(int64_t)(int32_t)rem;
 }
+
+/* ===========================================================================
+ * func_002C0498 -- Play re-entrado com st620 != 0 mantem o open FIOS em voo
+ *
+ * O QUE ISTO MIGRA
+ * ----------------
+ * `recomp_mid_v2/patch_fios_play_already_active.py`. O guest, em 0x002C0498,
+ * faz teardown do container e volta ao corpo do Play:
+ *
+ *     bl 0x002BFF88      # teardown (cancel + limpa +8)
+ *     b  0x002C0124      # re-entra no Play inteiro -> re-abre o m2v
+ *
+ * No recompilador esse teardown/re-open corre com o giant lock e perde a
+ * corrida com o pool de ops do FIOS: o open#1 escreveu container+8, o Play#2
+ * faz teardown, o open#2 apanha "SEM OP LIVRE" e escreve 0, e o poll do
+ * estado 1 fica a ver io=0 para sempre. No hardware ha' janela para o op
+ * cancelado ser libertado entre as duas coisas; aqui, muitas vezes, nao ha'.
+ *
+ * O fix e' o epilogo do proprio Play (o mesmo de 0x002C03FC): retorna ao
+ * chamador sem teardown e sem re-open, deixando o open em voo intacto.
+ *
+ * PORQUE E' SUBSTITUICAO TOTAL E NAO "ENVOLVER"
+ * --------------------------------------------
+ * Ao contrario dos dois overrides acima, aqui NAO se chama `__imp_`: o fix
+ * consiste precisamente em NAO correr o corpo natural (as duas instrucoes de
+ * teardown+salto sao o defeito). Chamar `__imp_` reporia o bug. E' o unico
+ * caso destes tres em que a substituicao total e' a leitura correcta -- e e'
+ * tambem o que o patch legado ja' fazia: ele apagava o corpo e escrevia este.
+ *
+ * O corpo abaixo e' o texto do patch legado, VERBATIM (mesmos offsets, mesma
+ * ordem, mesmas conversoes) -- migrar nao e' oportunidade para reescrever.
+ *
+ * NOTA DE LINK: sem chamada a `__imp_`, um build apontado a um lift SEM os
+ * wrappers fracos falha com `duplicate symbol` (e nao com `undefined symbol`,
+ * que e' o modo de falha do padrao "envolver") -- medido no 19-02, caso (2b).
+ * O guard do build_macos.sh apanha os dois antes de compilar.
+ * ======================================================================== */
+GOW2_FUNC_OVERRIDE(func_002C0498)
+{
+    ctx->gpr[0] = vm_read64((uint32_t)(ctx->gpr[1] + 0x2D0));
+    ctx->gpr[25] = vm_read64((uint32_t)(ctx->gpr[1] + 0x288));
+    ctx->gpr[26] = vm_read64((uint32_t)(ctx->gpr[1] + 0x290));
+    ctx->lr = ctx->gpr[0];
+    ctx->gpr[27] = vm_read64((uint32_t)(ctx->gpr[1] + 0x298));
+    ctx->gpr[28] = vm_read64((uint32_t)(ctx->gpr[1] + 0x2A0));
+    ctx->gpr[29] = vm_read64((uint32_t)(ctx->gpr[1] + 0x2A8));
+    ctx->gpr[30] = vm_read64((uint32_t)(ctx->gpr[1] + 0x2B0));
+    ctx->gpr[31] = vm_read64((uint32_t)(ctx->gpr[1] + 0x2B8));
+    ctx->gpr[1] = (int64_t)(int32_t)(ctx->gpr[1] + 0x2C0);
+    ctx->gpr[3] = (int64_t)(int32_t)(0);
+}
