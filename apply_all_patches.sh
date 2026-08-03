@@ -9,9 +9,16 @@
 #   ./apply_all_patches.sh [DIR_DE_LIFT]                # aplica tudo (default: recomp_macos_v2)
 #   ./apply_all_patches.sh --check [DIR]                # so verifica os marcadores, nao escreve
 #   ./apply_all_patches.sh [DIR] --status ARQUIVO.tsv   # tambem escreve patch/status/classe em TSV
+#   ./apply_all_patches.sh --print-order                # ordem efectiva de aplicacao, nao toca no lift
+#
+# ORDEM: declarada em lift_baseline/PATCH_DEPS.tsv (patch/depende_de/razao),
+# resolvida por lift_baseline/order_patches.py (topo-sort estavel). O glob
+# alfabetico nao serve -- 5 patches dependem de ancoras escritas por patches
+# que vinham depois deles (medido 2026-08-03, vale 2 elos da cadeia de boot).
 #
 # Idempotente: a 2a corrida seguida deve deixar a arvore identica e reportar
-# tudo como ALREADY-APPLIED.
+# tudo como ALREADY-APPLIED. Com a ordem correcta isso vale ja' na 1a passagem --
+# uma arvore que so' converge a 2a vez nunca chegou ao binario testado.
 #
 # Classificacao por patch em SEIS estados (D-4.1, 04-05-PLAN.md) -- a verdade
 # vem da POS-CONDICAO em CONTRACTS.tsv (D-4.2), nunca do rc autodeclarado
@@ -78,6 +85,7 @@ for a in "$@"; do
   fi
   case "$a" in
     --check) MODE=check ;;
+    --print-order) MODE=print-order ;;
     --status) _want_status_path=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     -*) echo "opcao desconhecida: $a" >&2; exit 2 ;;
@@ -94,7 +102,8 @@ fi
 
 LIFT_REL="${LIFT_ARG:-recomp_macos_v2}"
 LIFT="$REPO/${LIFT_REL#./}"
-if [ ! -d "$LIFT" ]; then
+# --print-order so' inspecciona a ordem de aplicacao: nao le nem escreve o lift.
+if [ "$MODE" != print-order ] && [ ! -d "$LIFT" ]; then
   echo "ERRO: dir de lift nao existe: $LIFT" >&2
   exit 2
 fi
@@ -153,6 +162,45 @@ if [ -z "$PY" ]; then
   echo "ERRO: nenhum python3 >= 3.10 encontrado (os patches usam" >&2
   echo "      Path.write_text(newline=...)). Instale um, ou aponte PS3_PATCH_PYTHON." >&2
   exit 2
+fi
+
+# ---- ORDEM DE APLICACAO (declarativa, PATCH_DEPS.tsv) ------------------------
+# O glob alfabetico NAO e' uma ordem valida: medido em 2026-08-03
+# (games/gow2/notes/2026-08-03-seis-patches-que-nao-reaplicam.md), cinco dos seis
+# patches que nao reaplicam a um lift fresco falham SO' porque a agulha deles e'
+# texto que outro patch escreve mais tarde no alfabeto -- e o rebuild medido em
+# 2026-08-03-rebuild-e2e-medicao.md provou que tres dessas relacoes valem DOIS
+# ELOS da cadeia de boot (elo 2 -> elo 4). A 2a passagem do script curava-as por
+# acidente, o que e' precisamente o buraco de gate da perna 3 do accept_relift.sh:
+# uma arvore que so' converge a segunda vez nunca chegou ao binario testado.
+#
+# A ordem vive DECLARADA em lift_baseline/PATCH_DEPS.tsv (patch/depende_de/razao)
+# -- um sitio obvio, uma linha por relacao -- e e' resolvida por
+# lift_baseline/order_patches.py com topo-sort ESTAVEL: sem relacoes a ordem e'
+# exactamente a do glob; cada relacao move o minimo necessario.
+#
+# Inspeccionar:  ./apply_all_patches.sh --print-order
+PATCH_DEPS="${PS3_PATCH_DEPS:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/PATCH_DEPS.tsv}"
+ORDER_TOOL="${PS3_ORDER_PATCHES:-$PS3_ENGINE_ROOT/games/gow2/lift_baseline/order_patches.py}"
+
+PATCH_NAMES_GLOB="$(for _p in "$PATCH_DIR"/patch_*.py; do basename "$_p"; done)"
+if [ -f "$PATCH_DEPS" ] && [ -f "$ORDER_TOOL" ]; then
+  PATCH_NAMES="$(printf '%s\n' "$PATCH_NAMES_GLOB" | "$PY" "$ORDER_TOOL" --deps "$PATCH_DEPS")"
+  order_rc=$?
+  if [ "$order_rc" -ne 0 ]; then
+    # Ciclo declarado: nunca escolher um lado em silencio (rc=1 do order_patches).
+    echo "ERRO: order_patches.py falhou (rc=$order_rc) -- ordem de aplicacao indefinida, nao vou aplicar nada" >&2
+    exit 2
+  fi
+else
+  echo "AVISO: PATCH_DEPS.tsv ou order_patches.py ausentes ($PATCH_DEPS / $ORDER_TOOL)" >&2
+  echo "       -- a cair para a ordem do glob, que e' comprovadamente errada para 5 patches." >&2
+  PATCH_NAMES="$PATCH_NAMES_GLOB"
+fi
+
+if [ "$MODE" = print-order ]; then
+  printf '%s\n' "$PATCH_NAMES"
+  exit 0
 fi
 
 # ---- hash helper (macOS md5 / Linux md5sum / fallback shasum) ----------------
@@ -326,8 +374,8 @@ failed_list=""
 nomatch_list=""
 unverified_list=""
 
-for p in "$PATCH_DIR"/patch_*.py; do
-  name="$(basename "$p")"
+for name in $PATCH_NAMES; do
+  p="$PATCH_DIR/$name"
   if is_skipped "$name"; then
     printf '%-16s %s\n' "SKIPPED" "$name"
     echo "                   | host helper so existe no backend D3D12 (Windows); nao linka no macOS"
