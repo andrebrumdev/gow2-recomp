@@ -73,8 +73,28 @@ Esse e' de OUTRO B71 -- `func_000B71B8`, chunk do CB56C -- e emite
 `[POSTINTRO] B71 ...`. Este emite `[B71] 2F3F0 ...`. Alvos, agulhas e
 marcadores sao disjuntos: os dois podem correr em qualquer ordem.
 
+MIGRADO PARA WEAK OVERRIDE (Fase 19, plano 19-03) -- ler antes de mexer
+------------------------------------------------------------------------
+Este bloco deixou de ser a fonte de verdade. Vive agora em codigo host
+VERSIONADO, `games/gow2/hooks/gow2_func_overrides.cpp` (`func_0002F3F0`), e o
+`ppu_lifter.py` emite a funcao como o par `PPC_FUNC_IMPL(func_0002F3F0)`
+(corpo, simbolo `__imp_`) + `PPC_FUNC(func_0002F3F0)` (wrapper FRACO) a partir
+da entrada `[[functions_override]] address = 0x0002F3F0` de
+`games/gow2/config/gow2_recomp.toml`. Um lift feito com `--config` +
+`emit_weak_wrappers` ja' vem com o fix -- sem correr patch nenhum.
+
+NAO e' mid-asm (o `alvo` do ledger foi corrigido de `midasm` para `weak` nesta
+fase): o guard precisa de um RETURN ANTECIPADO e de um TECTO no proprio loop,
+e um `[[midasm_hook]]` corre AO LADO de uma instrucao sem mudar o fluxo.
+
+O ficheiro NAO foi apagado (mesma politica A do 17-03): a producao ainda corre
+lifts ANTIGOS, gerados sem `--config`, e esses continuam a precisar do texto
+injectado. Sem a deteccao WEAK abaixo, um lift novo daria "func_0002F3F0 nao
+existe" e rc=1 -- vermelho FALSO, porque o fix esta' la', vindo do host.
+
 Contrato de rc
 --------------
+  rc=0  weak override presente (WEAK, skip -- o host e' a fonte de verdade)
   rc=0  aplicado, ou ja' aplicado (ALREADY, no-op verificavel por hash)
   rc=1  `func_0002F3F0` nao existe em nenhum ficheiro dado (lift errado)
   rc=2  a funcao existe mas o corpo gerado NAO tem as 4 ancoras esperadas
@@ -96,6 +116,12 @@ SIG = "void func_0002F3F0(ppu_context* ctx) {\n"
 
 # Marcador de idempotencia: so' este bloco escreve esta string.
 MARKER = "[B71] 2F3F0 bad str="
+
+# Forma que o lifter emite quando a funcao esta' declarada em
+# [[functions_override]] com [main].emit_weak_wrappers = true (Fase 19). E' ela
+# propria o delimitador de inicio da funcao, por isso e' procurada no ficheiro
+# inteiro e nao dentro de uma regiao (que so' existiria depois de a encontrar).
+WEAK_IMPL = "PPC_FUNC_IMPL(func_0002F3F0)"
 
 # --- ancoras (todas verificadas UMA unica vez dentro do corpo da funcao) -----
 # A1: cabecalho + 1a instrucao do guest. O prologo entra entre as duas.
@@ -164,8 +190,15 @@ def write(path: Path, text: str) -> None:
 
 
 def do_file(path: Path) -> int:
-    """0 aplicado | 1 ALREADY | -1 nao tem a funcao | -2 ancoras inesperadas."""
+    """0 aplicado | 1 ALREADY | 2 WEAK | -1 nao tem a funcao |
+    -2 ancoras inesperadas."""
     t = path.read_text(encoding="utf-8", errors="replace")
+    if WEAK_IMPL in t:
+        # Lift com [[functions_override]]: a funcao inteira e' host. Injectar o
+        # bloco aqui nao casaria (a forma `void func_0002F3F0(...)` ja' nao
+        # existe) e, se casasse, duplicava o guard.
+        print(f"  {path.name}: func_0002F3F0 WEAK (override host -- nada a injectar)")
+        return 2
     span = region(t)
     if span is None:
         return -1
@@ -205,6 +238,10 @@ def main() -> int:
         if r in (0, 1):
             host = p
 
+    if any(r == 2 for r in hits):
+        print("[b71-2f3f0-guard] SKIP: weak override e' a fonte de verdade neste "
+              "lift (games/gow2/hooks/gow2_func_overrides.cpp)")
+        return 0
     if any(r == -2 for r in hits):
         print("ERRO: func_0002F3F0 existe mas o corpo gerado NAO e' o esperado.\n"
               "  O lifter mudou de forma. Nao substituo as cegas: revalida o\n"

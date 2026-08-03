@@ -127,6 +127,28 @@ size = 0x24
 address = 0x000CE03C
 size = 0x64
 
+# MIGRACAO 2 DA FASE 19 (plano 19-03): o bounds-check do hash de nomes do
+# registry 393E0, que era escrito no lift por
+# ../recomp_mid_v2/patch_b71_2f3f0_guard.py.
+#
+# PORQUE weak E NAO midasm (o ledger da Fase 16 dizia midasm -- corrigido nesta
+# fase, com razao escrita): o guard precisa de um RETURN ANTECIPADO quando o
+# ponteiro e' invalido, e precisa de um TECTO no loop -- ou seja, de mudar a
+# condicao do salto de volta ao topo. Um [[midasm_hook]] corre AO LADO de uma
+# instrucao e nao faz nem uma coisa nem a outra.
+#
+# O override ENVOLVE (chama __imp_func_0002F3F0) em todos os casos menos um: o
+# patologico, em que nao ha' NUL nos primeiros 256 bytes e o corpo liftado nao
+# pararia. Nesse unico caso o hash e' replicado no host, instrucao a instrucao
+# (ver o comentario em ../hooks/gow2_func_overrides.cpp).
+#
+# `address`/`size` = 0x0002F3F0 / 0x4C, lidos do functions.json
+# (start 0x0002F3F0, end 0x0002F43C). O campo `size` e' registado e nao
+# consumido pelo lifter (19-01).
+[[functions_override]]
+address = 0x0002F3F0
+size = 0x4C
+
 [optimizations]
 skip_lr = false
 skip_msr = false

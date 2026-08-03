@@ -86,3 +86,64 @@ tag-wadld-opd	patch_wad_state_machine.py	global	-	count_ge	[WADLD-OPD]	1	marcado
 tag-wadld-t1sz	patch_2b0fb4_trace.py	global	-	count_ge	[WADLD-T1SZ]	1	marcador TAG com dono unico em MANIFEST.tsv (derivado por gen_contracts_candidates.py)
 tag-wadld-vt28r	patch_2b0fb4_trace.py	global	-	count_ge	[WADLD-VT28R]	1	marcador TAG com dono unico em MANIFEST.tsv (derivado por gen_contracts_candidates.py)
 tag-wadld-vt28	patch_2b0fb4_trace.py	global	-	count_ge	[WADLD-VT28]	1	marcador TAG com dono unico em MANIFEST.tsv (derivado por gen_contracts_candidates.py)
+#
+# Fase 17 (mid-asm) -- o caminho do marcador [INTROSEQ]/CE03C, valido nos DOIS
+# mecanismos. Ate' ao plano 17-03 o wait-idle do CE03C so' existia como texto
+# injectado por patch_ce03c_introseq_block.py; desde entao a fonte de verdade e'
+# o [[midasm_hook]] Ce03cWaitIdle (games/gow2/config/gow2_recomp.toml) com corpo
+# em games/gow2/hooks/gow2_midasm_hooks.cpp, e o lifter emite a chamada sozinho.
+# Um contrato que exigisse SO' o marcador injectado ficava VERMELHO em todo o
+# lift feito com --config (onde o fix esta' la', mas vindo do host); um que
+# exigisse SO' a chamada mid-asm ficava vermelho no lift de producao actual, que
+# ainda e' antigo. A agulha e' por isso uma ALTERNATIVA regex: o que se verifica
+# e' que a regiao de func_000CE03C tem o fix por UM dos dois mecanismos --
+# nunca por nenhum. Se um dia a producao for promovida a um lift com --config, o
+# lado esquerdo da alternativa deixa de casar e o contrato continua verde pelo
+# lado direito, sem ninguem ter de editar nada.
+midasm-ce03c-waitidle	patch_ce03c_introseq_block.py	ea	0x000CE03C	count_ge	re:\[INTROSEQ\] CE03C wait-idle 1st movie|gow2_midasm_Ce03cWaitIdle\(ctx\);	1	o wait-idle do CE03C tem de estar presente na funcao por um dos dois mecanismos: marcador do bloco injectado (lift antigo) OU chamada gow2_midasm_Ce03cWaitIdle emitida pelo lifter a partir do [[midasm_hook]] (lift com --config, Fase 17 plano 17-03)
+midasm-ce03c-donereset	patch_ce03c_movie_done_reset.py	ea	0x000CE03C	count_ge	re:movie_done_timebased_reset\(\);|gow2_midasm_Ce03cWaitIdle\(ctx\);	1	o reset do timer time-based tem de ser chamado ao re-entrar no CE03C: no lift antigo pela chamada injectada, no lift com --config pelo corpo do hook host (que chama movie_done_timebased_reset e por isso SUBSUME este patch -- ledger estado=migrated)
+#
+# Fase 18 (jump tables) -- os dois P0 de subclasse=jumptable, classificados
+# estado=redundant no plano 18-03. O aceite do ledger e' um unico `case`, e um
+# unico `case` e' um contrato fraco por duas razoes MEDIDAS nesta fase:
+#  a) escopo: `case 0x002A27BCu: goto loc_002A27BC;` aparece em TRES funcoes do
+#     lift (func_002A209C, func_002A2100, func_002A20F4 -- entradas diferentes
+#     que caem no mesmo bctr). Um contrato `global` ficaria verde mesmo que o
+#     switch do proprio dispatcher desaparecesse, desde que um dos irmaos o
+#     mantivesse. Por isso escopo=ea, ancorado na funcao dona do bctr.
+#  b) profundidade: um `case` so' nao distingue "tabela inteira" de "tabela
+#     truncada a uma entrada", e uma jump table truncada e' precisamente um
+#     salto para endereco invalido em runtime. A agulha e' uma ALTERNATIVA
+#     regex sobre os TRES extremos medidos da tabela (primeiro alvo, o alvo do
+#     aceite do ledger, ultimo alvo) com count_ge 3: o switch tem de cobrir o
+#     vao todo, nao um ponto. Medido nos dois re-lifts do 18-02 e no lift de
+#     producao recomp_macos_v2: 54 alvos distintos (2A209C) e 22 (2B11B8).
+# Estes contratos passam SEM os patches e SEM --config -- e' isso que a
+# classificacao `redundant` afirma, e e' isso que eles tornam re-verificavel.
+jt-2a209c-case	patch_jumptable_2a209c.py	ea	0x002A209C	count_ge	case 0x002A27BCu: goto loc_002A27BC;	1	o aceite do ledger (grep:case 0x002A27BCu...) ancorado na funcao dona do bctr 0x002A2130, e nao global -- o mesmo texto existe em func_002A2100 e func_002A20F4
+jt-2a209c-span	patch_jumptable_2a209c.py	ea	0x002A209C	count_ge	re:case 0x002A221Cu: goto loc_002A221C;|case 0x002A27BCu: goto loc_002A27BC;|case 0x002A3648u: goto loc_002A3648;	3	os tres extremos da tabela OPDISP (base guest 0x2A2134 + offsets): primeiro alvo, alvo do aceite, ultimo alvo. Uma tabela truncada falha aqui e passaria no contrato de um unico case
+jt-2b11b8-case	patch_jumptable_2b11b8.py	ea	0x002B11B8	count_ge	case 0x002B12C4u: goto loc_002B12C4;	1	o aceite do ledger (grep:case 0x002B12C4u...) ancorado na funcao dona do bctr 0x002B1224
+jt-2b11b8-span	patch_jumptable_2b11b8.py	ea	0x002B11B8	count_ge	re:case 0x002B1298u: goto loc_002B1298;|case 0x002B12C4u: goto loc_002B12C4;|case 0x002B2170u: goto loc_002B2170;	3	os tres extremos da tabela TYDISP (base guest 0x2B1228 + offsets): primeiro alvo, alvo do aceite, ultimo alvo. NOTA: este contrato cobre a jump table, NAO o residuo do patch (a substituicao da leitura de TOC-0x151C), que continua por classificar -- ver a RESSALVA MEDIDA no cabecalho do PATCH_MIGRATION.tsv
+#
+# Fase 19 (weak override, plano 19-03) -- as duas migracoes que fecham o marco.
+# Mesmo padrao de ALTERNATIVA regex que os contratos da Fase 17 acima, e pela
+# mesma razao MEDIDA: o mesmo aceite tem de ficar verde nos DOIS lifts que
+# coexistem hoje -- o de producao (recomp_macos_v2, ANTIGO, com o texto
+# injectado pelo patch) e um lift novo feito com --config + emit_weak_wrappers
+# (onde o fix esta' la', mas vindo de codigo HOST e por isso invisivel a um
+# grep sobre o lift).
+#
+# O QUE UM CONTRATO SOBRE O LIFT PODE E NAO PODE PROVAR NUM WEAK OVERRIDE
+# (limite declarado, nao escondido): quando a funcao passa a ser propriedade do
+# host, o lift deixa de conter UMA UNICA linha do fix -- so' o par
+# `PPC_FUNC_IMPL(func_X)` (corpo original, simbolo __imp_) + `PPC_FUNC(func_X)`
+# (wrapper fraco). O lado direito da alternativa afirma exactamente isso e nada
+# mais: "esta funcao esta' declarada em [[functions_override]] e o lifter
+# emitiu o par, logo o simbolo func_X que o binario chama vem do host". A outra
+# metade -- que o corpo host faz o que deve -- NAO e' verificavel a partir do
+# lift; e' verificada por `nm -m` (external, nao weak, no binario ligado) e por
+# `strings` dos marcadores que so' existem no host, ambos registados no
+# 19-03-SUMMARY.md. Fingir o contrario seria escrever um aceite que passa sem
+# medir o que diz medir.
+weak-ce03c-pad	patch_ce03c_introseq_block.py	ea	0x000CE03C	count_ge	re:g_ce03c_play_abort|PPC_FUNC_IMPL\(func_000CE03C\)	1	o pad de setjmp/longjmp do CE03C (WINDOWS #8) tem de estar presente por um dos dois mecanismos: o bloco injectado (lift antigo, onde `g_ce03c_play_abort` aparece dentro da regiao da funcao -- medido em recomp_macos_v2) OU a funcao emitida como par __imp_/wrapper fraco, com o pad no override host games/gow2/hooks/gow2_func_overrides.cpp (lift com --config, Fase 19 plano 19-03). Complementa midasm-ce03c-waitidle, que cobre a OUTRA metade do mesmo patch (o wait-idle, migrado na Fase 17)
+weak-2f3f0	patch_b71_2f3f0_guard.py	ea	0x0002F3F0	count_ge	re:\[B71\] 2F3F0 bad str=|PPC_FUNC_IMPL\(func_0002F3F0\)	1	o bounds-check do hash de nomes do registry 393E0 tem de estar presente por um dos dois mecanismos: marcador do bloco injectado (lift antigo) OU funcao emitida como par __imp_/wrapper fraco a partir de [[functions_override]] address = 0x0002F3F0, com o corpo em games/gow2/hooks/gow2_func_overrides.cpp (lift com --config). Substitui o aceite `grep:[B71] 2F3F0 bad str=` do ledger, que so' conhecia o primeiro mecanismo e ficaria VERMELHO num lift onde o fix esta' presente

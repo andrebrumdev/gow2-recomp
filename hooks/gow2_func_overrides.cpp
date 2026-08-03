@@ -297,3 +297,109 @@ GOW2_FUNC_OVERRIDE(func_000CE03C)
     g_ce03c_play_abort = 0;
     ctx->gpr[2] = sv_r2;
 }
+
+/* ===========================================================================
+ * func_0002F3F0 -- bounds-check do hash de nomes do registry 393E0
+ *
+ * O QUE ISTO MIGRA
+ * ----------------
+ * `recomp_mid_v2/patch_b71_2f3f0_guard.py`, que era o ESCRITOR de um bloco
+ * feito a mao dentro do lift gitignored (perdido no re-lift de 26 jul, corpo
+ * 2467 -> 1425 bytes, sem que nada se queixasse). O corpo liftado e' um
+ * `for(;;)` que so' termina ao ler um byte ZERO a partir de r4:
+ *
+ *     loc_0002F404: ... r11 = vm_read8(r4 + 1); r4 += 1; ...
+ *                   if (!(cr & 2)) goto loc_0002F404;      <-- SEM tecto
+ *
+ * `vm_read8` devolve 0 fora das regioes comitadas, mas o host macOS comita
+ * 0x00000000..0x51000000, 0xC0000000..0xE0000000 e 0xD0000000..0xE0000000 --
+ * 512 MB contiguos de framebuffer/stack quase todos NAO-nulos depois do
+ * primeiro render, e 1,27 GB de heap com payload de WAD. Um ponteiro lixo la'
+ * dentro faz UMA chamada percorrer centenas de milhoes de iteracoes; o 393E0
+ * chama isto centenas de vezes.
+ *
+ * PORQUE E' WEAK E NAO MID-ASM (correccao ao `alvo` do ledger)
+ * -----------------------------------------------------------
+ * O ledger da Fase 16 tinha `alvo=midasm` para esta linha. Nao serve, por duas
+ * razoes independentes: (a) o guard precisa de um RETURN ANTECIPADO quando o
+ * ponteiro e' invalido, e um [[midasm_hook]] corre ao lado de uma instrucao e
+ * deixa o corpo continuar; (b) o tecto de 256 caracteres so' se poe MUDANDO a
+ * condicao do salto de volta ao topo do loop -- e um hook nao muda o fluxo. O
+ * `alvo` foi corrigido para `weak` no PATCH_MIGRATION.tsv, com esta razao.
+ *
+ * ENVOLVER, NAO SUBSTITUIR -- excepto no caminho que nao pode ser envolvido
+ * ------------------------------------------------------------------------
+ * O caso normal chama `__imp_func_0002F3F0` (o corpo liftado, re-lift-safe).
+ * So' ha' um caminho em que isso e' impossivel: quando NAO existe um NUL nos
+ * primeiros 256 bytes, o loop do guest nao para, e o tecto tem de ser
+ * aplicado por fora. Ai', e SO' ai', o hash e' calculado aqui -- e nao "a
+ * gosto", mas replicando instrucao a instrucao o que o corpo liftado faz:
+ *
+ *     r0 = rlwinm(r10, 5, 0, 26)   ->  (h << 5) & 0xFFFFFFE0   ( = 32*h )
+ *     r0 = r0 - r10                ->  h * 31
+ *     r10 = r0 + r11               ->  h = h*31 + c
+ *     ...
+ *     r0 = mulhwu(r10, 0x0749CB29) ->  magia da divisao por 0x119 (281)
+ *     r0 = rlwinm(r0, 29, 3, 31)   ->  >> 3
+ *     r9 = r0 * 0x119 ; r0 = r10 - r9   ->  h % 281
+ *
+ * O acumulador so' importa nos 32 bits baixos (a magia le' (uint32_t)r10 e o
+ * resultado final sai por (int32_t)), por isso a recorrencia em uint32_t e'
+ * exacta -- nao uma aproximacao. A divisao usa a MESMA constante magica do
+ * lift, e nao o operador `%`, para nao depender de o compilador escolher a
+ * mesma sequencia.
+ *
+ * FIDELIDADE AO GUEST: para uma string legitima (rodata, nomes de registry
+ * muito abaixo de 256 chars) nenhum ramo dispara e o resultado e' bit-a-bit o
+ * do console -- o caminho normal E' o corpo do jogo. So' o patologico, que na
+ * PS3 real nunca existiria, e' cortado. Nao ha' CRC bypass, magic estampado
+ * nem guard mascarado: e' validacao de ponteiro + tecto de iteracao.
+ *
+ * SEM GATE DE ENV VAR, de proposito -- como no bloco original: e' um
+ * bounds-check FUNCIONAL, nao um probe, e deixa-lo OFF por omissao seria repor
+ * exactamente o pendurar que ele existe para evitar. Os dois fprintf tem tecto
+ * de vida (16 e 8) e num boot saudavel nunca aparecem (medido: 0 ocorrencias
+ * no smoke de 25 s).
+ * ======================================================================== */
+PPC_FUNC_IMPL_DECL(func_0002F3F0);
+
+GOW2_FUNC_OVERRIDE(func_0002F3F0)
+{
+    const uint32_t sp = (uint32_t)ctx->gpr[4];
+
+    /* (1) Ponteiro fora das bandas plausiveis do guest -> hash 0 e RETORNA.
+     * 0x4F000000 e' o mesmo tecto de ponteiro-valido dos blocos B71/TYPE15. */
+    if (sp < 0x10000u || sp >= 0x4F000000u) {
+        ctx->gpr[3] = 0;
+        { static int n = 0; if (n++ < 16)
+            fprintf(stderr, "[B71] 2F3F0 bad str=0x%08X -> 0\n", sp); }
+        return;
+    }
+
+    /* (2) Pre-scan com o mesmo alcance do bloco original: indices 0..256. */
+    int len = 0;
+    while (len <= 256 && (uint8_t)vm_read8(sp + (uint32_t)len) != 0u)
+        len++;
+
+    if (len <= 256) {
+        /* Ha' NUL dentro do alcance: o loop do guest termina sozinho, e o
+         * tecto nunca dispararia. Corre o corpo liftado tal e qual. */
+        __imp_func_0002F3F0(ctx);
+        return;
+    }
+
+    /* (3) Patologico: 257 bytes seguidos sem NUL. O corpo liftado nao pode ser
+     * chamado (nao pararia); replica-se aqui, com o tecto de 256 caracteres. */
+    { static int n = 0; if (n++ < 8)
+        fprintf(stderr, "[B71] 2F3F0 cap str=0x%08X\n", sp); }
+
+    uint32_t h = 0;
+    for (int i = 0; i < 256; i++)
+        h = (h * 31u) + (uint32_t)(uint8_t)vm_read8(sp + (uint32_t)i);
+
+    const uint32_t q = (uint32_t)(((uint64_t)h * 0x0749CB29ull) >> 32) >> 3;
+    const uint32_t rem = h - (q * 0x119u);
+
+    ctx->gpr[4] = (uint64_t)(sp + 256u);   /* onde o cursor do guest ficaria */
+    ctx->gpr[3] = (uint64_t)(int64_t)(int32_t)rem;
+}
