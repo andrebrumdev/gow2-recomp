@@ -138,9 +138,16 @@ echo "---- PERNA 4: smoke_chain_gate.sh (cadeia) + check_boot_health.py (nao pio
 if [ -x "$BIN4" ]; then
   "$REPO/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4" 2>&1 | tee "$LOG4"
   leg4_rc_bruto=${PIPESTATUS[0]}
-  leg4_ok=$(awk -F'\t' 'NR>1 && $10=="OK"{n++} END{print n+0}' "$TSV4" 2>/dev/null)
+  # Rule 1 (2026-08-03): estes dois liam as colunas ERRADAS do TSV do
+  # smoke_chain_gate.sh -- o cabecalho e' run(1)..pad_total(9) elo_stopped(10)
+  # class(11), e estava a testar $10=="OK" (a coluna do elo) e a imprimir $9
+  # (pad_total) como se fosse o elo. Consequencia medida: leg4_ok era SEMPRE 0
+  # e o elo mais frequente saia VAZIO. Os dois campos sao informativos (nunca
+  # entraram em nenhum rc), mas um relatorio que mente e' pior do que um
+  # relatorio que cala. Corrigidos para $11/$10.
+  leg4_ok=$(awk -F'\t' 'NR>1 && $11=="OK"{n++} END{print n+0}' "$TSV4" 2>/dev/null)
   leg4_ok=${leg4_ok:-0}
-  leg4_elo="$(awk -F'\t' 'NR>1 && $10=="REGRESSAO"{print $9}' "$TSV4" 2>/dev/null \
+  leg4_elo="$(awk -F'\t' 'NR>1 && $11=="REGRESSAO"{print $10}' "$TSV4" 2>/dev/null \
     | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //')"
 
   # Os logs de boot sao os que o proprio smoke_chain_gate.sh anunciou
