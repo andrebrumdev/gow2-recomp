@@ -283,6 +283,75 @@ if [ -f "$HERE/hooks/gow2_midasm_hooks.cpp" ]; then
         echo "  gow2_midasm_hooks: compilado"
     fi
 fi
+# gow2_func_overrides: corpos HOST dos WEAK OVERRIDES da Fase 19 (XEN-04). Uma
+# entrada [[functions_override]] no config/gow2_recomp.toml, com
+# [main].emit_weak_wrappers = true, faz o ppu_lifter.py emitir a funcao liftada
+# como um PAR -- `PPC_FUNC_IMPL(func_X)` (corpo, simbolo FORTE __imp_func_X) e
+# `PPC_FUNC(func_X)` (wrapper FRACO que so' o chama). A definicao FORTE de
+# func_X vem deste objecto e GANHA o link (medido no 19-01: nm -m + execucao).
+#
+# GUARD ANTI-DUPLICATE-SYMBOL -- porque nao e' o mesmo grep do bloco mid-asm
+# acima, apesar de o problema parecer o mesmo. Tres diferencas MEDIDAS:
+#
+#  (1) A LISTA DE SIMBOLOS SAI DO PROPRIO .cpp, nao esta' escrita aqui. Um
+#      override novo em 19-03 nao pode depender de alguem se lembrar de editar
+#      tambem este script -- essa e' exactamente a forma como um guard apodrece
+#      e deixa passar o erro que existia para apanhar. Extrai-se por DUAS
+#      expressoes (licao do host_gow2_f2b: nunca ancorar numa so' forma): a
+#      macro GOW2_FUNC_OVERRIDE(func_X) e, em alternativa, uma definicao
+#      escrita a mao `func_X(ppu_context* ctx)` sem a macro.
+#
+#  (2) O QUE SE PROCURA NO LIFT NAO E' O NOME, E' A FORMA DA DEFINICAO. As TUs
+#      liftadas trazem, alem da definicao, DECLARACOES (`void func_X(ppu_context*
+#      ctx);` -- terminam em `;`), CHAMADAS (`func_X(ctx);`), entradas da
+#      `function_table` (`{ 0x...ULL, func_X, "func_X" },`) e o wrapper
+#      `PPC_FUNC(func_X) {`. Um grep pelo nome casava com todas e mandava saltar
+#      a compilacao para sempre. Por isso as duas expressoes abaixo exigem
+#      `(...)` SEM `;` la' dentro seguido de `{` (ou de fim de linha, para o
+#      estilo com a chaveta na linha seguinte) -- e nenhuma delas casa com
+#      `PPC_FUNC_IMPL(func_X) {` nem com `PPC_FUNC(func_X) {`, onde o que vem a
+#      seguir ao nome e' `)` e nao `(`. Isso e' o que separa o lift COM
+#      wrappers (compilar) do lift SEM (nao compilar).
+#
+#  (3) HA' UM TERCEIRO ESTADO, e e' o silencioso. Se o lift nao tiver nem a
+#      definicao forte nem o wrapper fraco (EA fora do lift, TOML sem a
+#      entrada, emissao desligada num so' dos dois sitios), o objecto compila e
+#      liga sem erro nenhum, define um simbolo que ninguem chama, e o override
+#      e' um NO-OP INVISIVEL -- a mesma classe de falha que o guard do
+#      host_gow2_f2b existe para apanhar. Aqui isso da' AVISO explicito.
+if [ -f "$HERE/hooks/gow2_func_overrides.cpp" ]; then
+    _ovr_src="$HERE/hooks/gow2_func_overrides.cpp"
+    _ovr_names=$( { grep -oE 'GOW2_FUNC_OVERRIDE[[:space:]]*\([[:space:]]*func_[0-9A-Fa-f]{8}' "$_ovr_src" || true
+                    grep -oE '(^|[^A-Za-z0-9_])func_[0-9A-Fa-f]{8}[[:space:]]*\([[:space:]]*ppu_context[[:space:]]*\*[[:space:]]*ctx[[:space:]]*\)[[:space:]]*(\{|$)' "$_ovr_src" || true
+                  } | grep -oE 'func_[0-9A-Fa-f]{8}' | sort -u | tr '\n' ' ' )
+    _ovr_strong=""
+    _ovr_noweak=""
+    for _n in $_ovr_names; do
+        if grep -Eq "(^|[^A-Za-z0-9_])${_n}[[:space:]]*\([^;]*\)[[:space:]]*\{" "$LIFT"/ppu_recomp_*.cpp 2>/dev/null || \
+           grep -Eq "(^|[^A-Za-z0-9_])${_n}[[:space:]]*\([^;]*\)[[:space:]]*$" "$LIFT"/ppu_recomp_*.cpp 2>/dev/null; then
+            _ovr_strong="$_ovr_strong $_n"
+        elif ! grep -Eq "PPC_FUNC[[:space:]]*\([[:space:]]*${_n}[[:space:]]*\)" "$LIFT"/ppu_recomp_*.cpp 2>/dev/null; then
+            _ovr_noweak="$_ovr_noweak $_n"
+        fi
+    done
+    if [ -z "${_ovr_names// /}" ]; then
+        echo "  gow2_func_overrides: nenhum override declarado no .cpp -- nao compilar"
+        rm -f "$LIFT/gow2_func_overrides.o"
+    elif [ -n "$_ovr_strong" ]; then
+        echo "  gow2_func_overrides: DEFINICAO FORTE ja' no lift para:$_ovr_strong -- nao compilar"
+        echo "                       (lift gerado SEM [main].emit_weak_wrappers + [[functions_override]];"
+        echo "                        compilar daria duplicate symbol. OVERRIDES INACTIVOS neste binario.)"
+        rm -f "$LIFT/gow2_func_overrides.o"
+    else
+        if [ -n "$_ovr_noweak" ]; then
+            echo "  gow2_func_overrides: AVISO -- o lift nao tem wrapper fraco para:$_ovr_noweak"
+            echo "                       (o override compila e liga, mas ninguem o chama: NO-OP SILENCIOSO)"
+        fi
+        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$HERE/hooks" \
+            "$_ovr_src" -o "$LIFT/gow2_func_overrides.o"
+        echo "  gow2_func_overrides: compilado (overrides: $_ovr_names)"
+    fi
+fi
 # host_res_inflate: runtime/ppu is excluded from libps3recomp_runtime.a (same as
 # ppu_loader). Required for EBOOT gzip HOSTRES (gowshader.cfx, *.ctxr) after
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
@@ -383,6 +452,7 @@ clang++ -std=c++20 $HOST_OPT \
     $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
     $([ -f "$LIFT/host_gow2_f2b.o" ] && echo "$LIFT/host_gow2_f2b.o") \
     $([ -f "$LIFT/gow2_midasm_hooks.o" ] && echo "$LIFT/gow2_midasm_hooks.o") \
+    $([ -f "$LIFT/gow2_func_overrides.o" ] && echo "$LIFT/gow2_func_overrides.o") \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
