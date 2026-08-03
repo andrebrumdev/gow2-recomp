@@ -68,6 +68,44 @@ name = "Ce03cWaitIdle"
 address = 0x000CE03C
 
 # ---------------------------------------------------------------------------
+# SONDA E1 -- o walk de tipos da parede 4 (func_0041F700, 27 539 083 iteracoes,
+# 99,96% do rasto). NAO E' UM FIX: e' observacao, gated por PS3_TYPEWALK_TRACE=1
+# e OFF por default (regra 6 do CLAUDE.md / G2 do marco). Nenhum dos dois
+# corpos escreve na memoria guest nem toca em ctx->gpr.
+#
+# Previsoes escritas ANTES de a sonda existir:
+#   docs/re_sessions/2026-08-03-E1-typewalk-trace.md
+#
+# Porque MID-ASM e nao weak override: a sonda tem de correr AO LADO da
+# instrucao. Um [[functions_override]] obrigaria a reimplementar 296 bytes de
+# PPC so' para observar -- precisamente a divergencia do CELL que se quer
+# evitar (regra 8 do CLAUDE.md).
+# ---------------------------------------------------------------------------
+
+# E3 -- a sonda de CONTROLO, obrigatoria e primeiro. Conta entradas em push e
+# le' o cursor +0xC8 de `this` ANTES do incremento (r3 = this nesta instrucao).
+# Sem ela, um silencio nao distingue "nao passou aqui" de "nao foi compilada".
+[[midasm_hook]]
+name = "TypewalkPushEnter"
+address = 0x0041F700
+
+# A MEDICAO. 0x0041F78C = `540913BA rlwinm r9,r0,2,14,29` (low16*4), a
+# instrucao publicada ao byte por tres sessoes. Hook ANTES dela, portanto ainda
+# antes da guarda de poda em 0x0041F794: r0=w0(filho), r10=h(filho),
+# r4=q(filho), r3=this, r28=tab, r29=subtag(pai), r30=h(pai)+0x80.
+# Discriminador: tab[low16(filho)] == tab[subtag(filho)] ?
+[[midasm_hook]]
+name = "TypewalkPushChild"
+address = 0x0041F78C
+
+# O POP (`vt+0x44`). A nota games/gow2/notes/2026-08-02-parede-4-*.md mediu
+# 27 539 083 passagens pelo walk contra 2 088 pops -- contar os DOIS lados na
+# mesma corrida e' a unica forma de saber se essa desproporcao e' desta corrida.
+[[midasm_hook]]
+name = "TypewalkPop"
+address = 0x0041F924
+
+# ---------------------------------------------------------------------------
 # Weak function overrides
 # ---------------------------------------------------------------------------
 # PILOTO DA FASE 19 (plano 19-02). Ao contrario do [[midasm_hook]] acima -- que

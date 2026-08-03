@@ -56,6 +56,37 @@ extern "C" {
  * ENVOLVE a funcao. Ver o comentario do corpo no .cpp e o 17-03-SUMMARY.md. */
 void gow2_midasm_Ce03cWaitIdle(ppu_context* ctx);
 
+/* ---------------------------------------------------------------------------
+ * SONDA E1 -- o walk de tipos da parede 4. Gated por PS3_TYPEWALK_TRACE=1,
+ * OFF por default (G2: sem a variavel, zero bytes e zero mudanca de
+ * comportamento -- o corpo le um int cacheado e devolve).
+ *
+ * NAO E' UM FIX. E' observacao. Nenhum dos dois hooks escreve na memoria
+ * guest, nem toca em ctx->gpr/cr/ctr/lr -- so' le'. Ver
+ * docs/re_sessions/2026-08-03-E1-typewalk-trace.md para as duas previsoes
+ * (escritas antes de correr) e o desenho.
+ * ------------------------------------------------------------------------ */
+
+/* E3 -- a sonda de CONTROLO. EA guest 0x0041F700 (primeira instrucao de
+ * func_0041F700, o `vt+0x40` push da vtable do gestor 0x00515AA0). Conta
+ * entradas. Sem ela, um silencio nao distingue "nao passou aqui" de "a sonda
+ * nao foi compilada" -- foi assim que as Fases 7-10 mediram uma string
+ * inexistente. */
+void gow2_midasm_TypewalkPushEnter(ppu_context* ctx);
+
+/* A MEDICAO. EA guest 0x0041F78C -- `rlwinm r9,r0,2,14,29` (low16*4), dentro
+ * do anel do walk, ANTES da guarda de poda. Nesse ponto r0=w0(filho),
+ * r10=h(filho), r4=q(filho), r3=this, r28=tab, r29=subtag(pai),
+ * r30=h(pai)+0x80, r31=no' de lista. Discriminador: tab[low16] == tab[subtag]? */
+void gow2_midasm_TypewalkPushChild(ppu_context* ctx);
+
+/* O POP. EA guest 0x0041F924 (`vt+0x44` da mesma vtable). r3 = o gestor em que
+ * o pop foi chamado, cursor +0xC8 ainda NAO decrementado. Existe porque a nota
+ * de 2026-08-02 mediu 27 539 083 passagens pelo walk contra 2 088 pops: contar
+ * os dois lados na MESMA corrida e' a unica forma de saber se a desproporcao
+ * e' desta corrida. */
+void gow2_midasm_TypewalkPop(ppu_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif
