@@ -61,7 +61,12 @@
 # esperado, mesmo que a promocao nunca tenha chegado a um estado final.
 #
 # Uso:
-#   ./promote_lift.sh NEW_LIFT_DIR [--yes]
+#   ./promote_lift.sh NEW_LIFT_DIR [--yes] [--patch-status TSV_DA_ETAPA_4]
+#     --patch-status (ou ACCEPT_PATCH_STATUS no ambiente) e' OBRIGATORIO desde
+#     a correccao do defeito D2 (2026-08-03): a perna 3 do accept_relift.sh
+#     julga o TSV da PRIMEIRA passagem do apply_all_patches.sh -- a corrida que
+#     produziu o lift candidato -- e nao o resultado de uma segunda passagem
+#     sobre a arvore ja' patchada. Este script so' o reencaminha.
 #     Promove NEW_LIFT_DIR a producao. Sem --yes, pede confirmacao
 #     interativa ("digite 'sim'") antes de tocar em qualquer coisa. Com
 #     --yes, prossegue sem perguntar (para uso nao-interativo/rehearsal).
@@ -181,11 +186,17 @@ cmd_promote() {
     local NEW_LIFT_REL="${1:?uso: promote_lift.sh NEW_LIFT_DIR [--yes]}"
     shift || true
     local YES=0
-    local arg
-    for arg in "$@"; do
-        if [ "$arg" = "--yes" ]; then
-            YES=1
-        fi
+    # TSV da ETAPA 4, exigido pela perna 3 do accept_relift.sh desde a
+    # correccao do defeito D2 (2026-08-03). Passa-se tal e qual ao gate --
+    # este script nunca o interpreta.
+    local PATCH_STATUS="${ACCEPT_PATCH_STATUS:-}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --yes)            YES=1; shift ;;
+            --patch-status)   PATCH_STATUS="${2:-}"; shift 2 || shift ;;
+            --patch-status=*) PATCH_STATUS="${1#*=}"; shift ;;
+            *)                shift ;;
+        esac
     done
 
     local NEW_LIFT="$REPO/${NEW_LIFT_REL#./}"
@@ -199,7 +210,7 @@ cmd_promote() {
     echo " GATE OBRIGATORIO: accept_relift.sh $NEW_LIFT_REL"
     echo " (aceite de tres pernas D-5.1 + contadores por delta D-5.2)"
     echo "=============================================================="
-    "$REPO/accept_relift.sh" "$NEW_LIFT_REL"
+    "$REPO/accept_relift.sh" "$NEW_LIFT_REL" 6 /tmp --patch-status "$PATCH_STATUS"
     local gate_rc=$?
     if [ "$gate_rc" != "0" ]; then
         echo "ABORTADO: accept_relift.sh recusou $NEW_LIFT_REL (rc=$gate_rc) -- promocao NAO prossegue" >&2

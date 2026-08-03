@@ -25,13 +25,36 @@
 #              rc=0 os 3 passos (lift_parity/MANIFEST/audit_boundaries)
 #              passam por DELTA contra os baselines congelados (Fase 4 +
 #              Plano 05-02) -- ja NAO nasce vermelho por divida conhecida.
-#   perna 3 -- apply_all_patches.sh LIFT --status TSV
-#              este script NUNCA usa o `rc` bruto desse comando para a
-#              perna 3: esse `rc` tambem conta UNVERIFIED (D-4.1), que e
-#              divida conhecida (42 patches FUNCIONAL sem contrato) e NAO
-#              deve bloquear esta fase. Em vez disso le-se o `--status`
-#              TSV directamente e exige-se so zero NO-MATCH e zero FAILED
-#              fora de classe PROBE -- exactamente o que D-5.1 especifica.
+#   perna 3 -- VERIFICACAO DE CONVERGENCIA (lib_patch_convergence.sh)
+#              este script NUNCA usa o `rc` bruto do apply_all_patches.sh
+#              para a perna 3: esse `rc` tambem conta UNVERIFIED (D-4.1),
+#              que e divida conhecida (42 patches FUNCIONAL sem contrato) e
+#              NAO deve bloquear esta fase. Exige-se so zero NO-MATCH e zero
+#              FAILED/FAILED-PARTIAL fora de classe PROBE -- exactamente o
+#              que D-5.1 especifica.
+#
+#              CORRECCAO 2026-08-03 (defeito D2) -- as contagens deixam de
+#              vir de uma SEGUNDA corrida do apply_all_patches.sh sobre a
+#              arvore que a etapa 4 ja' patchou, e passam a vir do TSV da
+#              ETAPA 4: a corrida que produziu o binario que as pernas 1 e 4
+#              acabaram de testar. Porque, medido duas vezes (2026-08-02 e
+#              2026-08-03), a 2a passagem: (1) MASCARA falhas de ordem --
+#              um patch que so' aplica a' 2a vez aparece APPLIED no gate sem
+#              nunca ter entrado no binario testado; (2) FABRICA falhas --
+#              patch_1856a8_stream_opd.py e patch_icg_ctor_opd.py dao
+#              APPLIED na etapa 4 e FAILED na perna 3 ("no ps3_indirect_call
+#              decl"), porque procuram a declaracao que eles proprios
+#              converteram, enquanto o MESMO log imprime 160 linhas abaixo
+#              "[PASS] 1856A8 stream OPD" e "CHECKS: todos passaram"; (3)
+#              APAGA o FAILED-PARTIAL, o sinal mais grave dos seis estados
+#              (arvore meio escrita), que degrada para FAILED limpo.
+#              A reaplicacao continua a correr -- mas so' para PROVAR
+#              CONVERGENCIA por sha256 dos ppu_recomp_*.cpp (reaplicar nao
+#              pode mudar um byte). O rc e o TSV dela sao INFORMATIVOS.
+#              Sem o TSV da etapa 4 a perna 3 FALHA: um gate sem medicao
+#              nunca passa (a mesma politica de check_boot_health.py).
+#              Testado por games/gow2/test_patch_convergence.sh (11 testes,
+#              prova nos dois sentidos).
 #   perna 4 -- smoke_chain_gate.sh --bin BIN RUNS TSV (GATE-03, Fase 7)
 #              mede a cadeia de elos + a saude do boot. Reutiliza o MESMO
 #              binario que a PERNA 1 acabou de construir -- nunca dispara um
@@ -66,8 +89,12 @@
 # mostra sempre o estado das quatro, nunca so da primeira que falhou.
 #
 # Uso:
-#   ./accept_relift.sh LIFT_DIR [RUNS] [OUTDIR]
+#   ./accept_relift.sh LIFT_DIR [RUNS] [OUTDIR] [--patch-status TSV]
 #     LIFT_DIR default nenhum (obrigatorio); RUNS default 6; OUTDIR default /tmp.
+#     --patch-status TSV: o status TSV escrito pela ETAPA 4 da sequencia
+#       canonica (apply_all_patches.sh LIFT --status TSV, PRIMEIRA passagem
+#       sobre o lift fresco). Equivalente por ambiente: ACCEPT_PATCH_STATUS.
+#       OBRIGATORIO -- sem ele a perna 3 nao tem o que julgar (ver acima).
 #
 # Protocolo G6 (D-5.5): logs em /tmp (fora dos dois repositorios), kill
 # sempre por PID dentro de smoke_relift_equiv.sh/smoke_chain_gate.sh (TERM
@@ -77,7 +104,29 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 REPO="$PWD"
 
-LIFT_REL="${1:?uso: accept_relift.sh LIFT_DIR [RUNS] [OUTDIR]}"
+# ---- nucleo da perna 3 (D2): convergencia, nao repeticao -------------------
+LIB_CONV="$REPO/lib_patch_convergence.sh"
+if [ ! -f "$LIB_CONV" ]; then
+  echo "ERRO: $LIB_CONV nao encontrado -- sem ele a perna 3 nao pode ser avaliada" >&2
+  exit 2
+fi
+# shellcheck source=/dev/null
+. "$LIB_CONV"
+
+# ---- args: posicionais + --patch-status (bash 3.2, set -u) -----------------
+PATCH_STATUS_TSV="${ACCEPT_PATCH_STATUS:-}"
+POS=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --patch-status)   PATCH_STATUS_TSV="${2:-}"; shift 2 || shift ;;
+    --patch-status=*) PATCH_STATUS_TSV="${1#*=}"; shift ;;
+    *)                POS="$POS $1"; shift ;;
+  esac
+done
+# shellcheck disable=SC2086
+set -- $POS
+
+LIFT_REL="${1:?uso: accept_relift.sh LIFT_DIR [RUNS] [OUTDIR] [--patch-status TSV]}"
 RUNS="${2:-6}"
 OUTDIR="${3:-/tmp}"
 
@@ -87,6 +136,17 @@ if [ ! -d "$LIFT" ]; then
   exit 2
 fi
 TAG="$(basename "$LIFT")"
+
+# Falha CEDO se o TSV da etapa 4 nao foi dado: a perna 3 e' insatisfazivel sem
+# ele (D2) e nao ha' razao para gastar um build e 12 boots antes de o dizer.
+if [ -z "$PATCH_STATUS_TSV" ] || [ ! -f "$PATCH_STATUS_TSV" ]; then
+  echo "ERRO: falta o TSV da ETAPA 4 (--patch-status TSV ou ACCEPT_PATCH_STATUS)." >&2
+  echo "      A perna 3 julga a arvore que produziu o binario -- a PRIMEIRA passagem" >&2
+  echo "      do apply_all_patches.sh sobre o lift fresco. Sem esse TSV nao ha' o que" >&2
+  echo "      julgar, e um gate sem medicao nunca passa (defeito D2, 2026-08-03)." >&2
+  echo "      Recebido: '${PATCH_STATUS_TSV:-<vazio>}'" >&2
+  exit 2
+fi
 
 # ---- ponte cross-repo (mesma convencao de apply_all_patches.sh:112) --------
 PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$REPO/../ps3recomp}"
@@ -191,25 +251,29 @@ printf '%s\n' "$leg2_detail"
 echo "PERNA 2: rc=$leg2_rc (log completo: $LOG2)"
 echo
 
-# ---- PERNA 3: apply_all_patches.sh --status (NUNCA o rc bruto) ------------
-TSV3="$OUTDIR/accept_${TAG}_status.tsv"
+# ---- PERNA 3: convergencia (D2) -- consome o TSV da ETAPA 4 ---------------
+# NAO julga o resultado de uma segunda passagem sobre a arvore ja' patchada
+# (era isso que mascarava falhas de ordem, fabricava duas falhas e apagava o
+# FAILED-PARTIAL -- ver o cabecalho). A reaplicacao corre, mas so' para provar
+# por sha256 que nao muda um byte.
+TSV3="$OUTDIR/accept_${TAG}_status.tsv"     # TSV da REAPLICACAO (informativo)
 LOG3="$OUTDIR/accept_${TAG}_patches.log"
-echo "---- PERNA 3: apply_all_patches.sh --status (rc bruto ignorado para o gate) ----"
-"$REPO/apply_all_patches.sh" "$LIFT_REL" --status "$TSV3" > "$LOG3" 2>&1
-leg3_rc_bruto=$?
-n_nomatch=$(awk -F'\t' 'NR>1 && $2=="NO-MATCH"{n++} END{print n+0}' "$TSV3" 2>/dev/null)
-n_nomatch=${n_nomatch:-0}
-n_failed_nao_probe=$(awk -F'\t' 'NR>1 && ($2=="FAILED" || $2=="FAILED-PARTIAL") && $3!="PROBE"{n++} END{print n+0}' "$TSV3" 2>/dev/null)
-n_failed_nao_probe=${n_failed_nao_probe:-0}
-n_unverified=$(awk -F'\t' 'NR>1 && $2=="UNVERIFIED"{n++} END{print n+0}' "$TSV3" 2>/dev/null)
-n_unverified=${n_unverified:-0}
-if [ "$n_nomatch" -eq 0 ] && [ "$n_failed_nao_probe" -eq 0 ]; then
-  leg3_pass=1
-else
-  leg3_pass=0
-fi
-echo "PERNA 3: NO-MATCH=$n_nomatch FAILED-fora-de-PROBE=$n_failed_nao_probe (UNVERIFIED=$n_unverified, informativo, nao bloqueia)"
-echo "PERNA 3: rc bruto (inclui UNVERIFIED, nao bloqueia D-5.1)=$leg3_rc_bruto | leg3_pass=$leg3_pass"
+LOG3C="$OUTDIR/accept_${TAG}_convergencia.log"
+echo "---- PERNA 3: convergencia (TSV da etapa 4 + sha256 antes/depois de reaplicar) ----"
+# a reaplicacao e' uma FUNCAO para que a sua saida (milhares de linhas) va toda
+# para LOG3 e nao polua o relatorio da perna 3
+leg3_reapply() { "$REPO/apply_all_patches.sh" "$LIFT_REL" --status "$TSV3" > "$LOG3" 2>&1; }
+leg3_evaluate "$LIFT" "$PATCH_STATUS_TSV" leg3_reapply 2>&1 | tee "$LOG3C"
+leg3_pass=0
+grep -q 'LEG3 veredicto=PASS' "$LOG3C" && leg3_pass=1
+# campos para o relatorio final -- extraidos do relatorio da lib, nunca recontados
+leg3_field() { sed -n "s/.*[ =]$1=\([^ ]*\).*/\1/p" "$LOG3C" | head -1; }
+n_nomatch=$(leg3_field nomatch);                     n_nomatch=${n_nomatch:-0}
+n_failed_nao_probe=$(leg3_field failed_nao_probe);   n_failed_nao_probe=${n_failed_nao_probe:-0}
+n_failed_partial=$(leg3_field failed_partial_nao_probe); n_failed_partial=${n_failed_partial:-0}
+n_unverified=$(leg3_field unverified);               n_unverified=${n_unverified:-0}
+leg3_conv=$(leg3_field convergencia);                leg3_conv=${leg3_conv:-NAO-MEDIDA}
+echo "PERNA 3: leg3_pass=$leg3_pass (detalhe em $LOG3C; reaplicacao informativa em $LOG3 / $TSV3)"
 echo
 
 # ---- CONTADORES (D-5.2): baseline REAL congelado vs candidato, por DELTA ---
@@ -306,8 +370,8 @@ echo " RELATORIO DE ACEITE (D-5.1 + D-5.2 + GATE-03)"
 echo "=============================================================="
 printf 'PERNA 1 (smoke)          %s   (OK=%s/%s)\n' "$([ "$leg1_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg1_ok" "$RUNS"
 printf 'PERNA 2 (verify_lift)    %s   (rc=%s)\n' "$([ "$leg2_rc" -eq 0 ] && echo PASS || echo FAIL)" "$leg2_rc"
-printf 'PERNA 3 (apply_patches)  %s   (NO-MATCH=%s FAILED-fora-PROBE=%s, UNVERIFIED=%s informativo)\n' \
-  "$([ "$leg3_pass" -eq 1 ] && echo PASS || echo FAIL)" "$n_nomatch" "$n_failed_nao_probe" "$n_unverified"
+printf 'PERNA 3 (convergencia)   %s   (etapa 4: NO-MATCH=%s FAILED-fora-PROBE=%s dos quais FAILED-PARTIAL=%s | reaplicar muda a arvore? convergencia=%s | UNVERIFIED=%s informativo)\n' \
+  "$([ "$leg3_pass" -eq 1 ] && echo PASS || echo FAIL)" "$n_nomatch" "$n_failed_nao_probe" "$n_failed_partial" "$leg3_conv" "$n_unverified"
 if [ "$leg4_rc" -eq 0 ]; then
   printf 'PERNA 4 (chain+saude)    %s   (nao pior que a producao declarada; detalhe: %s)\n' "PASS" "$LOG4H"
 else
