@@ -97,6 +97,36 @@ address = 0x000CE03C
 address = 0x00010230
 size = 0x24
 
+# MIGRACAO 1 DA FASE 19 (plano 19-03): o pad de setjmp/longjmp do CE03C.
+# Fecha a entrada 8 do .planning/WINDOWS.md, aberta pelo 17-03: o
+# [[midasm_hook]] acima migrou o wait-idle, mas o bloco injectado por
+# ../recomp_mid_v2/patch_ce03c_introseq_block.py tambem ENVOLVIA o corpo
+# natural num setjmp, com um ramo de abort (cellVdec_stop_all_for_play_abort +
+# reconstrucao da freelist do media object). Um mid-asm corre AO LADO de uma
+# instrucao e nao envolve nada -- so' o weak override envolve.
+#
+# OS DOIS MECANISMOS COMPOEM-SE NESTA MESMA FUNCAO, e e' de proposito: o corpo
+# emitido (`PPC_FUNC_IMPL(func_000CE03C)`, simbolo __imp_) leva a chamada
+# gow2_midasm_Ce03cWaitIdle na primeira linha, e o override host chama esse
+# __imp_ de dentro do setjmp. O override NAO repete o wait-idle -- se o
+# repetisse haveria dois pumps por entrada (ver ../hooks/gow2_func_overrides.cpp).
+#
+# `address` = 0x000CE03C. NAO e' uma linha do functions.json (que so' tem a
+# funcao que a contem, 0x000CE02C..0x000CE0A0): e' uma funcao criada pelas
+# passagens de mid-function entry do lifter, e por isso ESTA' em
+# `lifter.functions` -- que e' o conjunto contra o qual o
+# check_weak_override_coverage valida (19-01). Um EA que nao fosse inicio de
+# funcao liftada era recusado com rc=2 antes de escrever ficheiro nenhum.
+#
+# `size` = 0x64, DERIVADO e nao copiado: 0x000CE0A0 (o `end` da entrada que a
+# contem) - 0x000CE03C. Confere com o corpo liftado -- a ultima chamada tem
+# ctx->lr = 0x000CE08C (bl em 0xCE088), seguida de nop/lwz/addi/stw e do salto
+# do trampolim, o que poe a ultima instrucao em 0x000CE09C. O campo e'
+# REGISTADO e nao consumido pelo lifter (19-01).
+[[functions_override]]
+address = 0x000CE03C
+size = 0x64
+
 [optimizations]
 skip_lr = false
 skip_msr = false

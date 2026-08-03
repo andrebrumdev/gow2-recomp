@@ -45,15 +45,25 @@ texto injectado. O script passou a DISTINGUIR os dois casos:
   - funcao ja' contem o bloco injectado             -> ALREADY, nao escreve nada
   - funcao tem o corpo gerado esperado              -> injecta (lift antigo)
 
-O que o mid-asm NAO absorveu, e por isso nao e' reposto por ninguem num lift
-com `--config`: o pad de setjmp/longjmp (`g_ce03c_play_abort`) a' volta do
-corpo natural, com `cellVdec_stop_all_for_play_abort()` e a reconstrucao da
-freelist do media object. Um `[[midasm_hook]]` corre AO LADO de uma instrucao,
-nao ENVOLVE a funcao -- isso e' weak override (Fase 19). Esta' declarado no
-17-03-SUMMARY.md e no ledger; nao se afirma paridade de 143 linhas.
+E MIGRADO PARA WEAK OVERRIDE (Fase 19, plano 19-03) -- a outra metade
+--------------------------------------------------------------------
+O que o mid-asm NAO absorveu era o pad de setjmp/longjmp (`g_ce03c_play_abort`)
+a' volta do corpo natural, com `cellVdec_stop_all_for_play_abort()` e a
+reconstrucao da freelist do media object. Um `[[midasm_hook]]` corre AO LADO de
+uma instrucao, nao ENVOLVE a funcao. Essa metade vive agora em
+`games/gow2/hooks/gow2_func_overrides.cpp` (`func_000CE03C`), declarada como
+`[[functions_override]] address = 0x000CE03C` no `gow2_recomp.toml`.
+
+Num lift feito com `--config` + `emit_weak_wrappers`, a funcao deixa de ser
+emitida na forma `void func_000CE03C(ppu_context* ctx) {` e passa a sair como o
+par `PPC_FUNC_IMPL(func_000CE03C)` (corpo) + `PPC_FUNC(func_000CE03C)`
+(wrapper fraco). Este script procura a forma ANTIGA por texto; sem a deteccao
+abaixo daria "func_000CE03C nao existe" e rc=2 -- um vermelho FALSO, porque o
+fix esta' la', vindo do host. Dai' o estado WEAK.
 
 Contrato
 --------
+- weak override presente -> WEAK (skip), rc=0
 - mid-asm ja' presente   -> MIDASM (skip), rc=0
 - ja' instalado          -> ALREADY, rc=0
 - corpo gerado esperado  -> substitui, rc=0
@@ -80,6 +90,14 @@ MARKER = "[INTROSEQ] CE03C wait-idle 1st movie"
 # que nem sequer tem a funcao.
 MIDASM_CALL = "gow2_midasm_Ce03cWaitIdle(ctx);"
 
+# Forma que o lifter emite quando a funcao esta' declarada em
+# [[functions_override]] com [main].emit_weak_wrappers = true (Fase 19). A
+# funcao inteira passou a ser propriedade do host: o corpo liftado vira
+# __imp_func_000CE03C e o simbolo func_000CE03C e' o override de
+# games/gow2/hooks/gow2_func_overrides.cpp. Procurada no ficheiro inteiro (e
+# nao numa regiao) porque e' ela propria o delimitador do inicio da funcao.
+WEAK_IMPL = "PPC_FUNC_IMPL(func_000CE03C)"
+
 
 def func_region(t: str) -> str | None:
     """Fatia [inicio de func_000CE03C, inicio da funcao seguinte).
@@ -100,8 +118,16 @@ PATCHED_BODY = 'void func_000CE03C(ppu_context* ctx) {\n        /* Intro idx→2
 
 
 def patch_one(path: Path) -> int:
-    """0 aplicado | 1 ja' aplicado | 2 mid-asm | -1 sem a funcao | -2 corpo inesperado."""
+    """0 aplicado | 1 ja' aplicado | 2 mid-asm | 3 weak | -1 sem a funcao |
+    -2 corpo inesperado."""
     t = path.read_text(encoding="utf-8", errors="replace")
+    if WEAK_IMPL in t:
+        # Lift com [[functions_override]]: a funcao inteira e' host. O pad de
+        # setjmp e o resto do bloco vem de gow2_func_overrides.cpp -- injectar
+        # texto aqui reporia a duplicacao que a migracao eliminou (e nem casaria,
+        # porque a forma `void func_000CE03C(...)` ja' nao existe).
+        print(f"  {path.name}: WEAK (override host -- nada a injectar)")
+        return 3
     if SIG not in t:
         return -1
     region = func_region(t) or ""
@@ -130,7 +156,7 @@ def main() -> int:
     if not paths:
         print("ERRO: nenhum ficheiro de lift legivel", file=sys.stderr)
         return 3
-    applied = already = midasm = unexpected = 0
+    applied = already = midasm = weak = unexpected = 0
     for p in paths:
         r = patch_one(p)
         if r == 0:
@@ -139,8 +165,15 @@ def main() -> int:
             already += 1
         elif r == 2:
             midasm += 1
+        elif r == 3:
+            weak += 1
         elif r == -2:
             unexpected += 1
+    if weak:
+        print(f"[ce03c-introseq] SKIP: weak override e' a fonte de verdade neste "
+              f"lift ({weak} ficheiro(s) com PPC_FUNC_IMPL(func_000CE03C); "
+              f"wait-idle pelo mid-asm, pad pelo override host)")
+        return 0
     if midasm:
         print(f"[ce03c-introseq] SKIP: mid-asm e' a fonte de verdade neste lift "
               f"({midasm} ficheiro(s) com gow2_midasm_Ce03cWaitIdle; "

@@ -74,9 +74,31 @@ MARKER = "movie_done_timebased_reset"
 SIG_CE03C = "void func_000CE03C(ppu_context* ctx) {\n"
 MIDASM_CALL = "gow2_midasm_Ce03cWaitIdle(ctx);"
 
+# Weak override (Fase 19, plano 19-03): com [[functions_override]] declarado
+# para 0x000CE03C a funcao deixa de sair na forma `void func_000CE03C(...)` e
+# passa a `PPC_FUNC_IMPL(func_000CE03C)`. O tem_midasm() abaixo procura a forma
+# antiga para delimitar a regiao, e sem esta constante devolveria False num
+# lift onde o hook ESTA' la' -- o script iria entao procurar a ancora do bloco
+# injectado, nao a encontraria, e sairia rc=2. Vermelho falso.
+WEAK_IMPL = "PPC_FUNC_IMPL(func_000CE03C)"
+
 
 def tem_midasm(t: str) -> bool:
-    """A regiao de func_000CE03C ja' traz o hook mid-asm emitido pelo lifter?"""
+    """A regiao de func_000CE03C ja' traz o hook mid-asm emitido pelo lifter?
+
+    Conhece as DUAS formas de inicio de funcao: a de sempre e a do par
+    __imp_/wrapper fraco que a Fase 19 introduziu para as funcoes declaradas em
+    [[functions_override]]. A de fim tambem: o wrapper `PPC_FUNC(func_X)` vem
+    logo a seguir ao corpo e nao pode ser confundido com a funcao seguinte.
+    """
+    i = t.find(WEAK_IMPL)
+    if i >= 0:
+        j = min((k for k in (t.find("\nvoid func_", i + 20),
+                             t.find("\nPPC_FUNC_IMPL(func_", i + 20),
+                             t.find("\nPPC_FUNC(func_", i + 20)) if k >= 0),
+                default=-1)
+        region = t[i:j] if j >= 0 else t[i:]
+        return MIDASM_CALL in region
     i = t.find(SIG_CE03C)
     if i < 0:
         return False
