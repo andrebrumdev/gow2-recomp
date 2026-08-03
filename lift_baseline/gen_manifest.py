@@ -38,8 +38,20 @@ GLOBAL_RE = re.compile(r"\b((?:g|k)_[a-z0-9_]+)\b")
 
 
 def preamble_end(text: str) -> int:
+    """Indice da 1a linha DEPOIS do preambulo -- ou seja, o inicio da 1a funcao.
+
+    Desde a Fase 19 (XEN-04) uma funcao pode comecar em duas formas: a de
+    sempre (`void func_X(ppu_context* ctx) {`) ou, quando declarada em
+    `[[functions_override]]` com a emissao ligada, `PPC_FUNC_IMPL(func_X) {`.
+    Conhecer so' a primeira dava um preambulo longo de mais sempre que a 1a
+    funcao do chunk fosse uma com override -- e a fronteira e' o que separa o
+    que se conta como preambulo do que se conta como corpo. Medido a
+    2026-08-02: no lift desta fase o defeito NAO chegou a disparar (o
+    MANIFEST_DEBT deu exactamente os mesmos 7/36 do baseline da Fase 18), o que
+    o torna precisamente o tipo de bug dependente de ordem que so' aparece
+    quando ja' custa caro. Corrigido antes disso."""
     for i, line in enumerate(text.splitlines()):
-        if line.startswith("void func_"):
+        if line.startswith(("void func_", "PPC_FUNC_IMPL(func_")):
             return i
     return len(text.splitlines())
 

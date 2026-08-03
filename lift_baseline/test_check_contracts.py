@@ -160,11 +160,55 @@ def test_7_erro_de_uso(tmp: Path) -> None:
     print("[PASS] teste 7: CONTRACTS.tsv/LIFT_DIR inexistente -- rc=3")
 
 
+def test_8_weak_override_nao_e_ancora_perdida(tmp: Path) -> None:
+    """Fase 19 (XEN-04): o corpo de uma funcao com [[functions_override]] sai em
+    `PPC_FUNC_IMPL(func_X) {`, seguido de um wrapper FRACO `PPC_FUNC(func_X)`.
+
+    Nasceu VERMELHO de uma medicao (2026-08-02): contra um lift com a forma
+    nova, os contratos `escopo=ea` de 0x0032E200 davam "ancora perdida ... nao
+    existe no lift" -- vermelho FALSO sobre uma funcao inteira. E' precisamente
+    o alvo que o plano 19-03 vai migrar, portanto o defeito estava programado
+    para so' aparecer quando ja' custasse caro.
+
+    Tres asseveracoes, todas necessarias:
+      - a ancora e' encontrada (senao: vermelho falso);
+      - a regiao PARA no wrapper (senao: a contagem inclui `__imp_...(ctx)`);
+      - a regiao NAO invade a funcao seguinte (o delimitador de fim tem de
+        conhecer as tres formas de inicio, nao so' `void func_`)."""
+    lift = tmp / "t8_lift"
+    lift.mkdir()
+    (lift / "ppu_recomp_003.cpp").write_text(
+        "PPC_FUNC_IMPL(func_0032E200) {\n"
+        + "        ps3_call_opd(ctx, (uint32_t)ctx->gpr[10]);\n" * 7
+        + "}\n"
+        "PPC_FUNC(func_0032E200) {\n"
+        "    __imp_func_0032E200(ctx);\n"
+        "}\n"
+        "void func_00330D54(ppu_context* ctx) {\n"
+        "        ps3_call_opd(ctx, (uint32_t)ctx->gpr[3]);\n"
+        "}\n"
+    )
+    contracts = tmp / "t8_contracts.tsv"
+    write_contracts(contracts, [
+        "opd-32e200\tpatch_32e200_opd.py\tea\t0x0032E200\tcount_ge\tps3_call_opd(\t7\tteste",
+        # count_eq 7 aperta os dois lados: 8 significaria ter apanhado a funcao
+        # seguinte; menos de 7 significaria ter parado cedo demais.
+        "opd-32e200-exacto\tpatch_32e200_opd.py\tea\t0x0032E200\tcount_eq\tps3_call_opd(\t7\tteste",
+        "opd-32e200-sem-imp\tpatch_32e200_opd.py\tea\t0x0032E200\tcount_eq\t__imp_func_\t0\tteste",
+    ])
+    r = run(contracts, lift, "patch_32e200_opd.py")
+    assert "ancora perdida" not in r.stdout, r.stdout
+    assert r.returncode == 0, f"rc esperado 0, obtido {r.returncode}: {r.stdout}{r.stderr}"
+    assert "[FAIL]" not in r.stdout, r.stdout
+    print("[PASS] teste 8: weak override -- ancora encontrada, regiao delimitada "
+          "pelo wrapper e nao pela funcao seguinte")
+
+
 def main() -> int:
     tests = [
         test_1_contrato_ea_passa, test_2_contrato_ea_falha, test_3_ancora_perdida,
         test_4_sem_contrato, test_5_escopo_global, test_6_agulha_regex,
-        test_7_erro_de_uso,
+        test_7_erro_de_uso, test_8_weak_override_nao_e_ancora_perdida,
     ]
     failed = 0
     with tempfile.TemporaryDirectory() as tmpdir:

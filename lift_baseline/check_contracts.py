@@ -101,14 +101,33 @@ def ea_region(chunks: dict[str, str], alvo: str) -> str | None:
     Replica EXACTAMENTE a delimitacao que os patches OPD ja usam
     (s.find("void func_...") / s.find("void func_", i+20)). Devolve None se
     a funcao nao existir em nenhum chunk -- "ancora perdida".
+
+    FASE 19 (XEN-04): ha' uma SEGUNDA forma de inicio de funcao. Uma funcao
+    declarada em `[[functions_override]]`, com `[main].emit_weak_wrappers`,
+    sai como `PPC_FUNC_IMPL(func_X) {` (corpo, simbolo __imp_func_X) seguida de
+    um wrapper FRACO `PPC_FUNC(func_X) { __imp_func_X(ctx); }`.
+
+    Isto NAO e' hipotetico: medido a 2026-08-02 contra um lift com a forma
+    nova, todos os contratos `escopo=ea` de um alvo com override davam
+    "ancora perdida: ... nao existe no lift" -- um VERMELHO FALSO sobre uma
+    funcao que la' esta' inteira. Como os aceites `contract:` dos OPD P0 sao
+    exactamente o que a Fase 19 vai migrar, deixar isto por corrigir era
+    programar um vermelho falso para o plano seguinte.
+
+    O wrapper e' incluido no delimitador de FIM (`_FUNC_STARTS`) mas nunca
+    usado como INICIO: como vem logo a seguir ao corpo, tomar o wrapper como
+    inicio daria uma regiao de duas linhas -- pior que a ancora perdida,
+    porque um `count_ge` sobre ela falharia com um numero plausivel.
     """
     func = f"func_{int(alvo, 16):08X}"
-    needle = f"void {func}("
+    starts = (f"void {func}(", f"PPC_FUNC_IMPL({func})")
+    ends = ("void func_", "PPC_FUNC_IMPL(func_", "PPC_FUNC(func_")
     for text in chunks.values():
-        i = text.find(needle)
+        i = min((p for p in (text.find(n) for n in starts) if p >= 0), default=-1)
         if i < 0:
             continue
-        j = text.find("void func_", i + 20)
+        j = min((p for p in (text.find(n, i + 20) for n in ends) if p >= 0),
+                default=-1)
         return text[i:j] if j >= 0 else text[i:]
     return None
 
