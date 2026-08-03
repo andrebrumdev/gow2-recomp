@@ -33,13 +33,33 @@
 #              TSV directamente e exige-se so zero NO-MATCH e zero FAILED
 #              fora de classe PROBE -- exactamente o que D-5.1 especifica.
 #   perna 4 -- smoke_chain_gate.sh --bin BIN RUNS TSV (GATE-03, Fase 7)
-#              rc=0 se a cadeia de 5 elos bloqueantes (intro/2o movie/
-#              re-Play/AUTO_LOAD/WAD) chega ao fim em >=THRESHOLD de RUNS
-#              execucoes. Reutiliza o MESMO binario que a PERNA 1 acabou de
-#              construir -- nunca dispara um segundo build a partir do
-#              mesmo LIFT_REL. Le o TSV produzido (nunca o rc bruto de
-#              forma opaca) e nomeia o elo_stopped mais frequente entre as
-#              corridas que falharam.
+#              mede a cadeia de elos + a saude do boot. Reutiliza o MESMO
+#              binario que a PERNA 1 acabou de construir -- nunca dispara um
+#              segundo build a partir do mesmo LIFT_REL.
+#
+#              CORRECCAO 2026-08-03 -- o criterio passa a ser NAO PIOR QUE A
+#              PRODUCAO, e o rc bruto de smoke_chain_gate.sh deixa de ser
+#              autoritativo (a mesma politica que a perna 3 ja' usa para o
+#              seu). Porque: esse rc exige elo_stopped="nenhum", os 5 elos
+#              bloqueantes passados. A PRODUCAO nunca o atinge -- para no elo
+#              4 em 100% das corridas medidas -- e ha' uma razao MEDIDA,
+#              escrita em lib_boot_chain_metrics.sh:94-118: a thread
+#              AUTO_LOAD so' pode ser criada a jusante de func_00242C94, o
+#              LOOP PRINCIPAL do jogo, que so' retorna em REQUEST_EXITGAME.
+#              "AUTO_LOAD nunca criada" e' o comportamento CORRECTO de um
+#              jogo que ainda esta a correr; um binario que passasse esse elo
+#              teria SAIDO do jogo. O criterio, como estava, exigia que o
+#              jogo se fechasse para o lift ser aceite -- e era, por
+#              construcao, inatingivel por qualquer lift, incluindo o de
+#              producao que o candidato ia substituir.
+#              O rc autoritativo vem agora de
+#              lift_baseline/check_boot_health.py, que compara
+#              elo/st620/ICALL-BAD/OOB/0xFFFF/FATAL contra
+#              lift_baseline/PRODUCTION_REFERENCE.tsv -- a producao medida,
+#              declarada com DATA e PROVENIENCIA por linha, nunca um numero
+#              hard-coded aqui que ninguem consiga refutar daqui a um mes.
+#              O rc bruto do smoke_chain_gate.sh continua a ser impresso,
+#              como informacao, e o elo_stopped mais frequente tambem.
 #
 # rc final = 0 SO se as quatro pernas passarem. As quatro correm sempre,
 # mesmo que uma ja tenha falhado (nao aborta cedo) -- o relatorio final
@@ -102,25 +122,56 @@ echo
 # timing de compilacao).
 BIN4="$REPO/boot_gow2_${TAG#recomp_macos_}"
 TSV4="$OUTDIR/accept_${TAG}_chain.tsv"
-echo "---- PERNA 4: smoke_chain_gate.sh (cadeia) ----"
+LOG4="$OUTDIR/accept_${TAG}_chain.log"
+LOG4H="$OUTDIR/accept_${TAG}_boot_health.log"
+CHECK_HEALTH="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/check_boot_health.py"
+REF_PROD="$PS3_ENGINE_ROOT/games/gow2/lift_baseline/PRODUCTION_REFERENCE.tsv"
+
+# interpretador: a mesma resolucao de verify_lift.sh (nunca assumir o do PATH)
+PY4="${PS3_PATCH_PYTHON:-}"
+if [ -z "$PY4" ]; then
+  if [ -x "$PS3_ENGINE_ROOT/.venv/bin/python3" ]; then PY4="$PS3_ENGINE_ROOT/.venv/bin/python3"
+  else PY4="$(command -v python3 || true)"; fi
+fi
+
+echo "---- PERNA 4: smoke_chain_gate.sh (cadeia) + check_boot_health.py (nao pior que a producao) ----"
 if [ -x "$BIN4" ]; then
-  "$REPO/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4"
-  leg4_rc=$?
+  "$REPO/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4" 2>&1 | tee "$LOG4"
+  leg4_rc_bruto=${PIPESTATUS[0]}
   leg4_ok=$(awk -F'\t' 'NR>1 && $10=="OK"{n++} END{print n+0}' "$TSV4" 2>/dev/null)
   leg4_ok=${leg4_ok:-0}
   leg4_elo="$(awk -F'\t' 'NR>1 && $10=="REGRESSAO"{print $9}' "$TSV4" 2>/dev/null \
     | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //')"
+
+  # Os logs de boot sao os que o proprio smoke_chain_gate.sh anunciou
+  # ("log: /tmp/..."), nunca um glob adivinhado -- um glob apanharia corridas
+  # de outra sessao e mediria o binario errado.
+  health_args=()
+  while IFS= read -r l; do
+    [ -n "$l" ] && health_args+=(--log "$l")
+  done < <(grep '^log: ' "$LOG4" 2>/dev/null | sed 's/^log: //')
+
+  if [ -z "$PY4" ] || [ ! -f "$CHECK_HEALTH" ]; then
+    echo "ERRO: sem python3 ou sem $CHECK_HEALTH -- a perna 4 nao pode ser avaliada" >&2
+    leg4_rc=2
+  else
+    # ${a[@]+"${a[@]}"}: o bash 3.2 do macOS estoira com `set -u` num array
+    # VAZIO expandido como "${a[@]}" -- e um array vazio aqui e' exactamente o
+    # caso "nao houve logs", que tem de chegar ao check e ser REJEITADO la',
+    # nao rebentar o script antes de o gate opinar.
+    "$PY4" "$CHECK_HEALTH" --chain-tsv "$TSV4" --reference "$REF_PROD" \
+      ${health_args[@]+"${health_args[@]}"} 2>&1 | tee "$LOG4H"
+    leg4_rc=${PIPESTATUS[0]}
+  fi
 else
   echo "ERRO: binario da PERNA 1 nao encontrado ($BIN4) -- PERNA 1 deve ter falhado antes de construir" >&2
   leg4_rc=2
+  leg4_rc_bruto=2
   leg4_ok=0
   leg4_elo="binario nao construido"
 fi
-if [ "$leg4_rc" -eq 0 ]; then
-  echo "PERNA 4: OK=$leg4_ok de $RUNS, rc=$leg4_rc"
-else
-  echo "PERNA 4: OK=$leg4_ok de $RUNS, rc=$leg4_rc, elo_stopped mais frequente: ${leg4_elo:-desconhecido}"
-fi
+echo "PERNA 4: rc=$leg4_rc (check_boot_health.py, autoritativo) | elo 'nenhum' em $leg4_ok de $RUNS, rc bruto do smoke_chain_gate=$leg4_rc_bruto [INFORMATIVO -- exige REQUEST_EXITGAME, ver cabecalho]"
+[ "$leg4_ok" -eq 0 ] && echo "PERNA 4: elo_stopped mais frequente: ${leg4_elo:-desconhecido}"
 echo
 
 # ---- PERNA 2: games/gow2/verify_lift.sh ------------------------------------
@@ -251,9 +302,9 @@ printf 'PERNA 2 (verify_lift)    %s   (rc=%s)\n' "$([ "$leg2_rc" -eq 0 ] && echo
 printf 'PERNA 3 (apply_patches)  %s   (NO-MATCH=%s FAILED-fora-PROBE=%s, UNVERIFIED=%s informativo)\n' \
   "$([ "$leg3_pass" -eq 1 ] && echo PASS || echo FAIL)" "$n_nomatch" "$n_failed_nao_probe" "$n_unverified"
 if [ "$leg4_rc" -eq 0 ]; then
-  printf 'PERNA 4 (chain gate)     %s   (OK=%s/%s)\n' "PASS" "$leg4_ok" "$RUNS"
+  printf 'PERNA 4 (chain+saude)    %s   (nao pior que a producao declarada; detalhe: %s)\n' "PASS" "$LOG4H"
 else
-  printf 'PERNA 4 (chain gate)     %s   (OK=%s/%s, elo_stopped mais frequente: %s)\n' "FAIL" "$leg4_ok" "$RUNS" "${leg4_elo:-desconhecido}"
+  printf 'PERNA 4 (chain+saude)    %s   (pior que a producao declarada, ou nao medido; elo_stopped mais frequente: %s; detalhe: %s)\n' "FAIL" "${leg4_elo:-desconhecido}" "$LOG4H"
 fi
 printf 'CONTADORES (D-5.2)       %s   (imp_modules/imp_imports/orfaos bloqueantes)\n' \
   "$([ "$counters_pass" -eq 1 ] && echo PASS || echo FAIL)"
