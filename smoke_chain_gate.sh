@@ -124,12 +124,29 @@ derive_elo_stopped() {
     echo "2o movie (StartSeq)"
   elif [ "${nopic:-0}" -lt 4 ] 2>/dev/null; then
     echo "re-Play (NOPIC)"
-  elif [ "${thr_end:-0}" -lt 1 ] 2>/dev/null; then
-    if [ "${thr_created:-0}" -lt 1 ] 2>/dev/null; then
-      echo "AUTO_LOAD (nunca criada)"
-    else
-      echo "AUTO_LOAD (criada, nao termina)"
-    fi
+  # CORRECCAO 2026-08-05: "AUTO_LOAD nunca criada" deixa de ser BLOQUEANTE.
+  #
+  # Medido a 2026-08-05 sobre boot_gow2 (producao, com os fixes das paredes 1 e
+  # 4 promovidos): 6 de 6 corridas com st620=11, startseq=2, nopic=4, r_perma=1
+  # -- e as 6 classificadas REGRESSAO, todas por este elo. O gate reprovava um
+  # boot saudavel, e pior: o elo do WAD vem DEPOIS deste na ordem, por isso
+  # r_perma=1 nunca chegava a ser reportado. Um elo bloqueante inatingivel nao
+  # falha so' a si proprio -- cega todos os que estao a jusante.
+  #
+  # A razao de ser inatingivel esta' medida e escrita na nota "AVISO MAIOR" de
+  # lib_boot_chain_metrics.sh: a thread so' pode ser criada a jusante de
+  # `0x002B2E14 bl 0x00242C94` (o loop principal), e func_00242C94 so' retorna
+  # em REQUEST_EXITGAME. Numa corrida saudavel: SetFlipCommand 2619, linhas
+  # apos o loop principal 0, degraus da cadeia 0, sonda de CONTROLO 2.
+  # "Nunca criada" e' o comportamento CORRECTO de um jogo que ainda corre.
+  #
+  # O valor continua a ser MEDIDO e IMPRESSO (thr_created/thr_end na linha de
+  # cada corrida) -- nao se perde dado nenhum, deixa apenas de decidir o rc.
+  #
+  # "Criada e nao termina" CONTINUA bloqueante: se a thread chega a nascer, o
+  # jogo saiu do loop principal e nao acabar e' um hang a serio.
+  elif [ "${thr_created:-0}" -ge 1 ] 2>/dev/null && [ "${thr_end:-0}" -lt 1 ] 2>/dev/null; then
+    echo "AUTO_LOAD (criada, nao termina)"
   elif [ "${r_perma:-0}" -lt 1 ] 2>/dev/null; then
     echo "WAD (R_PermA)"
   else
