@@ -339,6 +339,47 @@ try:
 except Exception as e:
     report("FIOS sticky done-word (4 insercoes)", False, "erro: %r" % (e,))
 
+# 6) Parede [4]: poda por subtag no outer walk (patch_outer_subtag_prune.py).
+#    Sem isto o walk le' matrix[0][3] (um float 0.0f) como cabeca de lista
+#    ligada e o loop nao termina: no_rep medido em 179.459.342 iteracoes.
+#    Com o fix, no_rep = 0 em 3 de 3 corridas (ver docs/re_sessions/
+#    2026-08-04-E5-aceite-parede-4.md).
+try:
+    n = src("ppu_recomp_001.cpp").count("Fase 11-03 FIX v2")
+    report("parede 4: poda por subtag no outer walk (1 sitio)", n == 1,
+           "esperado 1 ocorrencia em ppu_recomp_001.cpp, encontrado %d%s" % (
+               n, " -- fix AUSENTE do lift" if n == 0 else
+                  " -- lift CONTAMINADO (catalogo aplicado mais de uma vez)"))
+except Exception as e:
+    report("parede 4: poda por subtag no outer walk (1 sitio)", False, "erro: %r" % (e,))
+
+# 7) Parede [1]: skip por subtag no dispatch de func_0024E1E8
+#    (patch_24e1e8_wall1_subtag_skip.py). Sem isto o boot aborta com
+#    "[ppu] FATAL: stuck calling 0x00514E80" -- medido em 6 de 6 corridas.
+#    Com o fix o FATAL desaparece em 0 de 6 (ver 2026-08-05-E7-*.md).
+#
+#    A contagem e' EXACTA e por ficheiro, de proposito. Um `>= 1` passaria
+#    numa copia contaminada: em 2026-08-05 o recomp_macos_e6fix chegou a 16
+#    marcadores (o dobro) por o catalogo ter sido aplicado varias vezes sobre
+#    a mesma copia de trabalho, e nenhum teste deu conta. Se um re-lift mudar
+#    o numero de sitios, este check falha alto -- e' o comportamento desejado:
+#    alguem tem de reconferir e actualizar a contagem com medicao.
+try:
+    want = {"ppu_recomp_000.cpp": 1, "ppu_recomp_002.cpp": 5, "ppu_recomp_004.cpp": 2}
+    got = {f: src(f).count("PAREDE1-E6-SUBTAG-SKIP-FIX") for f in want}
+    total = sum(got.values())
+    ok = got == want
+    if total == 0:
+        why = "fix AUSENTE do lift"
+    elif total > sum(want.values()):
+        why = "lift CONTAMINADO (catalogo aplicado mais de uma vez)"
+    else:
+        why = "distribuicao inesperada"
+    report("parede 1: skip por subtag em 0024E1E8 (8 sitios)", ok,
+           "esperado %r, encontrado %r (total %d) -- %s" % (want, got, total, why))
+except Exception as e:
+    report("parede 1: skip por subtag em 0024E1E8 (8 sitios)", False, "erro: %r" % (e,))
+
 print()
 if fails:
     print("CHECKS: %d FALHA(S) -> %s" % (len(fails), ", ".join(fails)))
