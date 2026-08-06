@@ -42,7 +42,7 @@ import os
 import sys
 import glob
 
-MARKER = "POP212-PROBE"
+MARKER = "POP212-PROBE-V2"
 
 # 4 linhas, verificado unico no lift a 2026-08-05. A linha do +0xD0 e' o que a
 # distingue das outras chamadas a func_00263554.
@@ -74,6 +74,8 @@ REPL = (
     "            fprintf(stderr,\"[POP212] #%d mgr=0x%08X off=0x%X pool=0x%08X -> ret=0x%08X \\\"%s\\\"%s\\n\",\n"
     "              _n, _p212_mgr, _p212_off, _p212_pool, _r, _a,\n"
     "              (_r==0x2F725F70u)?\" <ENVENENADO>\":\"\");\n"
+    "            if(_p212_pool==0u){ fprintf(stderr,\"[POP212] ..pool NULO: vm_read32(4)=0x%08X vm_read32(0)=0x%08X\\n\",\n"
+    "                vm_read32(4u), vm_read32(0u)); }\n"
     "            fflush(stderr); } } }\n"
 )
 
