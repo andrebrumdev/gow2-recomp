@@ -53,7 +53,8 @@ import os
 import sys
 import glob
 
-MARKER = "EMPTYFAB-PROBE"
+MARKER = "EMPTYFAB-PROBE-V2"
+MARKER_V1 = "EMPTYFAB-PROBE:"
 
 # `loc_0039E5D0` e' unico no lift inteiro (label = endereco guest), logo a
 # agulha nao pode casar com func_0039DA78/func_0039DAB0, que tem a mesma forma
@@ -63,9 +64,11 @@ NEEDLE = (
     "        if (((ctx->cr >> 0) & 8)) goto loc_0039E5D0;\n"
 )
 
-REPL = (
-    "        ctx->gpr[9] = (int64_t)(int32_t)ctx->gpr[9];\n"
-    "        /* " + MARKER + ": cursor da fabrica ANTES do ramo -- ve' o vazio */\n"
+# Bloco da v1, sem `tid`. Fica aqui so' para poder ser SUBSTITUIDO: o lift nao
+# e' versionado, logo uma arvore que ja' levou a v1 tem de poder subir para a
+# v2 sem passar por um re-lift.
+BLOCK_V1 = (
+    "        /* EMPTYFAB-PROBE: cursor da fabrica ANTES do ramo -- ve' o vazio */\n"
     "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
     "            const char* _e=getenv(\"PS3_TRACE_EMPTYFAB\");\n"
     "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
@@ -79,6 +82,32 @@ REPL = (
     "              (_cur<0)?\"VAZIO->devolve-0\":\"ok\",\n"
     "              (uint32_t)ctx->lr);\n"
     "            fflush(stderr); } } }\n"
+)
+
+BLOCK = (
+    "        /* " + MARKER + ": cursor da fabrica ANTES do ramo -- ve' o vazio.\n"
+    "         * O tid separa corrida entre fios de ordem de programa (E46). */\n"
+    "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
+    "            const char* _e=getenv(\"PS3_TRACE_EMPTYFAB\");\n"
+    "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
+    "          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);\n"
+    "            const char* _c=getenv(\"PS3_TRACE_EMPTYFAB_CAP\");\n"
+    "            _cap=(_c&&*_c)?atoi(_c):400; }\n"
+    "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
+    # SEM `extern \"C\"`: especificacao de ligacao e' ilegal em escopo de bloco.
+    # ps3_dbg_tid e' C++ puro no ppu_loader.cpp, logo o mangled bate.
+    "            unsigned long ps3_dbg_tid(void);\n"
+    "            int _cur=(int)(int32_t)ctx->gpr[0];\n"
+    "            fprintf(stderr,\"[EMPTYFAB] tid=%lu fab=0x%08X cursor=%d %s lr=0x%08X\\n\",\n"
+    "              ps3_dbg_tid(), (uint32_t)ctx->gpr[3]-0x48u, _cur,\n"
+    "              (_cur<0)?\"VAZIO->devolve-0\":\"ok\",\n"
+    "              (uint32_t)ctx->lr);\n"
+    "            fflush(stderr); } } }\n"
+)
+
+REPL = (
+    "        ctx->gpr[9] = (int64_t)(int32_t)ctx->gpr[9];\n"
+    + BLOCK +
     "        if (((ctx->cr >> 0) & 8)) goto loc_0039E5D0;\n"
 )
 
@@ -86,6 +115,11 @@ REPL = (
 def patch_text(t):
     if MARKER in t:
         return t, "ALREADY", 0
+    if BLOCK_V1 in t:                      # upgrade v1 -> v2, sem re-lift
+        return t.replace(BLOCK_V1, BLOCK), "APPLIED", t.count(BLOCK_V1)
+    if MARKER_V1 in t:
+        # v1 presente mas com outro corpo -- nao adivinhar, parar.
+        return t, "MISSING", 0
     n = t.count(NEEDLE)
     if not n:
         return t, "MISSING", 0
