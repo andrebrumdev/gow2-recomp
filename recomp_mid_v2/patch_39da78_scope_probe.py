@@ -1,40 +1,48 @@
 #!/usr/bin/env python3
 """Sonda do PUSH e do POP do escopo da fabrica -- quem estabelece o escopo.
 
-Porque existe (E49)
--------------------
+Porque existe (E49, corrigido por E50/E51)
+------------------------------------------
 A fabrica `0x400C6210` guarda um contexto numa pilha cujo cursor vive em
 `this+0xC8`. `func_0039DA78` empurra, `func_0039DAB0` retira, e `func_0039E5A8`
 (`vt[0x48]`) devolve o topo -- ou **0** se a pilha estiver vazia, por contrato.
 
-O E49 mediu a particao dos 259 pedidos por chamador, e ela e' limpa:
+Medida a particao dos 259 pedidos POR CHAMADOR REAL (`ra` de host, nao `lr` --
+ver a nota de instrumento abaixo):
 
-    lr=0x0027C724  238  ok      FUN_0027c6f0
-    lr=0x002553D8   10  ok      FUN_00255368
-    lr=0x0042CA64    5  ok      FUN_0042ca14
-    lr=0x0024E424    2  VAZIO   FUN_0024e198
-    lr=0x0024E25C    1  VAZIO   FUN_0024e198
-    lr=0x002B2DE0    1  VAZIO   FUN_002b2dd0
-    lr=0x002A9A84    1  VAZIO   FUN_002a98e8
-    lr=0x00237D38    1  VAZIO   FUN_00237cdc
+    func_0027C6F0+0x54C  238  ok
+    ps3_call_opd+0x1D0    15  ok
+    func_0024E3D0+0x444    3  VAZIO
+    func_0039F0F8+0xC20    2  VAZIO
+    func_00264BA8+0x15C    1  VAZIO
 
-Nenhum sitio e' misto: tres chamadores acertam 253 de 253, quatro falham 6 de 6.
-Logo os que acertam correm DENTRO de um dos 176 escopos push/pop e os que
-falham correm FORA de todos. Duas leituras, com fixes diferentes:
+Nenhum chamador e' misto: dois acertam 253 de 253, tres falham 6 de 6. E as
+CINCO fabricas aparecem nos DOIS lados (E51) -- `0x40300E80` serve 225 vezes e
+falha uma. Logo nenhuma fabrica esta' partida: tres chamadores pedem fora da
+janela em que ha' produto, e nunca dentro dela. Duas leituras, com fixes
+diferentes:
 
-  1. FALTA O PUSH  -- o jogo devia ter empurrado antes destes quatro e, por
+  1. FALTA O PUSH  -- o jogo devia ter empurrado antes destes tres e, por
      razao nossa (HLE, ordem de init, caminho que nao corre), nao empurrou;
-  2. SOBRA A CHAMADA -- estes quatro nao deviam correr aqui de todo.
+  2. SOBRA A CHAMADA -- estes tres nao deviam correr aqui de todo.
 
-Esta sonda nomeia quem abre e fecha os escopos. Com o `lr` do push ao lado do
-`lr` do pedido, as duas leituras separam-se: se o push vem de um chamador que
-tambem alcanca os quatro falhados, e' ordem; se vem de outro ramo que nunca os
+NOTA DE INSTRUMENTO (E50): a v1 desta sonda imprimia `ctx->lr` como identidade
+do chamador, e isso e' FALSO -- o lifter so' escreve `ctx->lr` em chamadas
+DIRECTAS, e `ps3_indirect_call` nao o escreve de todo (467 linhas varridas,
+zero escritas). `func_0039DA78` e' chamada indirectamente, logo o `lr` da v1
+vinha pendurado de uma directa qualquer. A v2 imprime `ra1`/`ra2` de host
+resolvidos por `ps3_dbg_sym()` (dladdr) e mantem o `lr` ao lado, para a
+divergencia ficar visivel na propria linha.
+
+Esta sonda nomeia quem abre e fecha os escopos. Com o `ra` do push ao lado do
+`ra` do pedido, as duas leituras separam-se: se o push vem de um chamador que
+tambem alcanca os tres falhados, e' ordem; se vem de outro ramo que nunca os
 alcanca, e' escopo em falta.
 
 O que mede
 ----------
-  PUSH  fab, cursor NOVO, valor guardado (r10), lr, tid
-  POP   fab, cursor NOVO, lr, tid
+  PUSH  fab, cursor NOVO, valor guardado (r10), ra1/ra2, lr, tid
+  POP   fab, cursor NOVO, ra1/ra2, lr, tid
 
 `fab` e' `r3 - 0x48`: as duas funcoes somam 0x48 a' entrada, logo o `r3` no
 sitio da escrita ja' nao e' o `this` original.
@@ -52,10 +60,11 @@ Uso:  patch_39da78_scope_probe.py [DIR_DE_LIFT]
 rc: 0 aplicado/ja aplicado; 2 se alguma agulha nao casou.
 """
 import os
+import re
 import sys
 import glob
 
-MARKER = "SCOPE-PROBE"
+MARKER = "SCOPE-PROBE-V2"
 
 NEEDLE_PUSH = (
     "loc_0039DA90:\n"
@@ -75,10 +84,14 @@ BLOCK_PUSH = (
     "            _cap=(_c&&*_c)?atoi(_c):800; }\n"
     "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
     "            unsigned long ps3_dbg_tid(void);\n"
+    "            const char* ps3_dbg_sym(void*);\n"
+    "            void* _r1=__builtin_return_address(1);\n"
+    "            void* _r2=__builtin_return_address(2);\n"
     "            fprintf(stderr,\"[SCOPE] tid=%lu PUSH fab=0x%08X cursor=%d \"\n"
-    "              \"val=0x%08X lr=0x%08X\\n\", ps3_dbg_tid(),\n"
+    "              \"val=0x%08X ra1=%s ra2=%s lr=0x%08X\\n\", ps3_dbg_tid(),\n"
     "              (uint32_t)ctx->gpr[3]-0x48u, (int)(int8_t)ctx->gpr[9],\n"
-    "              (uint32_t)ctx->gpr[10], (uint32_t)ctx->lr);\n"
+    "              (uint32_t)ctx->gpr[10], ps3_dbg_sym(_r1), ps3_dbg_sym(_r2),\n"
+    "              (uint32_t)ctx->lr);\n"
     "            fflush(stderr); } } }\n"
 )
 
@@ -98,17 +111,29 @@ BLOCK_POP = (
     "            _cap=(_c&&*_c)?atoi(_c):800; }\n"
     "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
     "            unsigned long ps3_dbg_tid(void);\n"
+    "            const char* ps3_dbg_sym(void*);\n"
+    "            void* _r1=__builtin_return_address(1);\n"
+    "            void* _r2=__builtin_return_address(2);\n"
     "            fprintf(stderr,\"[SCOPE] tid=%lu POP  fab=0x%08X cursor=%d \"\n"
-    "              \"lr=0x%08X\\n\", ps3_dbg_tid(),\n"
+    "              \"ra1=%s ra2=%s lr=0x%08X\\n\", ps3_dbg_tid(),\n"
     "              (uint32_t)ctx->gpr[3]-0x48u, (int)(int8_t)ctx->gpr[10],\n"
-    "              (uint32_t)ctx->lr);\n"
+    "              ps3_dbg_sym(_r1), ps3_dbg_sym(_r2), (uint32_t)ctx->lr);\n"
     "            fflush(stderr); } } }\n"
 )
+
+
+# Blocos da v1, sem `ra`. O lift nao e' versionado, logo o patch tem de saber
+# REMOVER a v1 antes de por a v2 -- sem isto a insercao pela agulha (que
+# continua presente, porque a v1 foi inserida DEPOIS dela) duplicava a sonda.
+OLD_BLOCK_RE = re.compile(
+    r"        /\* SCOPE-PROBE (?:push|pop):[^\n]*\n"
+    r"(?:.*?fflush\(stderr\); \} \} \}\n)", re.S)
 
 
 def patch_text(t):
     if MARKER in t:
         return t, "ALREADY", 0
+    t, nold = OLD_BLOCK_RE.subn("", t)
     n = 0
     if NEEDLE_PUSH in t:
         t = t.replace(NEEDLE_PUSH, NEEDLE_PUSH + BLOCK_PUSH)
