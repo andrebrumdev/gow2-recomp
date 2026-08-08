@@ -53,7 +53,7 @@ import os
 import sys
 import glob
 
-MARKER = "EMPTYFAB-PROBE-V3"
+MARKER = "EMPTYFAB-PROBE-V4"
 MARKER_V1 = "EMPTYFAB-PROBE:"
 
 # `loc_0039E5D0` e' unico no lift inteiro (label = endereco guest), logo a
@@ -106,8 +106,8 @@ BLOCK_V2 = (
     "            fflush(stderr); } } }\n"
 )
 
-BLOCK = (
-    "        /* " + MARKER + ": cursor da fabrica ANTES do ramo -- ve' o vazio.\n"
+BLOCK_V3 = (
+    "        /* EMPTYFAB-PROBE-V3: cursor da fabrica ANTES do ramo -- ve' o vazio.\n"
     "         * ra0/ra1 sao os enderecos de retorno do HOST resolvidos por dladdr:\n"
     "         * o ctx->lr NAO serve para identificar o chamador numa vcall, porque\n"
     "         * o lifter so' o escreve em chamadas directas (E50). Fica impresso\n"
@@ -135,6 +135,40 @@ BLOCK = (
     "            fflush(stderr); } } }\n"
 )
 
+
+BLOCK = (
+    "        /* " + MARKER + ": cursor da fabrica ANTES do ramo -- ve' o vazio.\n"
+    "         * ra0/ra1 sao os enderecos de retorno do HOST resolvidos por dladdr:\n"
+    "         * o ctx->lr NAO serve para identificar o chamador numa vcall, porque\n"
+    "         * o lifter so' o escreve em chamadas directas (E50). Fica impresso\n"
+    "         * na mesma, ao lado, para se ver a divergencia. */\n"
+    "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
+    "            const char* _e=getenv(\"PS3_TRACE_EMPTYFAB\");\n"
+    "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
+    "          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);\n"
+    "            const char* _c=getenv(\"PS3_TRACE_EMPTYFAB_CAP\");\n"
+    "            _cap=(_c&&*_c)?atoi(_c):400; }\n"
+    "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
+    # SEM `extern \"C\"`: especificacao de ligacao e' ilegal em escopo de bloco.
+    # ps3_dbg_tid/ps3_dbg_sym sao C++ puro no ppu_loader.cpp, logo o mangled bate.
+    "            unsigned long ps3_dbg_tid(void);\n"
+    "            const char* ps3_dbg_sym(void*);\n"
+    "            int _cur=(int)(int32_t)ctx->gpr[0];\n"
+    "            void* _r1=__builtin_return_address(1);\n"
+    "            void* _r2=__builtin_return_address(2);\n"
+    "            void* _r3=__builtin_return_address(3);\n"
+    "            void* _r4=__builtin_return_address(4);\n"
+    "            fprintf(stderr,\"[EMPTYFAB] tid=%lu fab=0x%08X cursor=%d %s \"\n"
+    "              \"ra1=%s ra2=%s lr=0x%08X\\n\",\n"
+    "              ps3_dbg_tid(), (uint32_t)ctx->gpr[3]-0x48u, _cur,\n"
+    "              (_cur<0)?\"VAZIO->devolve-0\":\"ok\",\n"
+    "              ps3_dbg_sym(_r1), ps3_dbg_sym(_r2),\n"
+    "              (uint32_t)ctx->lr);\n"
+    "            if(_cur<0) fprintf(stderr,\"[EMPTYFAB+] ra3=%s ra4=%s\\n\",\n"
+    "              ps3_dbg_sym(_r3), ps3_dbg_sym(_r4));\n"
+    "            fflush(stderr); } } }\n"
+)
+
 REPL = (
     "        ctx->gpr[9] = (int64_t)(int32_t)ctx->gpr[9];\n"
     + BLOCK +
@@ -145,10 +179,10 @@ REPL = (
 def patch_text(t):
     if MARKER in t:
         return t, "ALREADY", 0
-    for older in (BLOCK_V2, BLOCK_V1):     # upgrade sem re-lift
+    for older in (BLOCK_V3, BLOCK_V2, BLOCK_V1):     # upgrade sem re-lift
         if older in t:
             return t.replace(older, BLOCK), "APPLIED", t.count(older)
-    if MARKER_V1 in t or "EMPTYFAB-PROBE-V2" in t:
+    if MARKER_V1 in t or "EMPTYFAB-PROBE-V2" in t or "EMPTYFAB-PROBE-V3" in t:
         # versao antiga presente mas com outro corpo -- nao adivinhar, parar.
         return t, "MISSING", 0
     n = t.count(NEEDLE)
