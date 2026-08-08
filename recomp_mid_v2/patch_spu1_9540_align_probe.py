@@ -48,7 +48,13 @@ esse caso, e segue o mesmo contrato dos `patch_*.py` do PPU: idempotente, rc=2
 se a agulha nao casar.
 
 Gate: `PS3_SPU_DBG` (o mesmo que as sondas `[ATTERR]`/`[EDGEATT1]` ja' usam via
-`spu_dbg_log`). Cap proprio de 12, como as vizinhas.
+`spu_dbg_log`).
+
+A v1 copiou das vizinhas o `if (n < 12)` -- cap no PRINT, contagem invisivel --
+depois de eu ter passado um dia a corrigir exactamente esse padrao no PPU
+(E63/E64). Deu 12 linhas em 12, ou seja o cap batido, e eu quase generalizei a
+partir das duas primeiras (E71/E72). A v2 usa as primeiras 16 mais cada potencia
+de 2, como o resto da arvore.
 
 Uso:  patch_spu1_9540_align_probe.py [DIR_DO_SPU_LIFT]
 rc: 0 aplicado/ja aplicado; 2 se a agulha nao casou.
@@ -56,7 +62,7 @@ rc: 0 aplicado/ja aplicado; 2 se a agulha nao casou.
 import os
 import sys
 
-MARKER = "LFQALIGN-SPU"
+MARKER = "LFQALIGN-SPU-V2"
 
 NEEDLE = (
     "void spu1_spu_func_00009540(spu_context* ctx) {\n"
@@ -67,7 +73,8 @@ REPL = (
     "void spu1_spu_func_00009540(spu_context* ctx) {\n"
     "        /* " + MARKER + ": qual invariante falhou -- r17 = buffer, r20 = fila.\n"
     "         * Ver recomp_mid_v2/patch_spu1_9540_align_probe.py (ledger E70). */\n"
-    "        { static int n = 0; if (n < 12) { n++;\n"
+    "        { static unsigned long n = 0; ++n;\n"
+    "          if (n <= 16 || (n & (n - 1)) == 0) {\n"
     "            extern int spu_dbg_log(const char* fmt, unsigned a, unsigned b);\n"
     "            spu_dbg_log(\"[LFQALIGN-SPU] buffer=0x%08X fila=0x%08X\\n\",\n"
     "                        ctx->gpr[17]._u32[0], ctx->gpr[20]._u32[0]); } }\n"
@@ -75,9 +82,19 @@ REPL = (
 )
 
 
+BLOCK_V1 = (
+    '        /* LFQALIGN-SPU: qual invariante falhou -- r17 = buffer, r20 = fila.\n'
+    '         * Ver recomp_mid_v2/patch_spu1_9540_align_probe.py (ledger E70). */\n'
+    '        { static int n = 0; if (n < 12) { n++;\n'
+    '            extern int spu_dbg_log(const char* fmt, unsigned a, unsigned b);\n'
+    '            spu_dbg_log("[LFQALIGN-SPU] buffer=0x%08X fila=0x%08X\\n",\n'
+    '                        ctx->gpr[17]._u32[0], ctx->gpr[20]._u32[0]); } }\n'
+)
+
 def patch_text(t):
     if MARKER in t:
         return t, "ALREADY", 0
+    t = t.replace(BLOCK_V1, "")   # remove a v1 (cap de 12) antes de por a v2
     n = t.count(NEEDLE)
     if not n:
         return t, "MISSING", 0
