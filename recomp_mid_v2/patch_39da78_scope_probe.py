@@ -64,7 +64,7 @@ import re
 import sys
 import glob
 
-MARKER = "SCOPE-PROBE-V2"
+MARKER = "SCOPE-PROBE-V3"
 
 NEEDLE_PUSH = (
     "loc_0039DA90:\n"
@@ -74,8 +74,8 @@ NEEDLE_PUSH = (
     "        vm_write8(ctx->gpr[3] + 0x80, ctx->gpr[9]);\n"
 )
 
-BLOCK_PUSH = (
-    "        /* " + MARKER + " push: quem abre o escopo da fabrica */\n"
+BLOCK_PUSH_V2 = (
+    "        /* SCOPE-PROBE-V2 push: quem abre o escopo da fabrica */\n"
     "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
     "            const char* _e=getenv(\"PS3_TRACE_SCOPE\");\n"
     "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
@@ -95,14 +95,40 @@ BLOCK_PUSH = (
     "            fflush(stderr); } } }\n"
 )
 
+BLOCK_PUSH = (
+    "        /* " + MARKER + " push: quem abre o escopo da fabrica */\n"
+    "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
+    "            const char* _e=getenv(\"PS3_TRACE_SCOPE\");\n"
+    "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
+    "          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);\n"
+    "            const char* _c=getenv(\"PS3_TRACE_SCOPE_CAP\");\n"
+    "            _cap=(_c&&*_c)?atoi(_c):800; }\n"
+    "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
+    "            unsigned long ps3_dbg_tid(void);\n"
+    "            const char* ps3_dbg_sym(void*);\n"
+    "            void* _r1=__builtin_return_address(1);\n"
+    "            void* _r2=__builtin_return_address(2);\n"
+    "            void* _r3=__builtin_return_address(3);\n"
+    "            void* _r4=__builtin_return_address(4);\n"
+    "            fprintf(stderr,\"[SCOPE] tid=%lu PUSH fab=0x%08X cursor=%d \"\n"
+    "              \"val=0x%08X ra1=%s ra2=%s lr=0x%08X\\n\", ps3_dbg_tid(),\n"
+    "              (uint32_t)ctx->gpr[3]-0x48u, (int)(int8_t)ctx->gpr[9],\n"
+    "              (uint32_t)ctx->gpr[10], ps3_dbg_sym(_r1), ps3_dbg_sym(_r2),\n"
+    "              (uint32_t)ctx->lr);\n"
+    "            if((int)(int8_t)ctx->gpr[10] < 0)\n"
+    "              fprintf(stderr,\"[SCOPE+] ra3=%s ra4=%s\\n\",\n"
+    "                ps3_dbg_sym(_r3), ps3_dbg_sym(_r4));\n"
+    "            fflush(stderr); } } }\n"
+)
+
 NEEDLE_POP = (
     "        if (((ctx->cr >> 0) & 8)) { g_trampoline_fn = (void(*)(void*))func_0039DAF4; return; }\n"
     "        ctx->gpr[11] = vm_read32((ctx->gpr[7] + ctx->gpr[11]));\n"
     "        vm_write8(ctx->gpr[3] + 0x80, ctx->gpr[10]);\n"
 )
 
-BLOCK_POP = (
-    "        /* " + MARKER + " pop: quem fecha o escopo da fabrica */\n"
+BLOCK_POP_V2 = (
+    "        /* SCOPE-PROBE-V2 pop: quem fecha o escopo da fabrica */\n"
     "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
     "            const char* _e=getenv(\"PS3_TRACE_SCOPE\");\n"
     "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
@@ -122,6 +148,32 @@ BLOCK_POP = (
 )
 
 
+BLOCK_POP = (
+    "        /* " + MARKER + " pop: quem fecha o escopo da fabrica */\n"
+    "        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);\n"
+    "            const char* _e=getenv(\"PS3_TRACE_SCOPE\");\n"
+    "            _on=(_e&&*_e&&*_e!='0')?1:0; }\n"
+    "          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);\n"
+    "            const char* _c=getenv(\"PS3_TRACE_SCOPE_CAP\");\n"
+    "            _cap=(_c&&*_c)?atoi(_c):800; }\n"
+    "          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){\n"
+    "            unsigned long ps3_dbg_tid(void);\n"
+    "            const char* ps3_dbg_sym(void*);\n"
+    "            void* _r1=__builtin_return_address(1);\n"
+    "            void* _r2=__builtin_return_address(2);\n"
+    "            void* _r3=__builtin_return_address(3);\n"
+    "            void* _r4=__builtin_return_address(4);\n"
+    "            fprintf(stderr,\"[SCOPE] tid=%lu POP  fab=0x%08X cursor=%d \"\n"
+    "              \"ra1=%s ra2=%s lr=0x%08X\\n\", ps3_dbg_tid(),\n"
+    "              (uint32_t)ctx->gpr[3]-0x48u, (int)(int8_t)ctx->gpr[10],\n"
+    "              ps3_dbg_sym(_r1), ps3_dbg_sym(_r2), (uint32_t)ctx->lr);\n"
+    "            if((int)(int8_t)ctx->gpr[10] < 0)\n"
+    "              fprintf(stderr,\"[SCOPE+] ra3=%s ra4=%s\\n\",\n"
+    "                ps3_dbg_sym(_r3), ps3_dbg_sym(_r4));\n"
+    "            fflush(stderr); } } }\n"
+)
+
+
 # Blocos da v1, sem `ra`. O lift nao e' versionado, logo o patch tem de saber
 # REMOVER a v1 antes de por a v2 -- sem isto a insercao pela agulha (que
 # continua presente, porque a v1 foi inserida DEPOIS dela) duplicava a sonda.
@@ -133,6 +185,8 @@ OLD_BLOCK_RE = re.compile(
 def patch_text(t):
     if MARKER in t:
         return t, "ALREADY", 0
+    for older in (BLOCK_PUSH_V2, BLOCK_POP_V2):
+        t = t.replace(older, "")
     t, nold = OLD_BLOCK_RE.subn("", t)
     n = 0
     if NEEDLE_PUSH in t:
