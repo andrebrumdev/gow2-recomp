@@ -76,8 +76,25 @@ CHAMADORES = (("func_00237CDC", "00237D4C"), ("func_0023807C", "002380EC"))
 # dentro de func_00264BA8: antes e depois da chamada virtual
 N_PRE_V = ("        ctx->gpr[2] = vm_read32(ctx->gpr[10] + 0x4);\n"
            "        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);\n")
+
+# O pre-virtual imprime tambem o ALVO. Sem ele nao se distingue "a virtual correu
+# e o metodo devolveu 0" de "despachou para um stub/lixo que devolve 0" -- e a
+# primeira corrida ficou exactamente nessa duvida. ctr/r9/r10 estao todos vivos
+# aqui (o lift acabou de os calcular), portanto e' captura e nao reconstrucao.
+PRE_V_ALVO = (
+    '        /* ' + MARKER + '-pre-virtual */\n'
+    '        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);\n'
+    '              const char* _e = getenv("PS3_TRACE_R31SRC");\n'
+    '              _r_on = (_e && *_e && *_e != \'0\') ? 1 : 0; }\n'
+    '          if (_r_on) { fprintf(stderr, "[R31SRC] pre-virtual r3=0x%08X r11=0x%08X "\n'
+    '                "vtable=0x%08X opd=0x%08X ctr=0x%08X toc=0x%08X\\n",\n'
+    '                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11],\n'
+    '                (uint32_t)ctx->gpr[9], (uint32_t)ctx->gpr[10],\n'
+    '                (uint32_t)ctx->ctr, (uint32_t)ctx->gpr[2]); fflush(stderr); } }\n'
+)
+
 R_PRE_V = ("        ctx->gpr[2] = vm_read32(ctx->gpr[10] + 0x4);\n"
-           + p("pre-virtual") +
+           + PRE_V_ALVO +
            "        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);\n"
            + p("pos-virtual"))
 
