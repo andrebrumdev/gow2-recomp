@@ -35,6 +35,14 @@ def main():
         i = s.index(N1); j = s.index(N2, i)
         if j - i > 400: print("ERRO: N2 longe de N1", file=sys.stderr); return 2
         s = s[:i] + PRE + N1 + s[i+len(N1):j] + N2 + POST + s[j+len(N2):]
+        # v2: o ctr do despacho que se segue (o metodo vt[5] do gestor de tipo 4).
+        # Capturado no ponto em que o lift acabou de o calcular, antes do icall.
+        N3 = "        ctx->gpr[2] = vm_read32(ctx->gpr[10] + 0x4);\n        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);\n"
+        k = s.index(N3, s.index(POST))
+        if k - s.index(POST) > 800: print("ERRO: N3 longe", file=sys.stderr); return 2
+        CTR = ('        if (_t4_on) { fprintf(stderr, "[TAB4] despacho vt[5]: obj=0x%08X vtable=0x%08X opd=0x%08X ctr=0x%08X\\n",\n'
+               '                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[9], (uint32_t)ctx->gpr[10], (uint32_t)ctx->ctr); fflush(stderr); }\n')
+        s = s[:k] + "        ctx->gpr[2] = vm_read32(ctx->gpr[10] + 0x4);\n" + CTR + "        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);\n" + s[k+len(N3):]
         open(path, "w").write(s); print("APPLIED", os.path.basename(path)); return 0
     print("MISSING", file=sys.stderr); return 2
 if __name__ == "__main__": sys.exit(main())
