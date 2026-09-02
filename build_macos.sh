@@ -460,7 +460,7 @@ clang++ -std=c++20 $HOST_OPT \
     "$RUNTIME_LIB" \
     -framework Metal -framework MetalFX -framework QuartzCore -framework Foundation \
     -framework Cocoa \
-    -framework AVFoundation -framework CoreMedia -framework CoreVideo \
+    -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox \
     -framework AudioToolbox -framework CoreAudio \
     -framework GameController -framework CoreHaptics \
     $SDL_FLAGS $VK_FLAGS -lm \
