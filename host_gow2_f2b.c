@@ -119,6 +119,17 @@ unsigned f2b_fo_mfd_get(uint32_t fo) {
         if (g_f2b_fo_mfd_fo[i] == fo) return g_f2b_fo_mfd_fd[i];
     return 0;
 }
+/* E131 (2026-09-02): o guest fecha o file handle (dtor do fh, func_0031F540) --
+ * libertar a entrada fo->mfd para o slot do movieio poder ser reutilizado. */
+void f2b_fo_mfd_del(uint32_t fo) {
+    for (int i = 0; i < g_f2b_fo_mfd_n; i++)
+        if (g_f2b_fo_mfd_fo[i] == fo) {
+            for (int j = i + 1; j < g_f2b_fo_mfd_n; j++) {
+                g_f2b_fo_mfd_fo[j-1] = g_f2b_fo_mfd_fo[j]; g_f2b_fo_mfd_fd[j-1] = g_f2b_fo_mfd_fd[j]; g_f2b_fo_mfd_sz[j-1] = g_f2b_fo_mfd_sz[j];
+            }
+            g_f2b_fo_mfd_n--; return;
+        }
+}
 uint32_t f2b_fo_sz_get(uint32_t fo) {
     for (int i = 0; i < g_f2b_fo_mfd_n; i++)
         if (g_f2b_fo_mfd_fo[i] == fo) return g_f2b_fo_mfd_sz[i];
