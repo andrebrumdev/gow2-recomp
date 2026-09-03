@@ -536,6 +536,10 @@ static void movie_sampler_loop(void)
          * movie_cache when the player becomes active (PS3_MOVIE_HLE). */
         if (st >= 1u && st != 0xFFFFFFFFu)
             movie_hle_autostart_cache_if_needed();
+        /* E178: ponte gated (PS3_MOVIE_VT_REPLAY=1) -- no Play seguinte (st620 0 -> >=1)
+         * repete o overlay do cache, porque o 2o filme ja' nao passa pelo movie_io_open. */
+        /* Medido (e178): entre o Play#1 e o Play#2 a FSM vai 11 -> 1 -> 3 -> 11 sem passar
+         * por 0 no sampler; a aresta e' "estado alto (>=10) ou 0 -> estado de arranque (1..9)". */
 #endif
 
         /* Sinal REAL de "filme acabou" (produtor). No Windows vem do overlay
@@ -543,6 +547,19 @@ static void movie_sampler_loop(void)
          * o produtor time-based (PS3_MOVIE_DONE_MS). */
         long done_overlay = movie_hle_overlay_done() ? 1 : 0;
         long done         = done_overlay ? 1 : movie_done_timebased_poll(st);
+#if defined(__APPLE__)
+        /* Medido (e178): o sampler so' ve 0 -> 1 -> 11 -> 11; o Play#2 arranca e estaciona em 11
+         * antes de o sampler o apanhar. Sinal fiavel: o hook EOS do Play#1 ja' foi consumido e
+         * limpo pelo CE03C (g_movie_eos_ea==0), o overlay esta' "done" e a FSM esta' de novo
+         * a' espera (st>=10). O replay repoe overlay_done=0, logo dispara uma vez por Play. */
+        { static int dbg = 0;
+          if (dbg++ < 3 && st >= 10u && st != 0xFFFFFFFFu && getenv("PS3_MOVIE_VT_REPLAY")) {
+              fprintf(stderr, "[MOVIEEOS] replay-check st=%u eos_ea=0x%08X done_overlay=%ld\n", st, g_movie_eos_ea, done_overlay); fflush(stderr); } }
+        if (st >= 10u && st != 0xFFFFFFFFu && g_movie_eos_ea == 0u && done_overlay) {
+            extern void movie_vt_replay_from_cache(void);
+            movie_vt_replay_from_cache();
+        }
+#endif
 
         /* Mesmo formato do host Windows, para os dois logs se compararem
          * linha a linha. Emitido na transicao OU no heartbeat. */
