@@ -20,12 +20,14 @@ extern void spu2_spu_func_00004080(spu_context* ctx);   /* spu2 e_entry 0x4080 *
 extern void spu3_spu_func_00004080(spu_context* ctx);   /* spu3 e_entry 0x4080 */
 extern void spu4_spu_func_00003050(spu_context* ctx);   /* spu4 e_entry 0x3050 (fp 0x9527C889B1945669) */
 extern void spu5_spu_func_00003070(spu_context* ctx);   /* spu5 e_entry 0x3070 (fp 0x3512A7E99D34E0FF) */
+extern void spu6_spu_func_00003000(spu_context* ctx);   /* spu6 e_entry 0x3000 (fp 0xCEDB9A67A0C3A305 = SCREAM mixer PM) */
 extern void spu0_spu_recomp_register(void);
 extern void spu1_spu_recomp_register(void);
 extern void spu2_spu_recomp_register(void);
 extern void spu3_spu_recomp_register(void);
 extern void spu4_spu_recomp_register(void);
 extern void spu5_spu_recomp_register(void);
+extern void spu6_spu_recomp_register(void);
 
 void gow2_register_spu_workloads(void)
 {
@@ -35,6 +37,7 @@ void gow2_register_spu_workloads(void)
     spu3_spu_recomp_register();
     spu4_spu_recomp_register();
     spu5_spu_recomp_register();
+    spu6_spu_recomp_register();
     spu_workload_register(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0");
     /* spu1 (dearch / EDGE-zlib) VERIFICADO no caminho intro->WAD (Task 4 do
      * plano 2): sob PS3_SPU1=1 o dispatch vai de MISS constante (~332/120s) a
@@ -78,6 +81,11 @@ void gow2_register_spu_workloads(void)
         spu_workload_register(0x9527C889B1945669ull, spu4_spu_func_00003050, "gow2_spu4");
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
         spu_workload_register(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5");
+    /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980, base LS 0x3000).
+     * E' o PM cujo relogio de audio gateia a transicao do estado da app (parede [G]).
+     * Gated PS3_SPU6 (host e' SEH/setjmp; um job que rebenta leva o processo). */
+    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU6"))
+        spu_workload_register(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000, "gow2_spu6");
 }
 
 #if defined(__GNUC__)
