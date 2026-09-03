@@ -10,7 +10,7 @@ def main():
         s=f.read_text(errors='replace'); h="void func_0030644C(ppu_context* ctx) {"
         if h in s:
             if "E151-DONE" in s: print("E151: ALREADY"); return 0
-            s=s.replace(h,h+"\n        /* E151-DONE */ "+GATE+r''' if(_on){ static int _k=0; if(_k++<60){ uint32_t _op=(uint32_t)ctx->gpr[3]; int _ok=(_op>=0x10000u&&_op<0x4F000000u); uint32_t _fh=_ok?vm_read32(_op+0x98u):0u; '''+PATH+r''' fprintf(stderr,"[FIOSOP] done op=0x%08X tipo=0x%X status=0x%08X r4=%u path='%s'\n",_op,_ok?vm_read32(_op+0x40u):0u,_ok?vm_read32(_op+0x44u):0u,(uint32_t)ctx->gpr[4],_p); } } }''',1)
+            s=s.replace(h,h+"\n        /* E151-DONE */ "+GATE+r''' if(_on){ static int _k=0; if(_k++<120){ uint32_t _op=(uint32_t)ctx->gpr[3]; int _ok=(_op>=0x10000u&&_op<0x4F000000u); uint32_t _fh=_ok?vm_read32(_op+0x98u):0u; '''+PATH+r''' fprintf(stderr,"[FIOSOP] done op=0x%08X tipo=0x%X status=0x%08X r4=%u path='%s' op+0x30=0x%08X op+0x34=0x%08X lr=0x%08X\n",_op,_ok?vm_read32(_op+0x40u):0u,_ok?vm_read32(_op+0x44u):0u,(uint32_t)ctx->gpr[4],_p, _ok?vm_read32(_op+0x30u):0u, _ok?vm_read32(_op+0x34u):0u, (uint32_t)ctx->lr); } } }''',1)
             f.write_text(s); print("E151: instrumentado em",f.name); return 0
     print("E151: nao achei"); return 2
 if __name__=="__main__": raise SystemExit(main())
