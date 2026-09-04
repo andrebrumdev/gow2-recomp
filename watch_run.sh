@@ -4,7 +4,7 @@
 # Stop criteria (first wins):
 #   - "[ICALL-BAD]" whose host_ra names func_002F0AAC (the E385 GCM-callback crash)
 #   - "[ACC30-CYCLE]" dump (registry-walk cycle detector, E387)
-#   - idle: no new TYPE15SHELL post#N and no new WADLD-SM tick for idle_s seconds after the first shell
+#   - idle: no new TYPE15SHELL post#N and no new WADLD-SM tick for idle_s seconds, armed after the first loader tick (needs PS3_TRACE_TYMAP=1)
 #   - deadline
 # Prints the reason and elapsed seconds. Diagnostic tooling only; touches nothing in the runtime.
 RUN="$1"; LOG="$2"; IDLE="${3:-8}"; DL="${4:-120}"
@@ -19,7 +19,7 @@ while :; do
   if grep -q "ACC30-CYCLE" "$LOG"; then sleep 1; reason="ACC30-CYCLE dump"; break; fi
   sig="$(grep -oE 'post#[0-9]+' "$LOG" | tail -1)|$(grep -c 'WADLD-SM' "$LOG")"
   if [ "$sig" != "$last_sig" ]; then last_sig="$sig"; last_change=$now; fi
-  if [ -n "$(grep -oE 'post#[0-9]+' "$LOG" | tail -1)" ] && [ $((now-last_change)) -ge "$IDLE" ]; then reason="idle ${IDLE}s after $sig"; break; fi
+  if [ "$(grep -c 'WADLD-SM' "$LOG")" -ge 1 ] && [ $((now-last_change)) -ge "$IDLE" ]; then reason="idle ${IDLE}s after $sig"; break; fi
   [ "$el" -ge "$DL" ] && break
 done
 kill -TERM "$PID" 2>/dev/null; sleep 1; kill -9 "$PID" 2>/dev/null
