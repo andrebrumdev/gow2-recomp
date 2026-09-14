@@ -37,12 +37,14 @@ MARKER = "FIOS-16C-SELFHEAL"
 ROOT = (Path(sys.argv[1]) if len(sys.argv) > 1
         else Path(__file__).resolve().parent.parent / "recomp_macos_v2")
 
-# Ancora: leitura de media+0x16C seguida do "isync" no-op -- confirmado
+# Ancora: leitura de media+0x16C seguida do "isync" -- confirmado
 # unico (1 ocorrencia) em todo o lift, apesar de "+ 0x16C" sozinho nao ser
-# especifico.
+# especifico. O isync aceita as duas formas: o no-op do lifter antigo e o
+# PPU_FENCE(acquire) do lifter com fences (porte de upstream 981930fd, ou
+# patch_ppu_fences.py sobre um lift antigo).
 NEEDLE_RE = re.compile(
     r"( *ctx->gpr\[0\] = vm_read32\(ctx->gpr\[31\] \+ 0x16C\);\n"
-    r" */\* isync: cache/sync — no-op \*/;\n)"
+    r" *(?:/\* isync: cache/sync — no-op \*/;|PPU_FENCE\(acquire\);[^\n]*)\n)"
 )
 
 BLOCK = (
