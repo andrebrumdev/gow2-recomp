@@ -80,6 +80,17 @@ def main() -> int:
         "}\n",
         "void spu6_spu_func_0003FEC0(spu_context* ctx) { (void)ctx; }\n",
     )
+    # The 0x4930 helper is called with its link in r4 (not the usual r0).
+    # Its final `bi r4` is therefore a C return to the brsl caller, not an
+    # indirect tail jump to a mid-function PC such as 0x54A0.
+    begin = source.index("void spu6_spu_func_00004930")
+    end = source.index("void spu6_spu_func_00004960", begin)
+    helper = source[begin:end]
+    old_return = "ctx->pc = ctx->gpr[4]._u32[0]; spu_indirect_branch(ctx); return;"
+    if helper.count(old_return) != 1:
+        raise RuntimeError("unexpected SPU6 0x4930 return shape")
+    helper = helper.replace(old_return, "return;")
+    source = source[:begin] + helper + source[end:]
     source_path.write_text(source)
     for address in EXTRA:
         symbol = f"spu6_spu_func_{address:08X}"
