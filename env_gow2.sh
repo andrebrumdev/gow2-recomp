@@ -89,3 +89,5 @@ fi
 : "${PS3_METAL_DEBUG_NODEPTH:=0}"; export PS3_METAL_DEBUG_NODEPTH
 # Class B depth diagnostics (default B0 = RSX). always / lequal / gequal / invert.
 : "${PS3_METAL_DEBUG_DEPTH:=rsx}"; export PS3_METAL_DEBUG_DEPTH
+# Diagnostic: black-clear the flip's color target once per frame (first 3D pass).
+: "${PS3_METAL_DEBUG_CLEAR_FRAME:=0}"; export PS3_METAL_DEBUG_CLEAR_FRAME
