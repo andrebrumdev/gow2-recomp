@@ -87,6 +87,23 @@ void gow2_midasm_TypewalkPushChild(ppu_context* ctx);
  * e' desta corrida. */
 void gow2_midasm_TypewalkPop(ppu_context* ctx);
 
+/* ---------------------------------------------------------------------------
+ * SONDA E3 -- a contagem que decide D-11.2 (fix A vs fix B da parede 4).
+ * Gated por PS3_OUTER_SUBTAG_CENSUS=1, OFF por default (G2). NAO E' UM FIX:
+ * so' le' -- nao escreve memoria guest, nem toca em ctx->gpr/cr/ctr/lr. Ver
+ * docs/re_sessions/2026-08-04-E3-outer-walk-subtag-census.md para a pergunta,
+ * as ancoras e as duas previsoes (escritas ANTES deste hook existir).
+ * ------------------------------------------------------------------------ */
+
+/* EA guest 0x0042003C -- `lwz r27, 0x88(r28)` dentro de func_0041FF70 (o walk
+ * exterior), imediatamente APOS os dois filtros de flags (flags&0x10,
+ * flags&3) e o gate "tem filho" terem passado. Nesse ponto ctx->gpr[28] e' o
+ * `piVar8` do C do Ghidra -- o wrapper de registo que a instrucao seguinte
+ * vai desreferenciar em +0x88. O hook le' o MESMO valor, sem alterar o que a
+ * instrucao traduzida faz a seguir. Discriminador: quantos desses wrappers,
+ * com subtag != 1, chegam aqui numa corrida? */
+void gow2_midasm_OuterWalkSubtagCensus(ppu_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif

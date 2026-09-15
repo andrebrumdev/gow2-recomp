@@ -106,6 +106,26 @@ name = "TypewalkPop"
 address = 0x0041F924
 
 # ---------------------------------------------------------------------------
+# SONDA E3 -- a contagem que decide D-11.2 (Fase 11: fix A no desserializador
+# 0x00254C40 vs. fix B no walk exterior 0x0041FF70). NAO E' UM FIX: e'
+# observacao, gated por PS3_OUTER_SUBTAG_CENSUS=1 e OFF por default (regra 6
+# do CLAUDE.md / G2 do marco). O corpo nao escreve memoria guest nem toca em
+# ctx->gpr.
+#
+# Previsoes escritas ANTES de este hook existir:
+#   docs/re_sessions/2026-08-04-E3-outer-walk-subtag-census.md
+#
+# `address` = 0x0042003C -- `lwz r27, 0x88(r28)` dentro de func_0041FF70,
+# IMEDIATAMENTE APOS os dois filtros de flags (flags&0x10 em 0x42000C,
+# flags&3 em 0x420018) e o gate "tem filho" (0x420030/0x420038) terem
+# passado. r28 e' o wrapper de registo ("piVar8") cujo +0x88 a instrucao
+# seguinte vai desreferenciar -- o hook le' o MESMO valor, sem alterar o
+# fluxo. Reverificado contra o EBOOT.ELF real no plano 11-01 (Task 1).
+[[midasm_hook]]
+name = "OuterWalkSubtagCensus"
+address = 0x0042003C
+
+# ---------------------------------------------------------------------------
 # Weak function overrides
 # ---------------------------------------------------------------------------
 # PILOTO DA FASE 19 (plano 19-02). Ao contrario do [[midasm_hook]] acima -- que

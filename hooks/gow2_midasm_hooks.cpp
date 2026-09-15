@@ -651,3 +651,151 @@ void gow2_midasm_TypewalkPop(ppu_context* ctx)
 }
 
 } /* extern "C" */
+
+/* ===========================================================================
+ * SONDA E3 -- a contagem que decide D-11.2 (Fase 11: fix A no desserializador
+ * 0x00254C40 vs. fix B no walk exterior 0x0041FF70).
+ *
+ * NAO E' UM FIX. E' OBSERVACAO -- a mesma disciplina da SONDA E1 acima:
+ *   - NAO escreve um unico byte na memoria guest;
+ *   - NAO toca em ctx->gpr / cr / ctr / lr;
+ *   - NAO chama codigo guest;
+ *   - com PS3_OUTER_SUBTAG_CENSUS por definir, le' um int cacheado e devolve.
+ *
+ * O QUE MEDE (o discriminador da sessao de 2026-08-04, ver
+ * docs/re_sessions/2026-08-04-E3-outer-walk-subtag-census.md, onde as duas
+ * previsoes estao escritas ANTES deste hook existir):
+ *
+ *   Em func_0041FF70 (o walk exterior), no EA 0x0042003C -- `lwz r27,
+ *   0x88(r28)` -- o wrapper de registo em ctx->gpr[28] ("piVar8" no C do
+ *   Ghidra) JA' passou os dois filtros de flags (flags&0x10 em 0x42000C,
+ *   flags&3 em 0x420018) e o gate "tem filho" (0x420030/0x420038). Quantos
+ *   desses wrappers, nesta corrida, tem subtag != 1?
+ *     == 1 (so' o registo WAD conhecido) -> candidato B (D-11.1/D-11.2)
+ *      > 1                                -> a pergunta reabre para A
+ *
+ * VOLUME: a E1 mediu apenas 2 objectos a alcancar este ponto por corrida (o
+ * walk exterior enumera muito menos do que o walk interior que ele chama).
+ * Por isso um pequeno conjunto (cap OSC_KEYS_MAX pares distintos) chega --
+ * nao e' precisa a tabela de 512 slots com sondagem linear da E1 -- e o
+ * resumo pode sair em CADA chamada em vez de periodico por tempo: o custo e'
+ * irrisorio e evita a janela de cegueira entre marcos que a E1 teve de
+ * resolver com tw_time_due(). O boot e' morto por kill -TERM (G6), que nao
+ * corre atexit -- por isso o ultimo resumo tem de estar a' distancia de UMA
+ * chamada do fim, nao de um marco por tempo.
+ *
+ * CONCORRENCIA: mesma nota da SONDA E1 -- o corpo de uma funcao liftada corre
+ * com o giant lock do PPU TOMADO, por isso os contadores abaixo sao simples.
+ * ======================================================================== */
+
+enum { OSC_KEYS_MAX = 16 };   /* cap de pares (low16,subtag) distintos */
+
+struct osc_key { uint32_t low16, subtag; };
+
+static osc_key             g_osc_keys[OSC_KEYS_MAX];
+static int                 g_osc_nkeys       = 0;
+static unsigned long long  g_osc_calls       = 0;   /* total de chamadas ao hook */
+static unsigned long long  g_osc_match_total = 0;   /* D-11.2: subtag != 1 */
+static unsigned long long  g_osc_w0_known    = 0;   /* C-known: w0 == TW_W0_KNOWN */
+static uint32_t            g_osc_tab_first   = 0;   /* C1 */
+static unsigned long long  g_osc_tab_bad     = 0;   /* C1: gpr[24] mudou entre chamadas */
+
+static int gow2_outer_subtag_census_on(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("PS3_OUTER_SUBTAG_CENSUS");
+        on = (e && *e && *e != '0') ? 1 : 0;
+    }
+    return on;
+}
+
+/* Resumo por CHAMADA (nao periodico -- ver a nota de VOLUME acima). Reusa as
+ * constantes de controlo TW_TAB_EXPECT/TW_W0_KNOWN ja' declaradas para a
+ * SONDA E1: e' o MESMO tab base (0x00868D48, mesmo TOC -0x225C(r2), so' que
+ * lido para r24 aqui em vez de r28 no push interior) e o MESMO w0 patologico
+ * (0x40030001) medido pela E1 -- nao se re-deriva o que ja' esta' medido. */
+static void osc_dump(void)
+{
+    ps3_trace_emit(PS3_TS_CHECKPOINTS, "func_0041FF70", "OUTER_SUBTAG_CENSUS_SUM",
+        "calls=%llu match=%llu keys=%d w0_%08X=%llu tab=0x%08X tab_ok=%d tab_bad=%llu",
+        g_osc_calls, g_osc_match_total, g_osc_nkeys, TW_W0_KNOWN, g_osc_w0_known,
+        g_osc_tab_first, (g_osc_tab_first == TW_TAB_EXPECT) ? 1 : 0, g_osc_tab_bad);
+}
+
+extern "C" {
+
+/* ---------------------------------------------------------------------------
+ * EA guest 0x0042003C, ANTES da instrucao `lwz r27, 0x88(r28)`. Nesse ponto
+ * ctx->gpr[28] = piVar8 (o wrapper de registo, ja' filtrado por flags+gate
+ * "tem filho") e ctx->gpr[24] = tab (a base da tabela de tipos, carregada em
+ * 0x0041FF7C e viva ate' aqui -- C1).
+ * ------------------------------------------------------------------------ */
+GOW2_MIDASM_USED
+void gow2_midasm_OuterWalkSubtagCensus(ppu_context* ctx)
+{
+    if (!gow2_outer_subtag_census_on()) return;
+
+    g_osc_calls++;
+
+    /* C1 -- a base da tabela e' a que o guest carrega, nao uma constante
+     * nossa. Se divergir do primeiro valor visto, a sonda esta' a ler outro
+     * sitio e nada do que ela diz conta. */
+    const uint32_t tab = (uint32_t)ctx->gpr[24];
+    if (g_osc_tab_first == 0u) g_osc_tab_first = tab;
+    else if (tab != g_osc_tab_first) g_osc_tab_bad++;
+
+    const uint32_t piVar8 = (uint32_t)ctx->gpr[28];
+
+    /* C-alive -- sem esta linha, um silencio nao distingue "nao passou aqui"
+     * de "a sonda nao foi compilada". */
+    if (g_osc_calls == 1ULL) {
+        ps3_trace_emit(PS3_TS_CHECKPOINTS, "func_0041FF70", "OUTER_SUBTAG_ALIVE",
+            "hook=before_0042003C tab=0x%08X piVar8=0x%08X", tab, piVar8);
+    }
+
+    /* Guarda de leitura: piVar8+0x88 e' exactamente o que a instrucao
+     * seguinte (0x0042003C) vai carregar em r27 -- o hook LE' o mesmo valor,
+     * sem escrever em ctx->gpr[27] nem alterar o que o guest faz a seguir. */
+    if (gow2_ea_ok(piVar8 + 0x88u)) {
+        const uint32_t h_child = vm_read32(piVar8 + 0x88u);
+
+        if (gow2_ea_ok(h_child + 4u)) {
+            const uint32_t w0     = vm_read32(h_child + 4u);
+            const uint32_t low16  = w0 & 0xFFFFu;
+            const uint32_t subtag = (w0 >> 16) & 0xFFFu;
+
+            /* C-known -- reproduzir um numero ja' medido pela E1 antes de
+             * confiar no que esta sonda diz de novo. */
+            if (w0 == TW_W0_KNOWN) g_osc_w0_known++;
+
+            /* D-11.2 -- o discriminador em si: piVar8 ja' passou os dois
+             * filtros de flags e o gate "tem filho" (garantido pela ancora
+             * em 0x0042003C); resta perguntar se subtag != 1. */
+            if (subtag != 1u) {
+                g_osc_match_total++;
+
+                int found = -1;
+                for (int i = 0; i < g_osc_nkeys; i++) {
+                    if (g_osc_keys[i].low16 == low16 && g_osc_keys[i].subtag == subtag) {
+                        found = i;
+                        break;
+                    }
+                }
+                if (found < 0 && g_osc_nkeys < OSC_KEYS_MAX) {
+                    g_osc_keys[g_osc_nkeys].low16  = low16;
+                    g_osc_keys[g_osc_nkeys].subtag = subtag;
+                    g_osc_nkeys++;
+                    ps3_trace_emit(PS3_TS_CHECKPOINTS, "func_0041FF70", "OUTER_SUBTAG_MATCH",
+                        "w0=0x%08X h_child=0x%08X low16=0x%04X subtag=0x%03X "
+                        "piVar8=0x%08X n=%llu tab=0x%08X",
+                        w0, h_child, low16, subtag, piVar8, g_osc_match_total, tab);
+                }
+            }
+        }
+    }
+
+    osc_dump();
+}
+
+} /* extern "C" */

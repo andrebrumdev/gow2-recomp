@@ -72,3 +72,20 @@ fi
 
 # Reordenacao do cellSysutil exigida pela ordem de init do titulo.
 : "${PS3_CELLSYS_REORDER:=1}";  export PS3_CELLSYS_REORDER
+
+# Pos-intro sem FREELIST-TAG-GUARD (E466 vis / 240 s medido): callback GCM,
+# lwmutex real, sticky FIOS, produtor de EOS. PS3_GCM_CB=0 / LWMUTEX_STUB=1
+# restauram o legado que aborta no open do WAD.
+: "${PS3_GCM_CB:=1}";              export PS3_GCM_CB
+: "${PS3_LWMUTEX_REAL:=1}";        export PS3_LWMUTEX_REAL
+: "${PS3_FIOS_STICKY_OWNER:=1}";   export PS3_FIOS_STICKY_OWNER
+: "${PS3_MOVIE_DONE_MS:=3000}";    export PS3_MOVIE_DONE_MS
+
+# E466: sem isto os draws caem num só RT (texturas amassadas, sem 3D).
+: "${PS3_METAL_PER_DRAW_RT:=1}";   export PS3_METAL_PER_DRAW_RT
+# Diagnostic: Always/no-write. After BEGIN-coalesce the 3D is stable; this
+# left every triangle visible and additive-white. PS3_METAL_DEBUG_NODEPTH=1
+# restores the E466 probe.
+: "${PS3_METAL_DEBUG_NODEPTH:=0}"; export PS3_METAL_DEBUG_NODEPTH
+# Class B depth diagnostics (default B0 = RSX). always / lequal / gequal / invert.
+: "${PS3_METAL_DEBUG_DEPTH:=rsx}"; export PS3_METAL_DEBUG_DEPTH
