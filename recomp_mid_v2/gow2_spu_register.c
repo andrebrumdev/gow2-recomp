@@ -13,6 +13,8 @@ typedef void (*spu_lifted_entry_fn)(spu_context*);
 
 extern void spu_workload_register(uint64_t fingerprint, spu_lifted_entry_fn fn,
                                   const char* name);
+extern void spu_workload_register_raw(uint64_t fingerprint, spu_lifted_entry_fn fn,
+                                      const char* name, uint32_t raw_ls_base);
 
 extern void spu0_spu_func_00003070(spu_context* ctx);   /* spu0 e_entry 0x3070 */
 extern void spu1_spu_func_00003050(spu_context* ctx);   /* spu1 e_entry 0x3050 */
@@ -85,7 +87,8 @@ void gow2_register_spu_workloads(void)
      * E' o PM cujo relogio de audio gateia a transicao do estado da app (parede [G]).
      * Gated PS3_SPU6 (host e' SEH/setjmp; um job que rebenta leva o processo). */
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU6"))
-        spu_workload_register(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000, "gow2_spu6");
+        spu_workload_register_raw(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000,
+                                  "gow2_spu6", 0x3000);
 }
 
 #if defined(__GNUC__)
