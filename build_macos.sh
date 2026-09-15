@@ -30,6 +30,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
 # comportamento e' exactamente o de antes.
 PS3="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
+# The Xcode clang selected on this host does not infer the active SDK when it
+# is invoked directly.  Without SDKROOT every lifted C++ TU fails at the first
+# standard-library include (for example, <atomic>).  Keep an explicitly
+# supplied SDKROOT intact, but make the documented macOS build self-contained.
+if [ "$(uname -s)" = "Darwin" ] && [ -z "${SDKROOT:-}" ]; then
+    SDKROOT="$(xcrun --show-sdk-path)"
+    export SDKROOT
+fi
 # Default recomp_macos_v2: e o lift em que o apply_all_patches.sh opera (tambem
 # tem esse default). recomp_macos e' um lift ANTIGO sem os patches da sessao --
 # nomeadamente sem o ps3_indirect_tail (fix do bctr), sem o qual o pump da intro
