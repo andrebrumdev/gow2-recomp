@@ -2,8 +2,8 @@
 """Relift GoW2 SPU6 with observed indirect-branch entry points.
 
 The SCREAM policy module is a raw LS image, so automatic ELF function
-detection is unavailable.  Preserve the established function boundaries and
-add the two targets observed in a real mixer dispatch (0x391C, 0x51F0).
+detection is unavailable. Preserve the established function boundaries and
+add the legitimate target observed in a real mixer dispatch (0x51F0).
 Game bytes remain local: the input dump is deliberately not versioned.
 """
 
@@ -22,7 +22,10 @@ OUTPUT = ROOT / "spu_lifted" / "spu6_v2"
 LIFTER = ROOT.parent / "ps3recomp" / "tools" / "spu_lifter.py"
 BASE = 0x3000
 END = 0x5D00
-EXTRA = (0x391C, 0x51F0)
+# 0x391C was observed only after the mixer had already lost its context.  The
+# raw image at that address is padding/stop instructions, not a function.
+EXTRA = (0x51F0,)
+STALE_NON_FUNCTION = {0x391C}
 
 
 def existing_starts(source: pathlib.Path) -> list[int]:
@@ -39,7 +42,7 @@ def existing_starts(source: pathlib.Path) -> list[int]:
             start = int(value, 16)
             if BASE <= start < END:
                 starts.append(start)
-    return sorted(set(starts).union(EXTRA))
+    return sorted((set(starts) - STALE_NON_FUNCTION).union(EXTRA))
 
 
 def main() -> int:
