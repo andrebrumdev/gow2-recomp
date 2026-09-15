@@ -24,7 +24,7 @@ BASE = 0x3000
 END = 0x5D00
 # 0x391C was observed only after the mixer had already lost its context.  The
 # raw image at that address is padding/stop instructions, not a function.
-EXTRA = (0x51F0,)
+EXTRA = (0x51F0, 0x5260)
 STALE_NON_FUNCTION = {0x391C}
 
 
