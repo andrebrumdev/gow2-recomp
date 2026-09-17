@@ -10,7 +10,8 @@
 #
 # Opt levels / output (perf A/B):
 #   LIFT_OPT=-O0|-O1|-O2|-Os  optimization for lifted ppu_recomp_*.cpp (default -O0)
-#   HOST_OPT=-O0|-O1|-O2|-Os  host/runtime objects + link (default -O0; SPU stays -O1)
+#   HOST_OPT=-O0|-O1|-O2|-Os  host/runtime objects + link (default -O2; SPU stays -O1).
+#                             -O0 continua disponivel para depurar.
 #   OUT=/path/to/boot_gow2    binary path (default $HERE/boot_gow2)
 #   FORCE_REBUILD_LIFT=1      ignore stale .o and rebuild all lift chunks
 #   RELIFT=1  regenera o lift a partir do EBOOT.ELF/functions.json num
@@ -45,7 +46,7 @@ fi
 LIFT="${1:-$HERE/recomp_macos_v2}"
 OUT="${OUT:-$HERE/boot_gow2}"
 LIFT_OPT="${LIFT_OPT:--O0}"
-HOST_OPT="${HOST_OPT:--O0}"
+HOST_OPT="${HOST_OPT:--O2}"
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
 
 # RELIFT=1: regenera o lift a partir do EBOOT.ELF/functions.json num
