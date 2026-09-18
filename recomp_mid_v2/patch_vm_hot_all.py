@@ -29,6 +29,22 @@ ppu_vm_fast_policy, que so' liga o caminho rapido DEPOIS de o gameplay
 comecar -- qualquer tentativa futura tem de usar o mesmo portao, nao aplicar
 incondicionalmente. O lift foi revertido.
 
+TENTATIVA 2 (portao de gameplay, commit c06eba19 no ps3recomp): os acessores
+inline passam a cair no caminho COMPLETO enquanto ps3_vm_gameplay_ready_hot()
+e' 0. Isso RESOLVE o arranque -- o jogo volta a chegar ao gameplay -- mas NAO
+compra fps: 4 corridas alternadas deram referencia 17,0/22,5 e portao
+19,5/18,0 (medias 20,6 vs 17,4), com o lado do portao mais instavel
+(dp 4,57, p10=12).
+
+CAUSA MEDIDA: o binario passa de 64 965 504 para 107 360 336 bytes, **+65%**.
+Inlinar 990 636 acessos infla o codigo em 42 MB e o i-cache paga mais do que a
+chamada custava. E' o mesmo efeito de "inlining agressivo em codigo liftado
+enorme" que ja' tinha aparecido no SPU em -O2.
+
+O que isto NAO refuta: fazer o acessor GORDO ficar barato (mover os probes
+para #ifdef, tirar o __builtin_return_address) sem inlinar nada. Essa via
+mantem uma chamada so', nao mexe no tamanho do codigo, e continua por testar.
+
 GATED por construcao: isto reescreve o lift, que e' gitignored; para voltar
 atras, re-liftar ou re-aplicar o catalogo sem este script. Idempotente: se o
 marcador ja' esta' no header, reporta ALREADY.
