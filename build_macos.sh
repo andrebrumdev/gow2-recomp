@@ -9,7 +9,7 @@
 # Usage: ./build_macos.sh [lift-dir]        (default: recomp_macos_v2)
 #
 # Opt levels / output (perf A/B):
-#   LIFT_OPT=-O0|-O1|-O2|-O3|-Os  optimization for lifted ppu_recomp_*.cpp (default -O0)
+#   LIFT_OPT=-O0|-O1|-O2|-O3|-Os  optimization for lifted ppu_recomp_*.cpp (default -O1)
 #   LIFT_CFLAGS='...'         extra clang++ flags for lift TUs only
 #                             (PGO use: -fprofile-use=file.profdata)
 #   LINK_CFLAGS='...'         extra flags on the final link (PGO gen: -fprofile-generate)
@@ -50,7 +50,7 @@ fi
 # bate na recursao de host. Compilar o lift errado dava um boot sem os fixes.
 LIFT="${1:-$HERE/recomp_macos_v2}"
 OUT="${OUT:-$HERE/boot_gow2}"
-LIFT_OPT="${LIFT_OPT:--O0}"
+LIFT_OPT="${LIFT_OPT:--O1}"
 LIFT_CFLAGS="${LIFT_CFLAGS:-}"
 LINK_CFLAGS="${LINK_CFLAGS:-}"
 LIFT_OBJ_TAG="${LIFT_OBJ_TAG:-}"
