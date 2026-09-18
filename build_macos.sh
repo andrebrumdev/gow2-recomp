@@ -471,7 +471,15 @@ clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$HERE/boot_ma
 clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
 
 echo "=== 5. link ==="
-SDL_FLAGS=$(pkg-config --libs sdl2)
+SDL_FLAGS="${SDL_FLAGS-$(pkg-config --libs sdl2)}"
+# Sem SDL (corrida headless com TSan): compila os stubs no lugar da biblioteca.
+SDL_STUB_OBJ=""
+if [ -z "$SDL_FLAGS" ]; then
+    clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c \
+        "$HERE/recomp_mid_v2/sdl_stubs_headless.c" -o "$LIFT/sdl_stubs_headless.o"
+    SDL_STUB_OBJ="$LIFT/sdl_stubs_headless.o"
+    echo "  SDL: stubs headless (sem libSDL2)"
+fi   # SDL_FLAGS="" para um binario sem SDL (corridas headless com TSan)
 VK_FLAGS=""
 if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
     VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
@@ -513,7 +521,7 @@ clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox \
     -framework AudioToolbox -framework CoreAudio \
     -framework GameController -framework CoreHaptics \
-    $SDL_FLAGS $VK_FLAGS -lm \
+    $SDL_FLAGS $VK_FLAGS $SDL_STUB_OBJ -lm \
     -Wl,-stack_size,0x2000000 \
     -o "$OUT"
 
