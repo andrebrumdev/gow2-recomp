@@ -19,6 +19,16 @@ pointer e mata a tail-call) e dezenas de probes gated; o rapido mantem os
 passos funcionais -- poll de preempcao, verificacao de faixa comprometida
 (agora INLINE), load/store big-endian -- e larga o diagnostico.
 
+MEDIDO 2026-09-18 e REFUTADO: com isto aplicado a 990 636 sitios, o jogo NAO
+CHEGA AO GAMEPLAY em 2/2 corridas de 140 s -- para com draws=2, depois da FSM
+do filme e com jobs SPU a correr. Confirma a nota antiga de que a leitura
+rapida trava o carregamento do nivel: o acessor gordo tem, do lado da LEITURA,
+ganchos de que o boot depende (hook do EOS do filme, restauro de PT, guarda de
+type15/tblsize) que o rapido larga. E' por isso que existe o
+ppu_vm_fast_policy, que so' liga o caminho rapido DEPOIS de o gameplay
+comecar -- qualquer tentativa futura tem de usar o mesmo portao, nao aplicar
+incondicionalmente. O lift foi revertido.
+
 GATED por construcao: isto reescreve o lift, que e' gitignored; para voltar
 atras, re-liftar ou re-aplicar o catalogo sem este script. Idempotente: se o
 marcador ja' esta' no header, reporta ALREADY.
