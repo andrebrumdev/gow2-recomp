@@ -9,8 +9,13 @@
 # Usage: ./build_macos.sh [lift-dir]        (default: recomp_macos_v2)
 #
 # Opt levels / output (perf A/B):
-#   LIFT_OPT=-O0|-O1|-O2|-Os  optimization for lifted ppu_recomp_*.cpp (default -O0)
-#   HOST_OPT=-O0|-O1|-O2|-Os  host/runtime objects + link (default -O2; SPU stays -O1).
+#   LIFT_OPT=-O0|-O1|-O2|-O3|-Os  optimization for lifted ppu_recomp_*.cpp (default -O0)
+#   LIFT_CFLAGS='...'         extra clang++ flags for lift TUs only
+#                             (PGO use: -fprofile-use=file.profdata)
+#   LINK_CFLAGS='...'         extra flags on the final link (PGO gen: -fprofile-generate)
+#   LIFT_OBJ_TAG=tag          extra object suffix so PGO gen/use coexist with -O1
+#                             (ppu_recomp_000.cpp.1.tag.o)
+#   HOST_OPT=-O0|-O1|-O2|-O3|-Os  host/runtime objects + link (default -O2; SPU stays -O1).
 #                             -O0 continua disponivel para depurar.
 #   OUT=/path/to/boot_gow2    binary path (default $HERE/boot_gow2)
 #   FORCE_REBUILD_LIFT=1      ignore stale .o and rebuild all lift chunks
@@ -46,6 +51,9 @@ fi
 LIFT="${1:-$HERE/recomp_macos_v2}"
 OUT="${OUT:-$HERE/boot_gow2}"
 LIFT_OPT="${LIFT_OPT:--O0}"
+LIFT_CFLAGS="${LIFT_CFLAGS:-}"
+LINK_CFLAGS="${LINK_CFLAGS:-}"
+LIFT_OBJ_TAG="${LIFT_OBJ_TAG:-}"
 HOST_OPT="${HOST_OPT:--O2}"
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
 
@@ -106,11 +114,15 @@ if [ "${RELIFT:-0}" = "1" ]; then
     fi
 fi
 
-case "$LIFT_OPT" in -O0|-O1|-O2|-Os) ;; *)
-    echo "LIFT_OPT must be -O0|-O1|-O2|-Os (got '$LIFT_OPT')" >&2; exit 1 ;;
+case "$LIFT_OPT" in -O0|-O1|-O2|-O3|-Os) ;; *)
+    echo "LIFT_OPT must be -O0|-O1|-O2|-O3|-Os (got '$LIFT_OPT')" >&2; exit 1 ;;
 esac
-case "$HOST_OPT" in -O0|-O1|-O2|-Os) ;; *)
-    echo "HOST_OPT must be -O0|-O1|-O2|-Os (got '$HOST_OPT')" >&2; exit 1 ;;
+case "$HOST_OPT" in -O0|-O1|-O2|-O3|-Os) ;; *)
+    echo "HOST_OPT must be -O0|-O1|-O2|-O3|-Os (got '$HOST_OPT')" >&2; exit 1 ;;
+esac
+case "$LIFT_OBJ_TAG" in
+    ""|[A-Za-z0-9][A-Za-z0-9._-]*) ;;
+    *) echo "LIFT_OBJ_TAG must be empty or [A-Za-z0-9][A-Za-z0-9._-]* (got '$LIFT_OBJ_TAG')" >&2; exit 1 ;;
 esac
 
 if [ ! -f "$LIFT/ppu_recomp.h" ]; then
@@ -145,14 +157,21 @@ JOBS=$(( JOBS > 6 ? 6 : JOBS ))   # each chunk peaks near 1 GB of compiler RSS
 # (no mass rebuild of existing trees). Non-default: ppu_recomp_NNN.cpp.1.o
 lift_obj() {
     local f=$1
+    local o
     if [ "$LIFT_OPT" = "-O0" ]; then
-        echo "$f.o"
+        o="$f.o"
     else
-        echo "${f}.${LIFT_OPT#-O}.o"
+        o="${f}.${LIFT_OPT#-O}.o"
+    fi
+    if [ -n "$LIFT_OBJ_TAG" ]; then
+        echo "${o%.o}.${LIFT_OBJ_TAG}.o"
+    else
+        echo "$o"
     fi
 }
 
-echo "=== 1. lifted chunks -> .o  LIFT_OPT=$LIFT_OPT HOST_OPT=$HOST_OPT OUT=$OUT (-P $JOBS) ==="
+echo "=== 1. lifted chunks -> .o  LIFT_OPT=$LIFT_OPT HOST_OPT=$HOST_OPT OUT=$OUT tag=${LIFT_OBJ_TAG:-none} (-P $JOBS) ==="
+echo "  lift=$LIFT"
 cd "$LIFT"
 t0=$(date +%s)
 # Only rebuild chunks whose object is missing or stale. FORCE_REBUILD_LIFT=1
@@ -166,10 +185,11 @@ t0=$(date +%s)
             echo "$f"
         fi
     done
-} | xargs -P "$JOBS" -I {} sh -c \
+} | LIFT_CFLAGS="$LIFT_CFLAGS" LIFT_OBJ_TAG="$LIFT_OBJ_TAG" xargs -P "$JOBS" -I {} sh -c \
     'src="$1"; ps3="$2"; opt="$3"
      if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
-     clang++ -std=c++20 "$opt" -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
+     if [ -n "$LIFT_OBJ_TAG" ]; then o="${o%.o}.${LIFT_OBJ_TAG}.o"; fi
+     clang++ -std=c++20 "$opt" $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
          "$src" -o "$o" 2> "$src.cclog"' \
     _ {} "$PS3" "$LIFT_OPT"
 NOBJ=0
@@ -185,6 +205,8 @@ cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
     clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
+clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$LIFT/ppu_icall_ascii.o"
+clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$LIFT/ppu_vm_fast_policy.o"
 # host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
 # versionado (games/gow2/host_gow2_factory.cpp, commit 1f651aa no irmao
 # gow2-recomp; porte para o monorepo, criterio 3 do ROADMAP da Fase 2). O
@@ -407,7 +429,15 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
     [ -f "$d/spu_recomp.c" ] || continue
     n=$(basename "$d")
     o="$LIFT/${n}_spu_recomp.o"
-    if [ ! -f "$o" ] || [ "$d/spu_recomp.c" -nt "$o" ]; then
+    # Os helpers de semantica do SPU sao header-only: sem estas dependencias,
+    # editar runtime/spu/*.h produzia um binario novo com o codigo velho do SPU.
+    stale=0
+    [ -f "$o" ] || stale=1
+    [ "$d/spu_recomp.c" -nt "$o" ] && stale=1
+    for h in "$PS3"/runtime/spu/*.h "$PS3"/include/ps3emu/ps3types.h; do
+        [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
+    done
+    if [ "$stale" = 1 ]; then
         clang -std=c11 -O1 -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
               "$d/spu_recomp.c" -o "$o"
     fi
@@ -433,16 +463,12 @@ if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
     VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
 fi
 
-# Collect lift objects matching this LIFT_OPT (bare .o for -O0, .1.o for -O1, ...)
+# Collect lift objects matching this LIFT_OPT (and LIFT_OBJ_TAG).
 LIFT_OBJS=()
 for f in "$LIFT"/ppu_recomp_*.cpp "$LIFT"/ppu_stubs.cpp; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
-    if [ "$LIFT_OPT" = "-O0" ]; then
-        LIFT_OBJS+=("$LIFT/$base.o")
-    else
-        LIFT_OBJS+=("$LIFT/${base}.${LIFT_OPT#-O}.o")
-    fi
+    LIFT_OBJS+=("$LIFT/$(lift_obj "$base")")
 done
 
 # The guest's CRT recurses deeply under -O0; the default 8 MB main-thread stack
@@ -454,10 +480,11 @@ done
 # The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
 # an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
 # already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
-clang++ -std=c++20 $HOST_OPT \
+clang++ -std=c++20 $HOST_OPT $LINK_CFLAGS \
     "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
-    "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o \
+    "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o "$LIFT"/ppu_icall_ascii.o \
+    "$LIFT"/ppu_vm_fast_policy.o \
     $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
     $([ -f "$LIFT/host_gow2_f2b.o" ] && echo "$LIFT/host_gow2_f2b.o") \
     $([ -f "$LIFT/gow2_midasm_hooks.o" ] && echo "$LIFT/gow2_midasm_hooks.o") \
