@@ -58,6 +58,11 @@ HOST_OPT="${HOST_OPT:--O2}"
 # Imagens SPU liftadas: a computacao SPU domina o perfil do gameplay, entao o
 # nivel delas e' um botao proprio (era -O1 fixo).
 SPU_OPT="${SPU_OPT:--O1}"
+# Atomicos LSE do Apple Silicon: sem -mcpu, o Clang emite todo CAS como laco
+# ldaxr/stlxr; com ele vira casal/swpal numa instrucao. Toca o stwcx. inteiro
+# (ppu_res_stwcx), o spinlock de reserva e o lockline do SPU.
+# PS3_MCPU=  (vazio) desliga, para A/B.
+MCPU="${PS3_MCPU--mcpu=apple-m1}"
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
 
 # RELIFT=1: regenera o lift a partir do EBOOT.ELF/functions.json num
@@ -192,7 +197,7 @@ t0=$(date +%s)
     'src="$1"; ps3="$2"; opt="$3"
      if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
      if [ -n "$LIFT_OBJ_TAG" ]; then o="${o%.o}.${LIFT_OBJ_TAG}.o"; fi
-     clang++ -std=c++20 "$opt" $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
+     clang++ -std=c++20 "$opt" $MCPU $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
          "$src" -o "$o" 2> "$src.cclog"' \
     _ {} "$PS3" "$LIFT_OPT"
 NOBJ=0
@@ -206,11 +211,11 @@ echo "  dur=$(( $(date +%s) - t0 ))s objs=$NOBJ errors=$(cat ./*.cclog 2>/dev/nu
 echo "=== 2. runtime PPU sources -> .o (HOST_OPT=$HOST_OPT) ==="
 cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
-    clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
+    clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$LIFT/$src.o"
 done
-clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$LIFT/ppu_icall_ascii.o"
-clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$LIFT/ppu_vm_fast_policy.o"
-clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$LIFT/ppu_p10_ctr.o"
+clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$LIFT/ppu_icall_ascii.o"
+clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$LIFT/ppu_vm_fast_policy.o"
+clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$LIFT/ppu_p10_ctr.o"
 # host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
 # versionado (games/gow2/host_gow2_factory.cpp, commit 1f651aa no irmao
 # gow2-recomp; porte para o monorepo, criterio 3 do ROADMAP da Fase 2). O
@@ -234,7 +239,7 @@ if [ -f "$HERE/host_gow2_factory.cpp" ]; then
         echo "  host_gow2_factory: definicoes ja' no lift -- nao compilar (evita duplicate symbol)"
         rm -f "$LIFT/host_gow2_factory.o"
     else
-        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" \
+        clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" \
             "$HERE/host_gow2_factory.cpp" -o "$LIFT/host_gow2_factory.o"
         echo "  host_gow2_factory: compilado"
     fi
@@ -268,7 +273,7 @@ if [ -f "$HERE/host_gow2_f2b.c" ]; then
         echo "  host_gow2_f2b: definicao (static ou extern) ja' no lift -- nao compilar (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$LIFT/host_gow2_f2b.o"
     else
-        clang -std=c11 $HOST_OPT -w -c "${INC[@]}" \
+        clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" \
             "$HERE/host_gow2_f2b.c" -o "$LIFT/host_gow2_f2b.o"
         echo "  host_gow2_f2b: compilado"
     fi
@@ -313,7 +318,7 @@ if [ -f "$HERE/hooks/gow2_midasm_hooks.cpp" ]; then
         echo "                     (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$LIFT/gow2_midasm_hooks.o"
     else
-        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$HERE/hooks" \
+        clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$HERE/hooks/gow2_midasm_hooks.cpp" -o "$LIFT/gow2_midasm_hooks.o"
         echo "  gow2_midasm_hooks: compilado"
     fi
@@ -382,7 +387,7 @@ if [ -f "$HERE/hooks/gow2_func_overrides.cpp" ]; then
             echo "  gow2_func_overrides: AVISO -- o lift nao tem wrapper fraco para:$_ovr_noweak"
             echo "                       (o override compila e liga, mas ninguem o chama: NO-OP SILENCIOSO)"
         fi
-        clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$HERE/hooks" \
+        clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$_ovr_src" -o "$LIFT/gow2_func_overrides.o"
         echo "  gow2_func_overrides: compilado (overrides: $_ovr_names)"
     fi
@@ -392,12 +397,12 @@ fi
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
 # from the runtime .a — portable Mac/Win.
 if [ -f "$PS3/runtime/ppu/host_res_inflate.c" ]; then
-    clang -std=c11 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_res_inflate.c" -o "$LIFT/host_res_inflate.o"
 fi
 # WAD ~texture packages after WADLD-T1R (patch_wad_tex_capture → force-bind).
 if [ -f "$PS3/runtime/ppu/host_wad_tex.c" ]; then
-    clang -std=c11 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    clang -std=c11 $HOST_OPT $MCPU -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_wad_tex.c" -o "$LIFT/host_wad_tex.o"
 fi
 
@@ -415,7 +420,7 @@ LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
 # shellcheck disable=SC2086
 "$PS3/.venv/bin/python" "$PS3/tools/gen_hle_nids.py" \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
-clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
+clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
 
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
@@ -442,23 +447,23 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
     done
     if [ "$stale" = 1 ]; then
-        clang -std=c11 $SPU_OPT -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
+        clang -std=c11 $SPU_OPT $MCPU -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
               "$d/spu_recomp.c" -o "$o"
     fi
     SPU_OBJS+=("$o")
 done
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then
-    clang -std=c11 $SPU_OPT -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
+    clang -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$LIFT/gow2_spu_register.o"
     SPU_OBJS+=("$LIFT/gow2_spu_register.o")
 fi
 echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
 echo "=== 4. boot host -> .o ==="
-clang++ -std=c++20 $HOST_OPT -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
+clang++ -std=c++20 $HOST_OPT $MCPU -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
 # Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
 # PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
-clang -std=c11 $HOST_OPT -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
+clang -std=c11 $HOST_OPT $MCPU -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
 
 echo "=== 5. link ==="
 SDL_FLAGS=$(pkg-config --libs sdl2)
@@ -484,7 +489,7 @@ done
 # The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
 # an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
 # already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
-clang++ -std=c++20 $HOST_OPT $LINK_CFLAGS \
+clang++ -std=c++20 $HOST_OPT $MCPU $LINK_CFLAGS \
     "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o "$LIFT"/ppu_icall_ascii.o \
