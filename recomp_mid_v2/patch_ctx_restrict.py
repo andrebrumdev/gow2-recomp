@@ -23,6 +23,17 @@ So' toca nas funcoes liftadas (`func_XXXXXXXX` / `__imp_func_XXXXXXXX`), nunca
 nas declaracoes de funcoes do runtime, cujas definicoes vivem noutro ficheiro
 sem o qualificador.
 
+MEDIDO 2026-09-17, e o resultado e' NEUTRO: 4 corridas de 140 s no palacio,
+alternadas, com claude_runs/fps_aligned.py --
+
+  sem restrict (-O1)   fps mediana 22,0 (746 draws) e 23,0 (724 draws)
+  com restrict (-O1)   fps mediana 23,0 (758 draws) e 22,0 (773 draws)
+
+A diferenca de media (21,75 -> 22,31) cabe dentro da dispersao das proprias
+repeticoes de cada lado. Ou seja: o Clang ja' estava a tratar bem o aliasing do
+contexto, ou o gargalo esta' noutro sitio (o giant lock fica segurado ~93% do
+relogio). O patch fica porque e' correcto e nao custa nada, NAO porque acelera.
+
 Idempotente: se o marcador ja' esta' no header, reporta ALREADY.
 Usage: patch_ctx_restrict.py <lift_dir>    rc 0 ok / 2 sem lift / 3 needle ausente
 """
