@@ -55,6 +55,9 @@ LIFT_CFLAGS="${LIFT_CFLAGS:-}"
 LINK_CFLAGS="${LINK_CFLAGS:-}"
 LIFT_OBJ_TAG="${LIFT_OBJ_TAG:-}"
 HOST_OPT="${HOST_OPT:--O2}"
+# Imagens SPU liftadas: a computacao SPU domina o perfil do gameplay, entao o
+# nivel delas e' um botao proprio (era -O1 fixo).
+SPU_OPT="${SPU_OPT:--O1}"
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
 
 # RELIFT=1: regenera o lift a partir do EBOOT.ELF/functions.json num
@@ -207,6 +210,7 @@ for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
 done
 clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$LIFT/ppu_icall_ascii.o"
 clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$LIFT/ppu_vm_fast_policy.o"
+clang -std=c11 $HOST_OPT -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$LIFT/ppu_p10_ctr.o"
 # host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
 # versionado (games/gow2/host_gow2_factory.cpp, commit 1f651aa no irmao
 # gow2-recomp; porte para o monorepo, criterio 3 do ROADMAP da Fase 2). O
@@ -438,13 +442,13 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
     done
     if [ "$stale" = 1 ]; then
-        clang -std=c11 -O1 -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
+        clang -std=c11 $SPU_OPT -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
               "$d/spu_recomp.c" -o "$o"
     fi
     SPU_OBJS+=("$o")
 done
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then
-    clang -std=c11 -O1 -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
+    clang -std=c11 $SPU_OPT -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$LIFT/gow2_spu_register.o"
     SPU_OBJS+=("$LIFT/gow2_spu_register.o")
 fi
@@ -484,7 +488,7 @@ clang++ -std=c++20 $HOST_OPT $LINK_CFLAGS \
     "${LIFT_OBJS[@]}" \
     "$LIFT"/ppu_loader.o "$LIFT"/ppu_imports.o "$LIFT"/ppu_hle.o \
     "$LIFT"/ppu_sysprx.o "$LIFT"/ppu_fs.o "$LIFT"/ppu_icall_ascii.o \
-    "$LIFT"/ppu_vm_fast_policy.o \
+    "$LIFT"/ppu_vm_fast_policy.o "$LIFT"/ppu_p10_ctr.o \
     $([ -f "$LIFT/host_gow2_factory.o" ] && echo "$LIFT/host_gow2_factory.o") \
     $([ -f "$LIFT/host_gow2_f2b.o" ] && echo "$LIFT/host_gow2_f2b.o") \
     $([ -f "$LIFT/gow2_midasm_hooks.o" ] && echo "$LIFT/gow2_midasm_hooks.o") \
