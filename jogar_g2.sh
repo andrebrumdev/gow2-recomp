@@ -5,8 +5,9 @@
 # morria com SIGKILL (exit 137) a meio. Nome neutro = nao e' apanhado.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE" || exit 1
-# capturado ANTES do env_gow2.sh, que poe 3000 incondicionalmente
+# capturados ANTES do env_gow2.sh, que os poe incondicionalmente
 G2_DONE_MS="${PS3_MOVIE_DONE_MS-}"
+G2_MUTE="${PS3_MUTE-}"
 set -a
 . "$HERE/env_gow2.sh"
 set +a
@@ -24,6 +25,11 @@ set +a
 # Melhora, nao corrige. A correccao de raiz e' o relogio de audio (as vozes do
 # mixer SCREAM nao avancam, por isso o filme nunca acaba sozinho).
 export PS3_MOVIE_DONE_MS="${G2_DONE_MS:-auto}"
+# Som LIGADO a jogar. O env_gow2.sh poe PS3_MUTE=1 porque a bancada corre a
+# intro dezenas de vezes por sessao; para jogar isso e' um bug. "0" desliga o
+# mute de verdade desde que ps3_audio_muted() passou a respeitar o valor
+# (antes QUALQUER valor mutava, ate' PS3_MUTE=0). Mutar: PS3_MUTE=1 ./jogar_g2.sh
+export PS3_MUTE="${G2_MUTE:-0}"
 mkdir -p "$HERE/claude_runs"
 echo "[jogar] log: $HERE/claude_runs/jogar.log"
 exec ./g2play EBOOT.ELF > "$HERE/claude_runs/jogar.log" 2>&1
