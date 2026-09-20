@@ -439,6 +439,12 @@ echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # do job mas NAO um SIGBUS/SIGSEGV: um job que falta leva o processo inteiro.
 # E por isso que spu1/2/3 continuam opt-in.
 SPU_OBJS=()
+SPU_FLAGS_FILE="$LIFT/.spu_build_flags"
+SPU_FLAGS_VALUE="SPU_OPT=$SPU_OPT MCPU=$MCPU HOST_CFLAGS=$HOST_CFLAGS"
+SPU_FLAGS_STALE=1
+if [ -f "$SPU_FLAGS_FILE" ] && [ "$(cat "$SPU_FLAGS_FILE")" = "$SPU_FLAGS_VALUE" ]; then
+    SPU_FLAGS_STALE=0
+fi
 for d in "$HERE"/spu_lifted/spu?_v2; do
     [ -f "$d/spu_recomp.c" ] || continue
     n=$(basename "$d")
@@ -469,6 +475,7 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
     # editar runtime/spu/*.h produzia um binario novo com o codigo velho do SPU.
     stale=0
     [ -f "$o" ] || stale=1
+    [ "$SPU_FLAGS_STALE" = 1 ] && stale=1
     [ "$d/spu_recomp.c" -nt "$o" ] && stale=1
     for h in "$PS3"/runtime/spu/*.h "$PS3"/include/ps3emu/ps3types.h; do
         [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
@@ -479,6 +486,7 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
     fi
     SPU_OBJS+=("$o")
 done
+printf '%s' "$SPU_FLAGS_VALUE" > "$SPU_FLAGS_FILE"
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then
     clang -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$LIFT/gow2_spu_register.o"
