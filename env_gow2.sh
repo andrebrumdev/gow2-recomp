@@ -83,6 +83,14 @@ fi
 
 # E466: sem isto os draws caem num só RT (texturas amassadas, sem 3D).
 : "${PS3_METAL_PER_DRAW_RT:=1}";   export PS3_METAL_PER_DRAW_RT
+# Host present: MetalFX spatial 720p→Retina, in-encoder clears, GPU Morton,
+# vsync/ProMotion, EDR. PS3_METALFX=0 / PASS_MERGE=0 / GPU_DESWIZZLE=0 /
+# VSYNC=0 / HDR=0 desligam cada um.
+: "${PS3_METALFX:=1}";                 export PS3_METALFX
+: "${PS3_METAL_PASS_MERGE:=1}";        export PS3_METAL_PASS_MERGE
+: "${PS3_METAL_GPU_DESWIZZLE:=1}";     export PS3_METAL_GPU_DESWIZZLE
+: "${PS3_METAL_VSYNC:=1}";             export PS3_METAL_VSYNC
+: "${PS3_METAL_HDR:=1}";               export PS3_METAL_HDR
 # Diagnostic: Always/no-write. After BEGIN-coalesce the 3D is stable; this
 # left every triangle visible and additive-white. PS3_METAL_DEBUG_NODEPTH=1
 # restores the E466 probe.

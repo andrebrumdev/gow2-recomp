@@ -443,6 +443,22 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
     [ -f "$d/spu_recomp.c" ] || continue
     n=$(basename "$d")
     o="$LIFT/${n}_spu_recomp.o"
+    # SPU0_DIR=<dir> (A/B, opt-in): another spu0 lift, with its own object so
+    # the shared spu0_v2 object other builds link stays untouched.
+    if [ "$n" = spu0_v2 ] && [ -n "${SPU0_DIR:-}" ]; then
+        d="$SPU0_DIR"; o="$LIFT/spu0_ab_$(basename "$SPU0_DIR")_spu_recomp.o"
+    fi
+    if [ "$n" = spu0_v2 ]; then
+        "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
+        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
+            --observed "$HERE/recomp_mid_v2/spu0_observed_indirect_targets.lst"
+    elif [ "$n" = spu1_v2 ]; then
+        "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
+        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
+            --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst"
+    else
+        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" "${n%_v2}_"
+    fi
     # Os helpers de semantica do SPU sao header-only: sem estas dependencias,
     # editar runtime/spu/*.h produzia um binario novo com o codigo velho do SPU.
     stale=0

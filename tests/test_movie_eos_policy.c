@@ -20,9 +20,11 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "../movie_eos_arm.h"
 
@@ -31,9 +33,14 @@
 unsigned char* vm_base = NULL;
 uint32_t       g_movie_eos_ea = 0;
 long           movie_hle_overlay_done(void) { return 0; }
+static char    g_cache_path[1024];
+const char*    movie_hle_cache_path(void) { return g_cache_path[0] ? g_cache_path : NULL; }
 #if defined(__APPLE__)
 void           movie_hle_autostart_cache_if_needed(void) {}
+void           movie_vt_clear_overlay_done(void) {}
 #endif
+void           rsx_host_boot_logo_tick(void) {}
+void           ppu_blockmark_dump(void) {}
 
 /* Mapa de commits falso: so a primeira pagina conta como commitada. A segunda
  * fica PROT_NONE de propósito (ver o cabecalho).
@@ -71,6 +78,44 @@ static int g_fail = 0;
         if (!(cond)) { printf("  FAIL: %s\n", (msg)); g_fail++; }        \
         else         { printf("  ok:   %s\n", (msg)); }                  \
     } while (0)
+
+static int write_pcm_wav(const char* path, unsigned data_bytes, unsigned byterate)
+{
+    unsigned char wav_hdr[44];
+    unsigned riff = 36 + data_bytes;
+    FILE* wf;
+    unsigned i;
+    memset(wav_hdr, 0, sizeof wav_hdr);
+    memcpy(wav_hdr, "RIFF", 4);
+    wav_hdr[4] = (unsigned char)riff;
+    wav_hdr[5] = (unsigned char)(riff >> 8);
+    wav_hdr[6] = (unsigned char)(riff >> 16);
+    wav_hdr[7] = (unsigned char)(riff >> 24);
+    memcpy(wav_hdr + 8, "WAVE", 4);
+    memcpy(wav_hdr + 12, "fmt ", 4);
+    wav_hdr[16] = 16;
+    wav_hdr[20] = 1; wav_hdr[22] = 1;
+    wav_hdr[24] = (unsigned char)byterate;
+    wav_hdr[25] = (unsigned char)(byterate >> 8);
+    wav_hdr[26] = (unsigned char)(byterate >> 16);
+    wav_hdr[27] = (unsigned char)(byterate >> 24);
+    wav_hdr[28] = (unsigned char)byterate;
+    wav_hdr[29] = (unsigned char)(byterate >> 8);
+    wav_hdr[30] = (unsigned char)(byterate >> 16);
+    wav_hdr[31] = (unsigned char)(byterate >> 24);
+    wav_hdr[32] = 1; wav_hdr[34] = 8;
+    memcpy(wav_hdr + 36, "data", 4);
+    wav_hdr[40] = (unsigned char)data_bytes;
+    wav_hdr[41] = (unsigned char)(data_bytes >> 8);
+    wav_hdr[42] = (unsigned char)(data_bytes >> 16);
+    wav_hdr[43] = (unsigned char)(data_bytes >> 24);
+    wf = fopen(path, "wb");
+    if (!wf) return 0;
+    if (fwrite(wav_hdr, 1, 44, wf) != 44) { fclose(wf); return 0; }
+    for (i = 0; i < data_bytes; i++) fputc(0, wf);
+    fclose(wf);
+    return 1;
+}
 
 int main(void)
 {
@@ -218,6 +263,72 @@ int main(void)
           "A3b: already_marked one-shot");
     CHECK(movie_audio_should_mark_done(1, 1, 0xFFFFFFFFu, 0x84000002u, 0) == 0,
           "A3b: st sentinela nao marca");
+
+    printf("== later Play: time-based done reset + auto wav of the movie in play ==\n");
+    {
+        char dir[512], p_logo[640], p_hud[640], p_logo_m[640], p_hud_m[640];
+        const char* tmp = getenv("TMPDIR");
+        if (!tmp || !*tmp) tmp = "/tmp";
+        snprintf(dir, sizeof dir, "%s/ps3recomp_eoswav_XXXXXX", tmp);
+        if (!mkdtemp(dir)) { printf("FAIL: mkdtemp\n"); g_fail++; }
+        else {
+            snprintf(p_logo, sizeof p_logo, "%s/SmLogo_v2.wav", dir);
+            snprintf(p_hud, sizeof p_hud, "%s/introhud.wav", dir);
+            snprintf(p_logo_m, sizeof p_logo_m, "%s/SmLogo_v2.m2v", dir);
+            snprintf(p_hud_m, sizeof p_hud_m, "%s/introhud.m2v", dir);
+            if (!write_pcm_wav(p_logo, 8000, 8000)   /* 1000 ms */
+                || !write_pcm_wav(p_hud, 16000, 8000)) { /* 2000 ms */
+                printf("FAIL: write wav fixtures\n"); g_fail++;
+            }
+            setenv("PS3_MOVIE_CACHE", dir, 1);
+            setenv("PS3_MOVIE_DONE_MS", "auto", 1);
+            snprintf(g_cache_path, sizeof g_cache_path, "%s", p_logo_m);
+            movie_done_timebased_reset();
+            CHECK(movie_done_interval_ms() == 1000,
+                  "auto uses SmLogo_v2.wav of the movie in play (1000 ms)");
+            snprintf(g_cache_path, sizeof g_cache_path, "%s", p_hud_m);
+            movie_done_timebased_reset();
+            CHECK(movie_done_interval_ms() == 2000,
+                  "auto uses introhud.wav after reset, not the first directory entry");
+
+            /* Boot cache layout: SmLogo_v2.wav exists, introhud.m2v has no
+             * sibling .wav. auto must NOT inherit SmLogo's duration. */
+            remove(p_hud);
+            {
+                FILE* mf = fopen(p_hud_m, "wb");
+                if (mf) { fputs("m2v", mf); fclose(mf); }
+            }
+            snprintf(g_cache_path, sizeof g_cache_path, "%s", p_hud_m);
+            movie_done_timebased_reset();
+            CHECK(movie_done_interval_ms() == 0,
+                  "auto with introhud.m2v and no sibling wav does not reuse SmLogo duration");
+            CHECK(movie_done_interval_ms() != 1000,
+                  "auto orphan introhud is not SmLogo_v2.wav 1000 ms");
+            remove(p_hud_m);
+
+            unsetenv("PS3_MOVIE_DONE_MS");
+            setenv("PS3_MOVIE_DONE_MS", "50", 1);
+            movie_done_timebased_reset();
+            CHECK(movie_done_interval_ms() == 50, "numeric DONE_MS recomputed after reset");
+            CHECK(movie_done_timebased_poll(5) == 0, "new Play is not immediately done");
+            {
+                struct timespec ts;
+                ts.tv_sec = 0;
+                ts.tv_nsec = 80 * 1000000L;
+                nanosleep(&ts, NULL);
+            }
+            CHECK(movie_done_timebased_poll(5) == 1, "fires after this Play's own interval");
+            movie_done_timebased_reset();
+            CHECK(movie_done_timebased_poll(5) == 0,
+                  "reset + new st620 does not report leftover done");
+            unsetenv("PS3_MOVIE_DONE_MS");
+            movie_done_timebased_reset();
+            CHECK(movie_done_interval_ms() == 0, "unset DONE_MS is off after reset");
+            remove(p_logo); remove(p_hud);
+            rmdir(dir);
+            g_cache_path[0] = 0;
+        }
+    }
 
     munmap(buf, PAGE * 2);
     vm_base = NULL;

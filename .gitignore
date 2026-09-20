@@ -99,6 +99,11 @@ wad_tex__*.png
 frame_*.ppm
 wad_tex__*.ppm
 
+# Config e mods do launcher (dados do usuário, não do repo)
+user_config.json
+mods/*
+!mods/.gitkeep
+
 # Lixo de ferramentas
 .DS_Store
 **/.DS_Store

@@ -82,6 +82,12 @@ extern unsigned char* vm_base;
 extern int            ppu_guest_range_committed(uint32_t addr, uint32_t n);
 extern uint32_t       g_movie_eos_ea;      /* ponto de injeccao (vm_read8 devolve 1) */
 extern long           movie_hle_overlay_done(void);   /* movie_hle.c (C linkage) */
+extern const char*    movie_hle_cache_path(void);
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void pad_autostart_note_cutscene(int on) { (void)on; }
+#else
+static void pad_autostart_note_cutscene(int on) { (void)on; }
+#endif
 /* Sticky SEQDONE from cellVdec. Weak default 0 so unit tests link without the
  * codec; the strong definition in cellVdec.c wins in the real boot binary. */
 #if defined(__GNUC__) || defined(__clang__)
@@ -91,6 +97,7 @@ volatile int g_vdec_seqdone_fired = 0;
 #endif
 #if defined(__APPLE__)
 extern void           movie_hle_autostart_cache_if_needed(void);
+extern void           movie_vt_clear_overlay_done(void);
 #endif
 
 /* Gates do amostrador, latched em movie_eos_sampler_start (thread unica). */
@@ -364,32 +371,14 @@ static unsigned long long movie_now_ms(void)
 #endif
 }
 
-/* Duracao real (ms) do unico .wav em PS3_MOVIE_CACHE: le o cabecalho RIFF e
- * devolve data_bytes/byterate. Medicao do stream real, nao constante inventada.
- * 0 se nao houver .wav legivel. POSIX-only: no Windows o produtor e' o overlay
- * ffmpeg (movie_hle_overlay_done), nao este. */
 #ifndef _WIN32
-static long long movie_wav_duration_ms(void)
+/* Duracao real (ms) de um .wav: le o cabecalho RIFF e devolve
+ * data_bytes/byterate. 0 se o ficheiro nao for um WAVE legivel. */
+static long long movie_wav_duration_ms_file(const char* path)
 {
-    const char* cache = getenv("PS3_MOVIE_CACHE");
-    if (!cache || !*cache) cache = "../movie_cache";
-
-    char path[1024]; path[0] = 0;
-    DIR* d = opendir(cache);
-    if (d) {
-        struct dirent* e;
-        while ((e = readdir(d)) != NULL) {
-            size_t L = strlen(e->d_name);
-            if (L > 4 && strcasecmp(e->d_name + L - 4, ".wav") == 0) {
-                snprintf(path, sizeof path, "%s/%s", cache, e->d_name);
-                break;
-            }
-        }
-        closedir(d);
-    }
-    if (!path[0]) return 0;
-
-    FILE* f = fopen(path, "rb");
+    FILE* f;
+    if (!path || !path[0]) return 0;
+    f = fopen(path, "rb");
     if (!f) return 0;
 
     long long dur = 0;
@@ -424,14 +413,78 @@ static long long movie_wav_duration_ms(void)
     fclose(f);
     return dur;
 }
+
+/* Wav do filme em curso: SOMENTE o irmao .wav de movie_hle_cache_path().
+ * Se o filme actual nao tiver .wav (introhud.m2v no cache real), devolve 0
+ * e o produtor passa a ser o overlay_done do VT -- nunca reutiliza o .wav
+ * de outro titulo (SmLogo_v2, 14.7 s). O fallback "um so' .wav no directorio"
+ * so' vale quando ainda nao ha filme identificado (intro autostart). */
+static long long movie_wav_duration_ms(void)
+{
+    const char* cache = getenv("PS3_MOVIE_CACHE");
+    const char* movie;
+    char path[1024];
+    if (!cache || !*cache) cache = "../movie_cache";
+
+    movie = movie_hle_cache_path();
+    if (movie && movie[0]) {
+        size_t n = strlen(movie);
+        if (n > 4 && n < sizeof path) {
+            memcpy(path, movie, n - 4);
+            memcpy(path + (n - 4), ".wav", 5);
+            {
+                long long d = movie_wav_duration_ms_file(path);
+                if (d > 0) return d;
+            }
+        }
+        {
+            const char* base = strrchr(movie, '/');
+            char stem[512];
+            size_t sl;
+            long long d;
+            base = base ? base + 1 : movie;
+            snprintf(stem, sizeof stem, "%s", base);
+            sl = strlen(stem);
+            if (sl > 4 && stem[sl - 4] == '.') stem[sl - 4] = 0;
+            snprintf(path, sizeof path, "%s/%s.wav", cache, stem);
+            d = movie_wav_duration_ms_file(path);
+            if (d > 0) return d;
+        }
+        return 0;   /* filme conhecido, sem irmao -- nao herdar outro .wav */
+    }
+
+    {
+        DIR* d = opendir(cache);
+        int nwav = 0;
+        char only[1024];
+        only[0] = 0;
+        if (d) {
+            struct dirent* e;
+            while ((e = readdir(d)) != NULL) {
+                size_t L = strlen(e->d_name);
+                if (L > 4 && strcasecmp(e->d_name + L - 4, ".wav") == 0) {
+                    nwav++;
+                    snprintf(only, sizeof only, "%s/%s", cache, e->d_name);
+                    if (nwav > 1) break;
+                }
+            }
+            closedir(d);
+        }
+        if (nwav == 1 && only[0])
+            return movie_wav_duration_ms_file(only);
+    }
+    return 0;
+}
 #else
 static long long movie_wav_duration_ms(void) { return 0; }
 #endif
 
 /* Intervalo configurado (ms), latched. -1 = por decidir, 0 = desligado. */
-static long long movie_done_interval_ms(void)
+static long long s_movie_done_ivl = -1;
+
+long long movie_done_interval_ms(void)
 {
-    static long long ivl = -1;
+    long long ivl = s_movie_done_ivl;
     if (ivl != -1) return ivl;
 
     const char* e = getenv("PS3_MOVIE_DONE_MS");
@@ -456,6 +509,7 @@ static long long movie_done_interval_ms(void)
                 "[MOVIEDONE] produtor time-based LIGADO: intervalo=%lld ms. AVISO: HLE por temporizador, NAO EOF real do stream.\n",
                 ivl);
     fflush(stderr);
+    s_movie_done_ivl = ivl;
     return ivl;
 }
 
@@ -475,11 +529,12 @@ void movie_done_timebased_reset(void)
 {
     s_movie_done_start_ms = 0;
     s_movie_done_fired = 0;
+    s_movie_done_ivl = -1;
     fprintf(stderr, "[MOVIEDONE] time-based timer reset (next Play can re-arm)\n");
     fflush(stderr);
 }
 
-static long movie_done_timebased_poll(uint32_t st)
+long movie_done_timebased_poll(uint32_t st)
 {
     long long ivl = movie_done_interval_ms();
     if (ivl <= 0) return 0;                    /* produtor desligado (M3) */
@@ -536,10 +591,6 @@ static void movie_sampler_loop(void)
          * movie_cache when the player becomes active (PS3_MOVIE_HLE). */
         if (st >= 1u && st != 0xFFFFFFFFu)
             movie_hle_autostart_cache_if_needed();
-        /* E178: ponte gated (PS3_MOVIE_VT_REPLAY=1) -- no Play seguinte (st620 0 -> >=1)
-         * repete o overlay do cache, porque o 2o filme ja' nao passa pelo movie_io_open. */
-        /* Medido (e178): entre o Play#1 e o Play#2 a FSM vai 11 -> 1 -> 3 -> 11 sem passar
-         * por 0 no sampler; a aresta e' "estado alto (>=10) ou 0 -> estado de arranque (1..9)". */
 #endif
 
         /* Sinal REAL de "filme acabou" (produtor). No Windows vem do overlay
@@ -547,19 +598,6 @@ static void movie_sampler_loop(void)
          * o produtor time-based (PS3_MOVIE_DONE_MS). */
         long done_overlay = movie_hle_overlay_done() ? 1 : 0;
         long done         = done_overlay ? 1 : movie_done_timebased_poll(st);
-#if defined(__APPLE__)
-        /* Medido (e178): o sampler so' ve 0 -> 1 -> 11 -> 11; o Play#2 arranca e estaciona em 11
-         * antes de o sampler o apanhar. Sinal fiavel: o hook EOS do Play#1 ja' foi consumido e
-         * limpo pelo CE03C (g_movie_eos_ea==0), o overlay esta' "done" e a FSM esta' de novo
-         * a' espera (st>=10). O replay repoe overlay_done=0, logo dispara uma vez por Play. */
-        { static int dbg = 0;
-          if (dbg++ < 3 && st >= 10u && st != 0xFFFFFFFFu && getenv("PS3_MOVIE_VT_REPLAY")) {
-              fprintf(stderr, "[MOVIEEOS] replay-check st=%u eos_ea=0x%08X done_overlay=%ld\n", st, g_movie_eos_ea, done_overlay); fflush(stderr); } }
-        if (st >= 10u && st != 0xFFFFFFFFu && g_movie_eos_ea == 0u && done_overlay) {
-            extern void movie_vt_replay_from_cache(void);
-            movie_vt_replay_from_cache();
-        }
-#endif
 
         /* Mesmo formato do host Windows, para os dois logs se compararem
          * linha a linha. Emitido na transicao OU no heartbeat. */
@@ -581,6 +619,25 @@ static void movie_sampler_loop(void)
                         g_movie_eos_ea);
                 fflush(stderr);
                 g_movie_eos_ea = 0;
+            }
+            /* New Play after idle: re-time done/EOS from this open, not SmLogo. */
+            if (prev == 0u && st >= 1u && st != 0xFFFFFFFFu) {
+                const char* cache_movie = movie_hle_cache_path();
+                movie_done_timebased_reset();
+#if defined(__APPLE__)
+                movie_vt_clear_overlay_done();
+                fprintf(stderr,
+                        "[MOVIEEOS] clear overlay_done on st620 0->%u (later Play)\n",
+                        st);
+                fflush(stderr);
+#endif
+                /* Intro re-Play keeps SmLogo; do not idle TAS New Game CROSS.
+                 * A later file (introhud, …) is the opening cinematic. */
+                if (cache_movie && cache_movie[0]
+                    && !strstr(cache_movie, "SmLogo")
+                    && !strstr(cache_movie, "smlogo")
+                    && !strstr(cache_movie, "SMLOGO"))
+                    pad_autostart_note_cutscene(1);
             }
             /* Post-intro park: dump who is blocked (schedul wait etc.). */
             if (st == 0u && prev == 0u) {

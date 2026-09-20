@@ -119,8 +119,13 @@ cat > "$APP/Contents/MacOS/launch" <<LAUNCH
 BUNDLE_MACOS="\$(cd "\$(dirname "\$0")" && pwd)"
 GAME_DIR="$HERE"
 cd "\$GAME_DIR" || exit 1
+# Sem ELF configurado: abre a tela de setup/mods. Com ELF: joga.
+if [ -f "\$GAME_DIR/gow2_launcher.py" ]; then
+  export PS3_FULLSCREEN="\${PS3_FULLSCREEN:-1}"
+  exec python3 "\$GAME_DIR/gow2_launcher.py" --play-or-ui
+fi
 . "\$GAME_DIR/env_gow2.sh"
-export PS3_FULLSCREEN="\${PS3_FULLSCREEN:-1}"   # padrao de jogo (ESC sai)
+export PS3_FULLSCREEN="\${PS3_FULLSCREEN:-1}"
 exec "\$BUNDLE_MACOS/boot_gow2" "\$GAME_DIR/EBOOT.ELF"
 LAUNCH
 chmod +x "$APP/Contents/MacOS/launch"

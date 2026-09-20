@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -42,7 +43,16 @@ def existing_starts(source: pathlib.Path) -> list[int]:
             start = int(value, 16)
             if BASE <= start < END:
                 starts.append(start)
-    return sorted((set(starts) - STALE_NON_FUNCTION).union(EXTRA))
+    # spu_lifter leaves a self-dispatch stub when a conditional cross-function
+    # target was not seeded. A table entry for that stub would only recurse;
+    # make it a real function boundary in the next lift instead.
+    text = source.read_text()
+    stubs = {
+        int(value, 16)
+        for value in re.findall(
+            r"ctx->pc = 0x([0-9A-Fa-f]+)u; spu_indirect_branch\(ctx\);", text)
+    }
+    return sorted((set(starts) - STALE_NON_FUNCTION).union(EXTRA, stubs))
 
 
 def main() -> int:

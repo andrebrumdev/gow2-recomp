@@ -112,6 +112,17 @@ int movie_eos_force_blocks_arm(int force_ms, int seqdone_seen);
 int movie_audio_should_mark_done(int enabled, long done, uint32_t st620,
                                  uint32_t h720, int already_marked);
 
+/* Reset time-based done + latched interval so a later Play is timed from its
+ * own open, not from SmLogo / DONE_MS leftover. */
+void movie_done_timebased_reset(void);
+
+/* Latched PS3_MOVIE_DONE_MS interval in ms (0 = off). Recomputed after reset.
+ * auto uses the .wav sibling of movie_hle_cache_path(), not the first file. */
+long long movie_done_interval_ms(void);
+
+/* 1 when the time-based producer has fired for the current Play. */
+long movie_done_timebased_poll(uint32_t st);
+
 #ifdef __cplusplus
 }
 #endif
