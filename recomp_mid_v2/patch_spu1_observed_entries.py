@@ -31,7 +31,7 @@ def observed_targets(paths: list[pathlib.Path]) -> list[str]:
     targets: set[int] = set()
     for path in paths:
         text = path.read_text(encoding="utf-8", errors="replace")
-        targets.update(int(value, 16) for value in re.findall(
+        targets.update(int(value, 16) & ~0x3 for value in re.findall(
             r"(?:^\s*target\s+|unknown LS address\s+)0x([0-9a-fA-F]+)\b",
             text, re.MULTILINE | re.IGNORECASE))
     if not targets:
