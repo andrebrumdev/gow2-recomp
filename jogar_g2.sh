@@ -10,7 +10,10 @@ G2_DONE_MS="${PS3_MOVIE_DONE_MS-}"
 set -a
 . "$HERE/env_gow2.sh"
 set +a
-export PS3_TRACE_PROMPT_SHAPES="${PS3_TRACE_PROMPT_SHAPES:-1}"
+# PS3_TRACE_PROMPT_SHAPES: sonda de DIAGNOSTICO dos icones de botao. Estava
+# ligada por default aqui, mas ela calcula uma assinatura de forma por DRAW no
+# material 0x59864B76 -- que e' tambem o material das particulas, centenas de
+# draws por frame no combate. Fica opt-in: `PS3_TRACE_PROMPT_SHAPES=1 ./jogar_g2.sh`.
 # Cutscenes em video: o env_gow2.sh poe PS3_MOVIE_DONE_MS=3000, um atalho de
 # BANCADA ("a medicao repete a mesma intro dezenas de vezes por sessao") que
 # corta TODO filme aos 3 segundos -- o armador ancora no open e forca o fim
