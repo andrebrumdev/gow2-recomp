@@ -6,3 +6,19 @@ target 0x6088
 target 0x64E0
 # A/B 2026-09-20: next image-2 destination after 0x64E0 was promoted.
 target 0x56AC
+# Persisted destinations captured while walking the image-2 workload.  The
+# lifter/runtime normalize bi/bisl targets by clearing the low two bits.
+target 0x6074
+target 0x3318
+target 0x3410
+target 0x15BB0
+target 0x26168
+target 0x30000
+target 0x3FDA8
+target 0x0B54
+target 0x1BB0
+target 0x2B84
+target 0x3C0D0
+target 0xABA0
+target 0xEF80
+target 0x34288
