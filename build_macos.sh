@@ -454,8 +454,14 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
             --observed "$HERE/recomp_mid_v2/spu0_observed_indirect_targets.lst"
     elif [ "$n" = spu1_v2 ]; then
         "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
-        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
-            --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst"
+        if [ -n "${SPU1_OBSERVED_LOG:-}" ]; then
+            "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
+                --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst" \
+                --observed "$SPU1_OBSERVED_LOG"
+        else
+            "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
+                --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst"
+        fi
     else
         "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" "${n%_v2}_"
     fi
