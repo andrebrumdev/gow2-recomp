@@ -31,5 +31,6 @@ export PS3_MOVIE_DONE_MS="${G2_DONE_MS:-auto}"
 # (antes QUALQUER valor mutava, ate' PS3_MUTE=0). Mutar: PS3_MUTE=1 ./jogar_g2.sh
 export PS3_MUTE="${G2_MUTE:-0}"
 mkdir -p "$HERE/claude_runs"
-echo "[jogar] log: $HERE/claude_runs/jogar.log"
-exec ./g2play EBOOT.ELF > "$HERE/claude_runs/jogar.log" 2>&1
+LOG="${JOGAR_LOG:-$HERE/claude_runs/jogar.log}"   # testar_fix.sh usa um por teste
+echo "[jogar] log: $LOG"
+exec ./g2play EBOOT.ELF > "$LOG" 2>&1
