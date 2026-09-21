@@ -16,5 +16,14 @@ set -a
 set +a
 export PS3_TRACE_PROMPT_SHAPES="${PS3_TRACE_PROMPT_SHAPES:-1}"
 mkdir -p "$HERE/claude_runs"
+GOW2_BIN="${GOW2_BIN:-boot_gow2}"
+case "$GOW2_BIN" in
+  */*|*..*) echo "[jogar] GOW2_BIN invalido: $GOW2_BIN" >&2; exit 2 ;;
+esac
+if [ ! -x "$HERE/$GOW2_BIN" ]; then
+  echo "[jogar] binario ausente ou nao executavel: $HERE/$GOW2_BIN" >&2
+  exit 2
+fi
+echo "[jogar] binario: $GOW2_BIN"
 echo "[jogar] log: $HERE/claude_runs/jogar.log"
-exec ./boot_gow2 EBOOT.ELF > "$HERE/claude_runs/jogar.log" 2>&1
+exec "./$GOW2_BIN" EBOOT.ELF > "$HERE/claude_runs/jogar.log" 2>&1
