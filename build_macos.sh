@@ -455,9 +455,18 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         d="$SPU0_DIR"; o="$LIFT/spu0_ab_$(basename "$SPU0_DIR")_spu_recomp.o"
     fi
     if [ "$n" = spu0_v2 ]; then
+        # Re-lift the captured image in a temporary directory and import every
+        # observed bi/bisl destination.  SPU0_OBSERVED_LOG may point at a fresh
+        # runtime log; the tracked manifest remains the baseline evidence.
         "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
-        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
+        SPU0_CONTRACT_ARGS=(
             --observed "$HERE/recomp_mid_v2/spu0_observed_indirect_targets.lst"
+        )
+        if [ -n "${SPU0_OBSERVED_LOG:-}" ]; then
+            SPU0_CONTRACT_ARGS+=(--observed "$SPU0_OBSERVED_LOG")
+        fi
+        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
+            "${SPU0_CONTRACT_ARGS[@]}"
     elif [ "$n" = spu1_v2 ]; then
         "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
         if [ -n "${SPU1_OBSERVED_LOG:-}" ]; then
