@@ -36,6 +36,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
 # comportamento e' exactamente o de antes.
 PS3="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
+# Keep the Metal ring-fence fix reproducible across runtime rebuilds. The patch
+# is idempotent and preserves PS3_METAL_FRAME_FENCE=0 as an explicit unsafe A/B.
+"$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
+"$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
 # The Xcode clang selected on this host does not infer the active SDK when it
 # is invoked directly.  Without SDKROOT every lifted C++ TU fails at the first
 # standard-library include (for example, <atomic>).  Keep an explicitly
