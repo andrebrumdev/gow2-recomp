@@ -109,3 +109,15 @@ mods/*
 **/.DS_Store
 __pycache__/
 *.py[cod]
+
+# Codigo e imagens DERIVADOS do jogo: nunca no repositorio (sao regenerados a
+# partir da copia do proprio usuario pelo kit de build).
+spu_lifted/**/spu_recomp.c
+spu_lifted/**/spu_recomp.h
+recomp_mid_v2/*.png
+claude_runs/*
+!claude_runs/*.py
+!claude_runs/*.sh
+/g2play*
+/recomp_macos*/
+spu_lifted/
