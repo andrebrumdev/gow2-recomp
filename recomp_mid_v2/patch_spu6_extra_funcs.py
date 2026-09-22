@@ -25,7 +25,7 @@ BASE = 0x3000
 END = 0x5D00
 # 0x391C was observed only after the mixer had already lost its context.  The
 # raw image at that address is padding/stop instructions, not a function.
-EXTRA = (0x51F0, 0x5260)
+EXTRA = (0x51F0, 0x5258, 0x5260)
 STALE_NON_FUNCTION = {0x391C}
 
 
@@ -101,6 +101,17 @@ def main() -> int:
         raise RuntimeError("unexpected SPU6 0x4930 return shape")
     helper = helper.replace(old_return, "return;")
     source = source[:begin] + helper + source[end:]
+    # 0x4D20 GETs the workload argument from r4's preferred word. Dispatch
+    # places that EA in word 1 (RPCS3 gpr[4]._u64[1]); the PM shifts it into
+    # the preferred slot and saves the result at LS 0x13F0. Loading the
+    # unshifted copy (0x14E0) sees word 0 clear and skips the GET.
+    source = source.replace(
+        "ctx->gpr[4] = spu_ls_read128(ctx, 0x14E0);\n"
+        "        ctx->gpr[0] = spu_link(0x5240); spu6_spu_func_00004D20(ctx);",
+        "ctx->gpr[4] = spu_ls_read128(ctx, 0x13F0);\n"
+        "        ctx->gpr[0] = spu_link(0x5240); spu6_spu_func_00004D20(ctx);",
+        1,
+    )
     source_path.write_text(source)
     for address in EXTRA:
         symbol = f"spu6_spu_func_{address:08X}"

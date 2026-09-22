@@ -2,6 +2,7 @@
 """Setup (ELF + USRDIR) + mods + Jogar. Uma tela."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -174,21 +175,119 @@ def find_binary() -> Path | None:
     return None
 
 
-def play(cfg: dict) -> int:
-    ok, msg = setup_ok(cfg)
-    if not ok:
-        print(msg, file=sys.stderr)
-        return 2
-    binary = find_binary()
-    if binary is None:
-        print("Falta boot_gow2. Compila com ./build_macos.sh recomp_macos_e435", file=sys.stderr)
-        return 2
+def savedata_root_of(cfg: dict) -> Path:
+    raw = str(cfg.get("savedata_root") or os.environ.get("PS3_SAVEDATA_ROOT") or "").strip()
+    if raw:
+        return Path(raw)
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support" / "ps3recomp"
+    elif os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home()) / "ps3recomp"
+    else:
+        base = Path.home() / ".local" / "share" / "ps3recomp"
+    return base / "dev_hdd0" / "home" / "00000001" / "savedata"
+
+
+def _relative_save_file(path: str) -> bool:
+    if not path or path.startswith(("/", "\\")) or "\\" in path:
+        return False
+    parts = path.split("/")
+    return all(part and part not in (".", "..") for part in parts)
+
+
+def _autosave_slot_valid(slot: Path) -> bool:
+    if slot.is_symlink() or not slot.is_dir():
+        return False
+    current = slot / "current"
+    data = current / "data"
+    try:
+        manifest = json.loads((current / "manifest.json").read_text())
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return False
+    if not isinstance(manifest, dict) or manifest.get("version") != 1:
+        return False
+    title = manifest.get("title")
+    source = manifest.get("source")
+    files = manifest.get("files")
+    if not isinstance(title, str) or not SAFE_NAME.match(title):
+        return False
+    if not isinstance(source, str) or not SAFE_NAME.match(source):
+        return False
+    if not isinstance(files, list) or not files:
+        return False
+    try:
+        data_root = data.resolve()
+    except OSError:
+        return False
+    seen: set[str] = set()
+    for item in files:
+        if not isinstance(item, dict):
+            return False
+        rel = item.get("path")
+        size = item.get("size")
+        digest = item.get("sha256")
+        if not isinstance(rel, str) or rel in seen or not _relative_save_file(rel):
+            return False
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            return False
+        if not isinstance(digest, str) or len(digest) != 64:
+            return False
+        if any(c not in "0123456789abcdef" for c in digest):
+            return False
+        seen.add(rel)
+        try:
+            file_path = (data / rel).resolve()
+            blob = file_path.read_bytes()
+        except OSError:
+            return False
+        if data_root != file_path and not str(file_path).startswith(str(data_root) + os.sep):
+            return False
+        if len(blob) != size or hashlib.sha256(blob).hexdigest() != digest:
+            return False
+    return True
+
+
+def autosave_available(cfg: dict) -> bool:
+    """True when one title slot under the save root has a complete manifest."""
+    root = savedata_root_of(cfg)
+    parent = root.parent
+    if parent == root:
+        return False
+    base = parent / "ps3recomp-autosave"
+    if base.is_symlink() or not base.is_dir():
+        return False
+    try:
+        children = list(base.iterdir())
+    except OSError:
+        return False
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        if _autosave_slot_valid(child):
+            return True
+    return False
+
+
+def build_launch_script(cfg: dict, resume_autosave: bool = False) -> str:
+    binary = find_binary() or (HERE / "boot_gow2")
     env_sh = HERE / "env_gow2.sh"
     mods_dir = cfg.get("mods_dir") or str(DEFAULT_MODS)
     enabled = [n for n in cfg.get("mods_enabled") or [] if n in list_mod_names(mods_dir)]
     cache = cfg.get("movie_cache") or str(HERE / "movie_cache")
-    Path(mods_dir).mkdir(parents=True, exist_ok=True)
-    script = f"""
+    if resume_autosave:
+        # The original menu's AutoLoad reads the mirror. Leave the pad idle so
+        # autostart does not confirm New Game over that load.
+        autosave_env = (
+            "export PS3_AUTOSAVE_RESUME=1\n"
+            "export PS3_AUTOSAVE_MENU=1\n"
+            "export PS3_PAD_AUTOSTART=0\n"
+        )
+    else:
+        autosave_env = (
+            "unset PS3_AUTOSAVE_RESUME\n"
+            "export PS3_PAD_AUTOSTART=\"${PS3_PAD_AUTOSTART:-1}\"\n"
+        )
+    return f"""
 set -euo pipefail
 cd {HERE.as_posix()!r}
 G2_MUTE="${{PS3_MUTE-}}"
@@ -196,22 +295,38 @@ G2_DONE="${{PS3_MOVIE_DONE_MS-}}"
 set -a
 . {env_sh.as_posix()!r}
 set +a
-export PS3_VFS_ROOT={cfg['vfs_root']!r}
+export PS3_VFS_ROOT={cfg.get('vfs_root', '')!r}
 export PS3_MOVIE_CACHE={cache!r}
 export PS3_MODS_DIR={mods_dir!r}
 export PS3_MODS_ENABLED={','.join(enabled)!r}
 export PS3_MUTE="${{G2_MUTE:-0}}"
 export PS3_MOVIE_DONE_MS="${{G2_DONE:-auto}}"
-export PS3_PAD_AUTOSTART="${{PS3_PAD_AUTOSTART:-1}}"
 export PS3_FULLSCREEN="${{PS3_FULLSCREEN:-0}}"
 export PS3_METALFX="${{PS3_METALFX:-1}}"
 export PS3_METAL_PASS_MERGE="${{PS3_METAL_PASS_MERGE:-1}}"
 export PS3_METAL_GPU_DESWIZZLE="${{PS3_METAL_GPU_DESWIZZLE:-1}}"
 export PS3_METAL_VSYNC="${{PS3_METAL_VSYNC:-1}}"
-export PS3_METAL_HDR="${{PS3_METAL_HDR:-1}}"
-unset PS3_NO_RSX
-exec {binary.as_posix()!r} {cfg['elf']!r}
+export PS3_METAL_HDR="${{PS3_METAL_HDR:-0}}"
+{autosave_env}unset PS3_NO_RSX
+exec {binary.as_posix()!r} {cfg.get('elf', '')!r}
 """
+
+
+def play(cfg: dict, resume_autosave: bool = False) -> int:
+    ok, msg = setup_ok(cfg)
+    if not ok:
+        print(msg, file=sys.stderr)
+        return 2
+    if resume_autosave and not autosave_available(cfg):
+        print("Nenhum autosave válido para continuar.", file=sys.stderr)
+        return 2
+    binary = find_binary()
+    if binary is None:
+        print("Falta boot_gow2. Compila com ./build_macos.sh recomp_macos_e435", file=sys.stderr)
+        return 2
+    mods_dir = cfg.get("mods_dir") or str(DEFAULT_MODS)
+    Path(mods_dir).mkdir(parents=True, exist_ok=True)
+    script = build_launch_script(cfg, resume_autosave=resume_autosave)
     os.execvp("/bin/bash", ["/bin/bash", "-lc", script])
     return 127
 
@@ -255,6 +370,33 @@ def self_test() -> int:
         n2 = import_folder(str(folder), str(t / "mods"))
         check((t / "mods" / n2 / "bar.txt").read_text() == "ok", "import pasta")
 
+        save_root = t / "savedata"
+        save_root.mkdir()
+        cfg = {"savedata_root": str(save_root), "elf": "EBOOT.ELF", "vfs_root": "USRDIR"}
+        check(not autosave_available(cfg), "sem autosave")
+        payload = b"PARAM"
+        slot = save_root.parent / "ps3recomp-autosave" / "NPUA80491" / "current"
+        (slot / "data").mkdir(parents=True)
+        (slot / "data" / "PARAM.SFO").write_bytes(payload)
+        (slot / "manifest.json").write_text(json.dumps({
+            "version": 1,
+            "title": "NPUA80491",
+            "source": "BCUS98229_GOW2",
+            "captured_at": 1,
+            "files": [{
+                "path": "PARAM.SFO",
+                "size": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }],
+        }))
+        check(autosave_available(cfg), "autosave válido disponível")
+        check("PS3_AUTOSAVE_RESUME=1" in build_launch_script(cfg, resume_autosave=True),
+              "continuar exporta modo")
+        check("PS3_AUTOSAVE_RESUME=1" not in build_launch_script(cfg, resume_autosave=False),
+              "jogar normal não exporta modo")
+        (slot / "data" / "PARAM.SFO").write_bytes(b"PARAX")
+        check(not autosave_available(cfg), "digest ruim recusado")
+
     check(is_elf("/no/such") is False, "ELF ausente")
     print("gow2_launcher self-test:", "FALHOU" if fails else "PASS")
     return 1 if fails else 0
@@ -295,9 +437,20 @@ def run_ui(cfg: dict) -> int:
         return out
 
     def refresh_status() -> None:
-        ok, msg = setup_ok(snapshot())
-        status_var.set(msg)
-        jogar_btn.configure(state=("normal" if ok else "disabled"))
+        data = snapshot()
+        ok, msg = setup_ok(data)
+        have_save = ok and autosave_available(data)
+        status_var.set(msg if not have_save else msg + " Autosave pronto no menu do jogo.")
+        continue_btn.pack_forget()
+        jogar_btn.pack_forget()
+        if have_save:
+            continue_btn.configure(state="normal")
+            continue_btn.pack(fill="x", padx=18, pady=(8, 4))
+            jogar_btn.configure(text="JOGAR NORMALMENTE", state="normal")
+        else:
+            continue_btn.configure(state="disabled")
+            jogar_btn.configure(text="JOGAR", state=("normal" if ok else "disabled"))
+        jogar_btn.pack(fill="x", padx=18, pady=(4, 18))
 
     def persist() -> dict:
         data = snapshot()
@@ -420,10 +573,10 @@ def run_ui(cfg: dict) -> int:
         rebuild_mods()
         persist()
 
-    def do_play() -> None:
+    def do_play(resume_autosave: bool = False) -> None:
         data = persist()
         root.destroy()
-        raise SystemExit(play(data))
+        raise SystemExit(play(data, resume_autosave=resume_autosave))
 
     pad = {"padx": 18, "pady": 6}
     tk.Label(
@@ -504,17 +657,26 @@ def run_ui(cfg: dict) -> int:
             pady=6,
         ).pack(side="left", padx=(0, 8))
 
-    jogar_btn = tk.Button(
+    continue_btn = tk.Button(
         root,
-        text="JOGAR",
-        command=do_play,
+        text="CONTINUAR AUTOSAVE",
+        command=lambda: do_play(True),
         bg=GOLD,
         fg="#1A140F",
         relief="flat",
         font=("Helvetica", 18, "bold"),
         pady=10,
     )
-    jogar_btn.pack(fill="x", padx=18, pady=(8, 18))
+    jogar_btn = tk.Button(
+        root,
+        text="JOGAR",
+        command=lambda: do_play(False),
+        bg="#3A2F28",
+        fg=FG,
+        relief="flat",
+        font=("Helvetica", 16, "bold"),
+        pady=8,
+    )
 
     elf_var.trace_add("write", lambda *_: refresh_status())
     vfs_var.trace_add("write", lambda *_: refresh_status())
@@ -530,6 +692,8 @@ def main(argv: list[str]) -> int:
     args = argv[1:]
     if "--self-test" in args:
         return self_test()
+    if "--continue" in args:
+        return play(cfg, resume_autosave=True)
     if "--play" in args:
         return play(cfg)
     if "--play-or-ui" in args:
@@ -565,7 +729,7 @@ def main(argv: list[str]) -> int:
             save = True
             i += 1
             continue
-        print("uso: gow2_launcher.py [--play | --play-or-ui | --self-test]")
+        print("uso: gow2_launcher.py [--play | --continue | --play-or-ui | --self-test]")
         print("     [--elf PATH --usrdir PATH --save] [--import-zip ZIP]")
         return 2
     if save:

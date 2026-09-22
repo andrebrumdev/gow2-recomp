@@ -94,11 +94,15 @@ void gow2_register_spu_workloads(void)
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
         spu_workload_register_image(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5", 6);
     /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980, base LS 0x3000).
-     * E' o PM cujo relogio de audio gateia a transicao do estado da app (parede [G]).
-     * Gated PS3_SPU6 (host e' SEH/setjmp; um job que rebenta leva o processo). */
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU6"))
-        spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000,
-                                        "gow2_spu6", 0x3000, 7);
+     * On for a normal play launch. PS3_SPU6=0 turns it off. A faulting job is
+     * aborted by the setjmp landing pad; it does not have to stay opt-in. */
+    {
+        const char* e = getenv("PS3_SPU6");
+        int on = getenv("PS3_SPU_ALL") || !e || (e[0] && e[0] != '0');
+        if (on)
+            spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000,
+                                            "gow2_spu6", 0x3000, 7);
+    }
 }
 
 #if defined(__GNUC__)

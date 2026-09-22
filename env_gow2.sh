@@ -56,6 +56,9 @@ export PS3_MOVIE_CACHE
 # real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
 # texturas WAD/UI nao avanca. spu2/3 continuam opt-in (PS3_SPU2/3).
 : "${PS3_SPU1:=1}";             export PS3_SPU1
+# Policy module do SCREAM (fala e efeitos). Sem isto o dispatcher descarta
+# a imagem 0xCEDB9A67 e a porta cellAudio fica sem PCM. PS3_SPU6=0 desliga.
+: "${PS3_SPU6:=1}";             export PS3_SPU6
 
 # FIFO do RSX consumido pelo backend.
 : "${PS3_RSX_FIFO:=1}";         export PS3_RSX_FIFO
@@ -84,13 +87,14 @@ fi
 # E466: sem isto os draws caem num só RT (texturas amassadas, sem 3D).
 : "${PS3_METAL_PER_DRAW_RT:=1}";   export PS3_METAL_PER_DRAW_RT
 # Host present: MetalFX spatial 720p→Retina, in-encoder clears, GPU Morton,
-# vsync/ProMotion, EDR. PS3_METALFX=0 / PASS_MERGE=0 / GPU_DESWIZZLE=0 /
-# VSYNC=0 / HDR=0 desligam cada um.
+# vsync/ProMotion. HDR EDR off: estourava o manto do Colosso em ciano.
+# PS3_METAL_HDR=1 religa. PS3_METALFX=0 / PASS_MERGE=0 / GPU_DESWIZZLE=0 /
+# VSYNC=0 desligam cada um.
 : "${PS3_METALFX:=1}";                 export PS3_METALFX
 : "${PS3_METAL_PASS_MERGE:=1}";        export PS3_METAL_PASS_MERGE
 : "${PS3_METAL_GPU_DESWIZZLE:=1}";     export PS3_METAL_GPU_DESWIZZLE
 : "${PS3_METAL_VSYNC:=1}";             export PS3_METAL_VSYNC
-: "${PS3_METAL_HDR:=1}";               export PS3_METAL_HDR
+: "${PS3_METAL_HDR:=0}";               export PS3_METAL_HDR
 # Diagnostic: Always/no-write. After BEGIN-coalesce the 3D is stable; this
 # left every triangle visible and additive-white. PS3_METAL_DEBUG_NODEPTH=1
 # restores the E466 probe.

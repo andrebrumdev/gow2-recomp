@@ -8,6 +8,9 @@ cd "$HERE" || exit 1
 # capturados ANTES do env_gow2.sh, que os poe incondicionalmente
 G2_DONE_MS="${PS3_MOVIE_DONE_MS-}"
 G2_MUTE="${PS3_MUTE-}"
+# Jogar abre em TELA CHEIA (F11 / Cmd+Enter / Escape voltam para janela).
+# Em janela: PS3_FULLSCREEN=0 ./jogar_g2.sh
+export PS3_FULLSCREEN="${PS3_FULLSCREEN:-1}"
 set -a
 . "$HERE/env_gow2.sh"
 set +a
