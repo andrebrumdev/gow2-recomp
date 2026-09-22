@@ -1,40 +1,138 @@
-# gow2-recomp — work artifacts
+# God of War II HD — native macOS port by static recompilation
 
-Curated artifacts for the God of War II HD (NPUA80491) static recompilation,
-built on top of [ps3recomp](https://github.com/andrebrumdev/ps3recomp) (branch
-`spurs-bringup`). This repo holds the **hard-to-regenerate, non-copyrighted**
-pieces only.
+**God of War II HD** (PS3, `NPUA80491`) running **natively on Apple Silicon**:
+no emulator, no JIT. The PowerPC (PPU) and Cell SPU code is translated ahead
+of time into C/C++, compiled with clang for arm64, and runs on a
+reimplementation of the PS3 OS and libraries with **Metal** for graphics,
+**VideoToolbox** for cutscenes and **CoreAudio** for sound.
 
-## What's here
+> This repository contains **no game code and no game assets**. Like
+> [Dusk](https://duskport.com/dusk/), you bring your own legally dumped copy,
+> and the setup kit (in progress) translates and builds it **on your machine**.
 
-- `functions.json` — PPU function boundaries (with hand-curated additions,
-  e.g. truncated-bounds repair, mid-function targets).
-- `recomp_mid_v2/spu{0..3}_funcs.json` — SPU function boundaries, including
-  manually added function-pointer-only targets (e.g. 0x9300 / 0x96F8 attach
-  callbacks, 0x4070 / 0x5C00).
-- `recomp_mid_v2/rodar_gow2.cmd` — one-click launcher with the correct env vars.
-- `spu_lifted/spu{0..3}_v2/spu_recomp.{c,h}` — SPU lift sources (regenerable
-  from the funcs.json + the fixed lifter, but kept for convenience; contain the
-  RE trace scaffolding).
-- `*.py` — helper scripts (SELF decrypt, psarc/read correlation, lift fixes).
-- `*.md`, `*_design.json`, `research_result.json` — findings / design notes.
+| | |
+|---|---|
+| ![Combat in the palace of Rhodes](docs/img/palace-combat.jpg) | ![The Colossus of Rhodes through the palace windows](docs/img/colossus-window.jpg) |
+| ![Blades of Chaos effects](docs/img/blades-of-chaos.jpg) | ![Volumetric light in the palace](docs/img/palace-lighting.jpg) |
 
-## What's intentionally excluded (see `.gitignore`)
+*Captured from the native Metal renderer on an M-series Mac (1280×720 internal,
+MetalFX upscaled).*
 
-- **Game data** (copyright): `extracted/`, `EBOOT.ELF`, `*.psarc`, the extracted
-  SPU ELFs (`spu_images/`). Keep these in a private local/offline backup, never
-  on GitHub.
-- **Build artifacts** (regenerable): `*.o`, `*.exe`, and the generated PPU lift
-  chunk dirs (`recomp*/*.cpp`, ~1.3 GB — regenerate with the lifter).
+---
 
-## How to rebuild
+## Status
 
-1. Decrypt + extract the game (own copy) → `EBOOT.ELF`, `extracted/`.
-2. Lift PPU: `ppu_lifter.py EBOOT.ELF --functions functions.json` → chunks.
-3. Lift SPU: `spu_lifter.py --auto-functions spu_images/gow2_spuN.elf
-   --functions recomp_mid_v2/spuN_funcs.json --base 0x3000|0x4000
-   --symbol-prefix spuN_` → `spu_lifted/spuN_v2/`.
-4. Compile + link against the ps3recomp runtime (`-O0`), then `rodar_gow2.cmd`.
+| Area | State |
+|---|---|
+| Boot, intro videos, logos | ✅ natural path, videos decoded by VideoToolbox |
+| Main menu, New Game, saves | ✅ memory-card saves on disk |
+| Rhodes gameplay (combat, HUD, particles, lighting) | ✅ 45–60 fps on Apple Silicon |
+| Colossus of Rhodes fight | 🟡 playable; the bronze drape on its shoulder is skinned with a sheared bone matrix (under investigation) |
+| After the Colossus cutscene | 🔴 a script virtual call jumps to an invalid target (`ICALL-BAD 0x80029F47`); regression window narrowed to 2026-09-20 |
+| Audio | 🟡 music/SFX through the SCREAM mixer SPU program; clock still partly host-driven |
+| Controllers | ✅ DualShock 4 / DualSense / Xbox / MFi via GameController, keyboard + mouse |
 
-Full technical history lives in the Claude project memory (`ps3recomp-feasibility`,
-levas 13-17) and in `ps3recomp/docs/`.
+The engineering log (every wall, the hypotheses refuted by measurement and the
+fixes) lives in [`docs/`](docs/) and in the engine repository.
+
+## How it works
+
+```
+EBOOT.ELF (your copy, decrypted)
+   │
+   ├── PPU  ── ppu_lifter.py ──► ~650 C++ chunks, 69k functions ──┐
+   │          (functions.json: curated function bounds,           │
+   │           jump tables, mid-function entry points)            │
+   │                                                               ├─► clang -O1/-O2 arm64 ─► g2play
+   └── SPU  ── spu_lifter.py ──► SPU jobs / SPURS policy modules ─┘            │
+                                                                                ▼
+                               ps3recomp runtime (MIT): LV2 syscalls, PPU threads,
+                               lwmutex/lwcond, SPURS, FIOS, cellGcm → RSX FIFO walker
+                               → Metal backend (MSL from RSX VP/FP), cellVdec → VideoToolbox,
+                               cellAudio → CoreAudio, cellPad → GameController
+```
+
+What makes a PS3 title hard to recompile, and what this port had to solve:
+
+- **Cell B.E.**: one PPU plus up to six SPUs with their own ISA and 256 KB local
+  store; SPU programs (SPURS workloads, job chains, policy modules) are lifted
+  separately and scheduled on host threads.
+- **Indirect control flow**: 64-bit PowerPC function descriptors (`.opd`/TOC),
+  vtables, computed `bctr` jump tables and mid-function entries, all of which
+  the lifter must resolve statically.
+- **RSX**: the command FIFO (with CALL/JUMP, wait points and ring wraps) is
+  walked on the host, and the NV40-class vertex/fragment programs are
+  decompiled to Metal Shading Language.
+- **Faithfulness over shortcuts**: fixes follow console behaviour (RPCS3 is
+  used as a measurement oracle via its GDB stub); diagnostics are gated off by
+  default.
+
+## Bring your own game (macOS kit) — in progress
+
+The goal is a [Dusk](https://duskport.com/dusk/)-style kit: you point it at
+your own `EBOOT.ELF` (decrypted, e.g. with RPCS3 → *Utilities → Decrypt PS3
+Binaries*) and your game's `USRDIR`, and it lifts and builds the native binary
+on your Mac. It is **not released yet**: the production lift still carries
+hand-applied fixes that the patch scripts do not fully reproduce from a fresh
+lift (measured: 100+ patch anchors no longer match the current lifter output),
+and the SPU lift parameters are being turned into a reproducible script. The
+kit ships once a clean lift from a user's own copy boots to gameplay.
+
+Controls: WASD move, mouse camera, Space/E/J/K = ✕/○/□/△, Enter = Start,
+F11 or Cmd+Enter = fullscreen, Esc releases the mouse.
+
+## State of the art in game recompilation
+
+| Project | Platform | Approach | Notable result |
+|---|---|---|---|
+| [N64Recomp](https://github.com/N64Recomp/N64Recomp) | Nintendo 64 (MIPS) | Static recompilation to C | *Zelda 64: Recompiled* and many more; modding framework |
+| [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) | Xbox 360 (PowerPC) | Static recompilation to C++ | *Unleashed Recompiled*, the first 360 recomp playable start to finish |
+| ReXGlue | Xbox 360 | Static recompilation | Tooling for 360 ports |
+| PS2Recomp | PlayStation 2 (MIPS R5900) | Static recompilation | Early stage |
+| [psprecomp](https://github.com/sp00nznet/psprecomp) | PSP (Allegrex MIPS) | Static recompilation to C | Toolkit |
+| [ps3recomp](https://github.com/sp00nznet/ps3recomp) | PlayStation 3 (PPU) | Static recompilation runtime | The base of this port's engine |
+| **This port** | **PlayStation 3 (PPU + SPU)** | **Static recompilation, PPU and SPU, native Metal** | **A commercial PS3 title in gameplay on macOS/arm64** |
+| [Dusk / Dusklight](https://duskport.com/) | GameCube | Decompilation (source rebuilt by hand) | *Twilight Princess* native port; you supply the ISO |
+| [RPCS3](https://rpcs3.net/) | PlayStation 3 | Emulation (LLVM JIT/AOT) | The reference used here as an oracle |
+
+Catalogs: [Recompendium](https://nio03.github.io/unricopie/en/),
+[decompilation & recompilation list](https://readonlymemo.com/decompilation-projects-and-n64-recompiled-list/).
+
+Static recompilation sits between emulation and decompilation: like a
+decompilation it produces native code with no interpreter or JIT (so it can
+use native APIs such as Metal directly), but like an emulator it needs no
+hand-written game source. It only needs the original binary, which is why the
+user has to supply it.
+
+## Repository layout
+
+- `functions.json` — curated PPU function bounds (truncation repairs,
+  mid-function targets).
+- `recomp_mid_v2/` — hand-written glue: SPU workload registration, function
+  overrides, mid-asm hooks, and the idempotent `patch_*.py` scripts that must
+  survive every re-lift.
+- `config/gow2_recomp.toml` — lifter configuration (hooks).
+- `jogar_g2.sh`, `env_gow2.sh`, `gow2_launcher.py` — launcher and environment.
+- `docs/` — design notes and investigation logs.
+
+Excluded on purpose (see `.gitignore`): `EBOOT.ELF`, `extracted/`, `*.psarc`,
+SPU images, lifted PPU/SPU sources, texture dumps and build output. Those are
+derived from the game and are regenerated from your own copy.
+
+## Legal
+
+God of War II is © Sony Interactive Entertainment. This project is not
+affiliated with or endorsed by Sony. It distributes no copyrighted game code
+or assets; you must own the game. The engine is MIT licensed
+(© sp00nznet and contributors).
+
+---
+
+### Em português
+
+Port nativo de **God of War II HD** (PS3) para **macOS/Apple Silicon** por
+**recompilação estática**: o código PowerPC e SPU do jogo é traduzido para
+C/C++ e compilado para arm64, rodando sobre uma reimplementação do sistema do
+PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é
+distribuído: como no Dusk, você fornece sua própria cópia e o kit de
+instalação (em desenvolvimento) traduz e compila tudo na sua máquina.
