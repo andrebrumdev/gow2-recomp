@@ -36,10 +36,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
 # comportamento e' exactamente o de antes.
 PS3="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
+# Python das ferramentas: PY, senao o .venv do motor (checkout de dev), senao
+# python3. O motor do kit de release nao traz .venv.
+PYBIN="${PY:-$PS3/.venv/bin/python}"
+[ -x "$PYBIN" ] || PYBIN="$(command -v python3)"
 # Keep the Metal ring-fence fix reproducible across runtime rebuilds. The patch
 # is idempotent and preserves PS3_METAL_FRAME_FENCE=0 as an explicit unsafe A/B.
-"$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
-"$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
+"$PYBIN" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
+"$PYBIN" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
 # The Xcode clang selected on this host does not infer the active SDK when it
 # is invoked directly.  Without SDKROOT every lifted C++ TU fails at the first
 # standard-library include (for example, <atomic>).  Keep an explicitly
@@ -427,7 +431,7 @@ mkdir -p "$LIFT/gen"
 LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
        | grep -vx 'sceNpCommerce')
 # shellcheck disable=SC2086
-"$PS3/.venv/bin/python" "$PS3/tools/gen_hle_nids.py" \
+"$PYBIN" "$PS3/tools/gen_hle_nids.py" \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
 clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$LIFT/ppu_hle_nids.o"
 
@@ -462,27 +466,27 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         # Re-lift the captured image in a temporary directory and import every
         # observed bi/bisl destination.  SPU0_OBSERVED_LOG may point at a fresh
         # runtime log; the tracked manifest remains the baseline evidence.
-        "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
+        "$PYBIN" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
         SPU0_CONTRACT_ARGS=(
             --observed "$HERE/recomp_mid_v2/spu0_observed_indirect_targets.lst"
         )
         if [ -n "${SPU0_OBSERVED_LOG:-}" ]; then
             SPU0_CONTRACT_ARGS+=(--observed "$SPU0_OBSERVED_LOG")
         fi
-        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
+        "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
             "${SPU0_CONTRACT_ARGS[@]}"
     elif [ "$n" = spu1_v2 ]; then
-        "$PS3/.venv/bin/python" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
+        "$PYBIN" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
         if [ -n "${SPU1_OBSERVED_LOG:-}" ]; then
-            "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
+            "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
                 --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst" \
                 --observed "$SPU1_OBSERVED_LOG"
         else
-            "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
+            "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
                 --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst"
         fi
     else
-        "$PS3/.venv/bin/python" "$PS3/tools/verify_spu_indirect_entries.py" "$d" "${n%_v2}_"
+        "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" "${n%_v2}_"
     fi
     # Os helpers de semantica do SPU sao header-only: sem estas dependencias,
     # editar runtime/spu/*.h produzia um binario novo com o codigo velho do SPU.
