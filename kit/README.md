@@ -13,22 +13,31 @@ your Mac from the files you provide.
 - [Homebrew](https://brew.sh), then `brew install cmake ninja python`.
   Python must be 3.11 or newer.
 - Your game, **God of War II HD, NPUA80491 v01.00**:
-  - the game folder (`PS3_GAME`, the one with `USRDIR/gow2.psarc`), from your
-    disc or from RPCS3's `dev_hdd0/game/NPUA80491`;
-  - the decrypted executable `EBOOT.ELF`. In RPCS3, open **Utilities > Decrypt
-    PS3 Binaries** and pick `PS3_GAME/USRDIR/EBOOT.BIN`. Save the result as
-    `EBOOT.ELF`.
+  - the game folder (`PS3_GAME`, with `USRDIR/EBOOT.BIN` and
+    `USRDIR/gow2.psarc`), from RPCS3's `dev_hdd0/game/NPUA80491` or from your
+    PS3;
+  - your license for it, `UP9000-NPUA80491_00-GODOFWARIIHDUS00.rap`. RPCS3
+    keeps it in `dev_hdd0/home/<user>/exdata`, and it can also be dumped from
+    your PS3. `setup.sh` finds it by itself in RPCS3's folder, next to the game
+    folder or in `~/Downloads`.
+
+The kit decrypts `EBOOT.BIN` itself (engine `tools/unself`, the same process
+RPCS3 uses). You do not need RPCS3 to prepare anything.
 
 ## Build
 
 ```bash
 cd gow2-recomp
-./kit/setup.sh /path/to/EBOOT.ELF /path/to/PS3_GAME
+./kit/setup.sh /path/to/PS3_GAME            # finds the .rap by itself
+./kit/setup.sh /path/to/PS3_GAME --rap /path/to/UP9000-NPUA80491_00-GODOFWARIIHDUS00.rap
 ```
+
+If you already have a decrypted `EBOOT.ELF`, add `--elf /path/to/EBOOT.ELF`.
 
 The first run takes 5–15 minutes. `setup.sh` does the following:
 
-1. Checks that the EBOOT is the supported release, using its SHA-256.
+1. Decrypts `EBOOT.BIN` with your license and checks that the result is the
+   supported release, using its SHA-256.
 2. Extracts the movies and WADs the host video player needs from your
    `gow2.psarc` into `movie_cache/`.
 3. Recompiles the PPU code: the pinned lifter, then the patch scripts, then

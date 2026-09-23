@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # kit/setup.sh -- build GoW2 Recomp for macOS (Apple Silicon) from YOUR copy of the game.
 #
-#   ./kit/setup.sh <EBOOT.ELF> <PS3_GAME folder>
+#   ./kit/setup.sh <PS3_GAME folder> [--rap <license.rap>] [--elf <EBOOT.ELF>]
 #
-#   EBOOT.ELF        the game's executable, decrypted. RPCS3 does it:
-#                    Utilities > Decrypt PS3 Binaries > PS3_GAME/USRDIR/EBOOT.BIN.
-#                    Supported: God of War II HD, NPUA80491 v01.00 (SHA-256 below).
-#   PS3_GAME folder  the game's folder with USRDIR/gow2.psarc (and PARAM.SFO,
-#                    ICON0.PNG...), from your disc or your RPCS3 dev_hdd0/game.
+#   PS3_GAME folder  the game's folder with USRDIR/EBOOT.BIN and USRDIR/gow2.psarc,
+#                    from your RPCS3 dev_hdd0/game/NPUA80491 or your PS3.
+#   --rap            your license for the game, UP9000-NPUA80491_00-GODOFWARIIHDUS00.rap.
+#                    Found by itself in RPCS3's dev_hdd0/home/*/exdata, next to the
+#                    game folder or in ~/Downloads.
+#   --elf            an EBOOT.ELF you already decrypted (skips the decryption).
+#   Supported: God of War II HD, NPUA80491 v01.00 (SHA-256 of the ELF below).
 #
 # What it does, all locally, nothing is downloaded:
 #   1. checks the tools (Xcode Command Line Tools, CMake, Ninja, Python >= 3.11);
-#   2. checks the EBOOT and links the game folder as extracted/;
+#   2. decrypts USRDIR/EBOOT.BIN with your license (tools/unself in the engine)
+#      and links the game folder as extracted/;
 #   3. extracts the movies and WADs the host player reads into movie_cache/;
 #   4. recompiles the PPU code (pinned lifter + patch scripts + kit delta) and
 #      checks every generated file against kit/ppu_lift.sha256;
@@ -23,18 +26,28 @@
 set -euo pipefail
 
 EBOOT_SHA=23cfd435be284adb83745c3e1bcad7b7660782470f71255cb74a1d2be8b1163b
+CONTENT_ID=UP9000-NPUA80491_00-GODOFWARIIHDUS00
 PPU_LIFTER_REV=5b004fc7
 
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die()  { printf '\n\033[31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ $# -eq 2 ] || { sed -n '2,24p' "$0"; exit 2; }
+usage() { sed -n '2,29p' "$0"; exit 2; }
+GAME_ARG=""; RAP_IN=""; ELF_IN=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --rap) RAP_IN="${2:-}"; shift 2 ;;
+        --elf) ELF_IN="${2:-}"; shift 2 ;;
+        -h|--help) usage ;;
+        *) [ -z "$GAME_ARG" ] || usage; GAME_ARG="$1"; shift ;;
+    esac
+done
+[ -n "$GAME_ARG" ] || usage
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 KIT="$HERE/kit"
 ENGINE="$(cd "${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}" 2>/dev/null && pwd)" \
     || die "motor ps3recomp nao encontrado (esperado em $HERE/../ps3recomp ou PS3_ENGINE_ROOT)"
-EBOOT_IN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-GAME_IN="$(cd "$2" && pwd)"
+GAME_IN="$(cd "$GAME_ARG" && pwd)" || die "pasta do jogo nao encontrada: $GAME_ARG"
 JOBS="${JOBS:-$(sysctl -n hw.ncpu)}"
 
 # ---- 1. tools ---------------------------------------------------------------
@@ -56,19 +69,38 @@ echo "   clang $(clang --version | head -1 | sed 's/.*version //;s/ .*//'), cmak
 
 # ---- 2. game files ----------------------------------------------------------
 say "2/6 arquivos do jogo"
-if [ "$(head -c 3 "$EBOOT_IN")" = "SCE" ]; then
-    die "$EBOOT_IN ainda esta' cifrado (SELF). Descriptografe no RPCS3: Utilities > Decrypt PS3 Binaries."
-fi
-got="$(shasum -a 256 "$EBOOT_IN" | cut -d' ' -f1)"
-[ "$got" = "$EBOOT_SHA" ] || die "EBOOT nao suportado (SHA-256 $got). O kit precisa do God of War II HD NPUA80491 v01.00."
 [ -f "$GAME_IN/USRDIR/gow2.psarc" ] || die "nao achei USRDIR/gow2.psarc em $GAME_IN"
-if [ "$EBOOT_IN" != "$HERE/EBOOT.ELF" ]; then cp "$EBOOT_IN" "$HERE/EBOOT.ELF"; fi
+elf_ok() { [ -f "$1" ] && [ "$(shasum -a 256 "$1" | cut -d' ' -f1)" = "$EBOOT_SHA" ]; }
+if [ -n "$ELF_IN" ]; then
+    elf_ok "$ELF_IN" || die "$ELF_IN nao e' o EBOOT.ELF suportado (God of War II HD NPUA80491 v01.00)"
+    [ "$(cd "$(dirname "$ELF_IN")" && pwd)/$(basename "$ELF_IN")" = "$HERE/EBOOT.ELF" ] || cp "$ELF_IN" "$HERE/EBOOT.ELF"
+    echo "   EBOOT.ELF fornecido e conferido"
+elif elf_ok "$HERE/EBOOT.ELF"; then
+    echo "   EBOOT.ELF ja' descriptografado e conferido"
+else
+    [ -f "$GAME_IN/USRDIR/EBOOT.BIN" ] || die "nao achei USRDIR/EBOOT.BIN em $GAME_IN"
+    if [ -z "$RAP_IN" ]; then
+        for c in "$HOME/Library/Application Support/rpcs3/dev_hdd0/home/"*/exdata/"$CONTENT_ID.rap" \
+                 "$GAME_IN/$CONTENT_ID.rap" "$GAME_IN/../$CONTENT_ID.rap"; do
+            [ -f "$c" ] && { RAP_IN="$c"; break; }
+        done
+        [ -n "$RAP_IN" ] || RAP_IN="$(find "$HOME/Downloads" -maxdepth 3 -name "$CONTENT_ID.rap" 2>/dev/null | head -1)"
+    fi
+    [ -n "$RAP_IN" ] && [ -f "$RAP_IN" ] || die "falta a licenca do jogo ($CONTENT_ID.rap). Passe --rap <arquivo>; no RPCS3 ela fica em dev_hdd0/home/<usuario>/exdata."
+    mkdir -p "$HERE/.kit_tools"
+    clang -O2 "$ENGINE/tools/unself/ps3_unself.c" -lz -o "$HERE/.kit_tools/ps3_unself" \
+        || die "nao compilou o descriptografador (tools/unself)"
+    "$HERE/.kit_tools/ps3_unself" "$GAME_IN/USRDIR/EBOOT.BIN" "$HERE/EBOOT.ELF" --rap "$RAP_IN" \
+        || die "a descriptografia do EBOOT.BIN falhou"
+    elf_ok "$HERE/EBOOT.ELF" || die "o EBOOT.BIN descriptografado nao e' a versao suportada (NPUA80491 v01.00)"
+    echo "   EBOOT.BIN descriptografado com $(basename "$RAP_IN") e conferido"
+fi
 if [ -L "$HERE/extracted" ] || [ ! -e "$HERE/extracted" ]; then
     ln -sfn "$GAME_IN" "$HERE/extracted"
 elif [ "$(cd "$HERE/extracted" && pwd -P)" != "$(cd "$GAME_IN" && pwd -P)" ]; then
     echo "   extracted/ ja' existe (pasta real) -- mantida"
 fi
-echo "   EBOOT.ELF ok (NPUA80491 v01.00); extracted -> $GAME_IN"
+echo "   extracted -> $GAME_IN"
 
 # ---- 3. movie_cache -----------------------------------------------------------
 say "3/6 filmes e WADs (movie_cache)"
@@ -105,14 +137,23 @@ else
     "$PY" "$T/tools/ppu_lifter.py" "$HERE/EBOOT.ELF" --functions "$HERE/functions.json" \
         --config "$HERE/config/gow2_recomp.toml" -o "$T/lift" -j "$JOBS" > "$T/lift.log" 2>&1 \
         || { tail -20 "$T/lift.log"; die "o lifter falhou"; }
+    # The lifter stamps its git revision; an exported snapshot has no git, so
+    # it writes "unknown". The revision is the pinned one.
+    sed -i '' "s|/\* lifter-rev: unknown \*/|/* lifter-rev: $PPU_LIFTER_REV */|" "$T"/lift/ppu_recomp_00?.cpp
     echo "   scripts de patch (apply_all_patches.sh)"
-    (cd "$HERE" && ./apply_all_patches.sh "$T/lift" > "$T/patches.log" 2>&1) || true
+    # apply_all_patches.sh takes a lift dir RELATIVE to the repo root.
+    W=".kit_lift"; rm -rf "$HERE/$W"; mv "$T/lift" "$HERE/$W"
+    # rc != 0 is expected: its report counts the patches the old lift shape
+    # does not match (the kit delta below covers them). A missing dir is not.
+    (cd "$HERE" && ./apply_all_patches.sh "$W" > "$T/patches.log" 2>&1) || true
+    grep -q "^ERRO" "$T/patches.log" && { cat "$T/patches.log"; die "apply_all_patches.sh falhou"; }
     echo "   delta do kit (kit/ppu_lift_delta.patch)"
-    (cd "$T/lift" && patch -p1 -s < "$KIT/ppu_lift_delta.patch") || die "o delta do kit nao aplicou"
-    (cd "$T/lift" && shasum -a 256 -c "$KIT/ppu_lift.sha256" >/dev/null) \
-        || { (cd "$T/lift" && shasum -a 256 -c "$KIT/ppu_lift.sha256" | grep -v ': OK'); die "o PPU recompilado nao confere com kit/ppu_lift.sha256"; }
+    (cd "$HERE/$W" && patch -p1 -s < "$KIT/ppu_lift_delta.patch") || die "o delta do kit nao aplicou"
+    (cd "$HERE/$W" && shasum -a 256 -c "$KIT/ppu_lift.sha256" >/dev/null) \
+        || { (cd "$HERE/$W" && shasum -a 256 -c "$KIT/ppu_lift.sha256" | grep -v ': OK'); die "o PPU recompilado nao confere com kit/ppu_lift.sha256"; }
     rm -rf "$LIFT"; mkdir -p "$LIFT"
-    cp "$T"/lift/ppu_recomp.h "$T"/lift/ppu_recomp_00?.cpp "$LIFT/"
+    cp "$HERE/$W"/ppu_recomp.h "$HERE/$W"/ppu_recomp_00?.cpp "$LIFT/"
+    rm -rf "$HERE/$W"
     rm -rf "$T"; trap - EXIT
     echo "   8 arquivos verificados"
 fi

@@ -128,3 +128,5 @@ gcm_stream_*.bin
 
 # kit/setup.sh: extracted pode ser um symlink para a pasta PS3_GAME do usuario
 /extracted
+/.kit_lift/
+/.kit_tools/
