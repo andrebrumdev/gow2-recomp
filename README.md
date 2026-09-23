@@ -67,6 +67,29 @@ What makes a PS3 title hard to recompile, and what this port had to solve:
   used as a measurement oracle via its GDB stub); diagnostics are gated off by
   default.
 
+## Launcher (macOS)
+
+![GoW2 Recomp launcher](docs/img/launcher-play.jpg)
+
+`GoW2 Recomp.app` is a native SwiftUI launcher in the spirit of Dusk:
+point it at your own `EBOOT.ELF` and `USRDIR`, pick graphics/audio/control
+options, manage mods and play. Build it with:
+
+```
+launcher/macos/build_app.sh     # -> ./GoW2 Recomp.app
+```
+
+- **No Python, no interpreter**: validation, config, autosave checks (SHA-256
+  per file) and mod import run in Swift inside the app.
+- **RPCS3-style patches**: the launcher computes your executable's RPCS3 PPU
+  hash by streaming the ELF (for NPUA80491 01.00 it is
+  `PPU-31e32090ea333902dbf322c24487bab7e8c8d0d1`), reads RPCS3's
+  `patch.yml` (anchors, aliases, configurable values) or any `.yml` you
+  import, and passes the enabled ones to the runtime (`PS3_PATCH_FILE`). Data
+  patches (e.g. aspect ratio) take effect; code patches are flagged, because
+  the code was already recompiled and would need a re-lift.
+- Design system in [`launcher/macos/MASTER.md`](launcher/macos/MASTER.md).
+
 ## Bring your own game (macOS kit) — in progress
 
 The goal is a [Dusk](https://duskport.com/dusk/)-style kit: you point it at
