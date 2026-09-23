@@ -558,6 +558,16 @@ uint32_t movie_cutscene_publish_samples(uint32_t session_ea, int active,
      * cannot read. FUN_00461fe8 copies voice+0x14 over stream+0x154, so a
      * sample write without the voice write is wiped back to 0. */
     if (!active || !session_ea || !vm_base) return 0;
+    /* Host clock only for the intro (index 0), whose sound is the host .wav.
+     * An in-game video plays its own .vpk through the SCREAM mixer, which now
+     * advances the real voice position; overwriting it with host time counted
+     * from Open (not Play) made the player end the cutscene 4-14 s in instead
+     * of ~113 s. Default stays "always" until that is fixed at the root;
+     * PS3_MOVIE_CLOCK=intro = intro only, 0 = never. */
+    { static int on = -1;
+      if (on < 0) { const char* e = getenv("PS3_MOVIE_CLOCK"); on = (e && e[0] == '0') ? 0 : (e && e[0] == 'i') ? 2 : 1; }
+      if (!on) return 0;
+      if (on == 2 && movie_clock_ingame_index() >= 1) return 0; }
     if (!movie_eos_peek32(session_ea + MOVIE_AUDIO_VOICE_OFF, &voice)
         || voice >= MOVIE_VOICE_MAX)
         return 0;
@@ -750,6 +760,13 @@ static void movie_sampler_loop(void)
                     ppu_blockmark_dump();
                 }
             }
+#if defined(__APPLE__)
+            /* The in-game picture waits for Play (movie_hle.c). */
+            if (st == 11u && prev != 11u) {
+                extern int movie_hle_start_pending_ingame(void);
+                movie_hle_start_pending_ingame();
+            }
+#endif
             prev = st;
             since_log = 0;
         }
