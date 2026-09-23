@@ -167,19 +167,22 @@
 @@ -1067 +1168 @@
 -/* lifter-rev: 5b004fc7 */
 +/* lifter-rev: 72a50b5e */
-@@ -1527,0 +1629 @@
+@@ -1527,0 +1629,4 @@
 +extern "C" void ps3_type15_product_list_reset(uint32_t prod);
-@@ -1642,0 +1745,2 @@
++
++
++
+@@ -1772,0 +1878,2 @@
 +        /* SCHEDARM-PROBE id=12 */
 +        { ps3_sa_on_enter(12, ctx); }
-@@ -47413,0 +47518,6 @@
+@@ -47543,0 +47651,6 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (boot[6] logo DEPOIS da intro). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_00040090 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -48873,0 +48984,8 @@
+@@ -49003,0 +49117,8 @@
 +        /* E89-ATTACHED-GATE */
 +        { static int _e89=-1; if(_e89<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_E89_LGLSCA_ATTACHED"); _e89=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_e89){ uint32_t _p=(uint32_t)ctx->gpr[3]; if(_p>=0x10000u && vm_read16(_p+6)==0x0016u){ uint16_t _f=vm_read16(_p+8); vm_write16(_p+8, _f|4u);
@@ -188,16 +191,16 @@
 +        { static int _l_on=-1; if(_l_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _l_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_l_on){ const char* ps3_dbg_sym(void*); uint32_t _p=(uint32_t)ctx->gpr[3]; uint16_t _fl=vm_read16(_p+8); (void)ps3_dbg_sym;
 +            fprintf(stderr,"[LGLSC] entra func_000415F0 p=0x%08X classidx(+6)=0x%04X ownerslot(+0xA)=0x%04X flags(+8)=0x%04X bit4=%s -> %s lr=0x%08X\n", _p, vm_read16(_p+6), vm_read16(_p+0xA), _fl, (_fl&4)?"SET":"clear", (_fl&4)?"SALTA o push":"vai empurrar", (uint32_t)ctx->lr); fflush(stderr);} }
-@@ -49459,0 +49578 @@
+@@ -49589,0 +49711 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<4) fprintf(stderr,"[DRV] after 1st func_002BAD10 (sync) returned r3=0x%08X\n",(uint32_t)ctx->gpr[3]); } }
-@@ -49483,0 +49603 @@
+@@ -49613,0 +49736 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<4) fprintf(stderr,"[DRV] after 2nd func_002BAD10 (async) returned r3=0x%08X\n",(uint32_t)ctx->gpr[3]); } }
-@@ -49492,0 +49613,4 @@
+@@ -49622,0 +49746,4 @@
 +        /* E370: does control RETURN from the loader call at all? (placed BEFORE the cmp/goto,
 +         * unlike the E351 KG-PROBE which sat after the branch and was therefore ambiguous). */
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICKRET"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static int _n=0; static int _cap=-1; if(_cap<0){ const char* c=getenv("PS3_TRACE_TICKRET_N"); _cap=(c&&*c)?atoi(c):30; } if(_n++<_cap) fprintf(stderr,"[TICKRET] #%d returned from func_002BA76C r3=0x%08X (r3!=0 -> loop again)\n",_n,(uint32_t)ctx->gpr[3]); } }
-@@ -49495,0 +49620,15 @@
+@@ -49625,0 +49753,15 @@
 +        /* E351 KEEPGOING (gated PS3_F2B_KEEPGOING, diagnostic OFF by default):
 +         * the driver exits when func_002BA76C returns 0 after the TOC pass, but
 +         * the loader reservation rem (ts+0x1AC) is still ~20MB. Force the loop
@@ -213,111 +216,111 @@
 +              if(_rounds<=40||(_rounds%5000)==0) fprintf(stderr,"[F2B-KEEPGOING] round=%ld rem=0x%X ret=%d -> re-drive\n",_rounds,_rem,(int)(int32_t)ctx->gpr[3]);
 +              goto loc_00041FD4; }
 +          } }
-@@ -49667,0 +49807,6 @@
+@@ -49797,0 +49940,6 @@
 +        /* E117-WADSLOTS */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static uint32_t _last=0xFFFFFFFFu; static int _n=0; uint32_t _o=(uint32_t)ctx->gpr[3]; if(_o>=0x10000u&&_o<0x4F000000u){ uint32_t _st=vm_read32(_o+0x550u);
 +            if(_st!=_last && _n++<40){ _last=_st; uint32_t _idx=vm_read32(_o+0x480u); char _b[400]; int _w=0; _b[0]=0;
 +              for(int _i=0;_i<12;_i++){ uint32_t _wo=vm_read32(_o+0x454u+_i*4u); _w+=snprintf(_b+_w,sizeof(_b)-_w,"[%d]=%08X/+20=%08X ",_i,_wo,(_wo>=0x10000u&&_wo<0x4F000000u)?vm_read32(_wo+0x20u):0xDEADu); }
 +              fprintf(stderr,"[WADSLOTS] obj=0x%08X estado=%u idx=%u +0x554=0x%08X +0x558=%u  %s\n",_o,_st,_idx,vm_read32(_o+0x554u),vm_read32(_o+0x558u),_b); fflush(stderr); } } } }
-@@ -49678,0 +49824 @@
+@@ -49808,0 +49957 @@
 +        /* E435-DRVQ */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_DRVQ"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ uint32_t _o=(uint32_t)ctx->gpr[31]; if(_o>=0x10000u&&_o<0x4F000000u){ static uint32_t _l[4]={0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu}; static int _c=0; static unsigned long _n=0; _n++; uint32_t _v[4]; _v[0]=vm_read32(_o+0x40u); _v[1]=vm_read32(_o+0x44u); _v[2]=vm_read32(_o+0x54Cu); _v[3]=vm_read32(_o+0x550u); int _ch=(_v[0]!=_l[0]||_v[1]!=_l[1]||_v[2]!=_l[2]||_v[3]!=_l[3]); if((_ch && _c<400) || (_n%20000u)==0){ if(_ch) _c++; char _b[260]; int _w=0; _b[0]=0; for(int _i=0;_i<32;_i++) _w+=snprintf(_b+_w,sizeof(_b)-(size_t)_w,"%02X",(unsigned)(vm_read16(_o+0x4Cu+(uint32_t)_i*32u)&0xFFu)); fprintf(stderr,"[DRVQ] #%lu%s o=0x%08X idx=%u count=%u pause=%u state=%u ops=%s\n",_n,_ch?" CHANGE":" beat",_o,_v[0],_v[1],_v[2],_v[3],_b); fflush(stderr); } _l[0]=_v[0];_l[1]=_v[1];_l[2]=_v[2];_l[3]=_v[3]; } } }
-@@ -49720,0 +49867,2 @@
+@@ -49850,0 +50000,2 @@
 +        /* E130-LDRSTATE 0 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=0){ fprintf(stderr,"[LDRSTATE] 0 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=0; g_e130_n=0; } g_e130_n++; } }
-@@ -49779,0 +49928,2 @@
+@@ -49909,0 +50061,2 @@
 +        /* E130-LDRSTATE 1 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=1){ fprintf(stderr,"[LDRSTATE] 1 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=1; g_e130_n=0; } g_e130_n++; } }
-@@ -49900,0 +50051,2 @@
+@@ -50030,0 +50184,2 @@
 +        /* E130-LDRSTATE 26 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=26){ fprintf(stderr,"[LDRSTATE] 26 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=26; g_e130_n=0; } g_e130_n++; } }
-@@ -49931,0 +50084,2 @@
+@@ -50061,0 +50217,2 @@
 +        /* E130-LDRSTATE 25 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=25){ fprintf(stderr,"[LDRSTATE] 25 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=25; g_e130_n=0; } g_e130_n++; } }
-@@ -49961,0 +50116,2 @@
+@@ -50091,0 +50249,2 @@
 +        /* E130-LDRSTATE 24 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=24){ fprintf(stderr,"[LDRSTATE] 24 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=24; g_e130_n=0; } g_e130_n++; } }
-@@ -50077,0 +50234,2 @@
+@@ -50207,0 +50367,2 @@
 +        /* E130-LDRSTATE 23 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=23){ fprintf(stderr,"[LDRSTATE] 23 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=23; g_e130_n=0; } g_e130_n++; } }
-@@ -50129,0 +50288,2 @@
+@@ -50259,0 +50421,2 @@
 +        /* E130-LDRSTATE 22 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=22){ fprintf(stderr,"[LDRSTATE] 22 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=22; g_e130_n=0; } g_e130_n++; } }
-@@ -50180,0 +50341,2 @@
+@@ -50310,0 +50474,2 @@
 +        /* E130-LDRSTATE 21 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=21){ fprintf(stderr,"[LDRSTATE] 21 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=21; g_e130_n=0; } g_e130_n++; } }
-@@ -50258,0 +50421,2 @@
+@@ -50388,0 +50554,2 @@
 +        /* E130-LDRSTATE 20 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=20){ fprintf(stderr,"[LDRSTATE] 20 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=20; g_e130_n=0; } g_e130_n++; } }
-@@ -50280,0 +50445,2 @@
+@@ -50410,0 +50578,2 @@
 +        /* E130-LDRSTATE 19 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=19){ fprintf(stderr,"[LDRSTATE] 19 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=19; g_e130_n=0; } g_e130_n++; } }
-@@ -50310,0 +50477,2 @@
+@@ -50440,0 +50610,2 @@
 +        /* E130-LDRSTATE 18 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=18){ fprintf(stderr,"[LDRSTATE] 18 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=18; g_e130_n=0; } g_e130_n++; } }
-@@ -50338,0 +50507,2 @@
+@@ -50468,0 +50640,2 @@
 +        /* E130-LDRSTATE 17 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=17){ fprintf(stderr,"[LDRSTATE] 17 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=17; g_e130_n=0; } g_e130_n++; } }
-@@ -50373,0 +50544,2 @@
+@@ -50503,0 +50677,2 @@
 +        /* E130-LDRSTATE 9 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=9){ fprintf(stderr,"[LDRSTATE] 9 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=9; g_e130_n=0; } g_e130_n++; } }
-@@ -50490,0 +50663,2 @@
+@@ -50620,0 +50796,2 @@
 +        /* E130-LDRSTATE 13 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=13){ fprintf(stderr,"[LDRSTATE] 13 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=13; g_e130_n=0; } g_e130_n++; } }
-@@ -50566,0 +50741,2 @@
+@@ -50696,0 +50874,2 @@
 +        /* E130-LDRSTATE 12 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=12){ fprintf(stderr,"[LDRSTATE] 12 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=12; g_e130_n=0; } g_e130_n++; } }
-@@ -50597,0 +50774,2 @@
+@@ -50727,0 +50907,2 @@
 +        /* E130-LDRSTATE 5 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=5){ fprintf(stderr,"[LDRSTATE] 5 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=5; g_e130_n=0; } g_e130_n++; } }
-@@ -50714,0 +50893,2 @@
+@@ -50844,0 +51026,2 @@
 +        /* E130-LDRSTATE 4 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=4){ fprintf(stderr,"[LDRSTATE] 4 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=4; g_e130_n=0; } g_e130_n++; } }
-@@ -50765,0 +50946,2 @@
+@@ -50895,0 +51079,2 @@
 +        /* E130-LDRSTATE 15 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=15){ fprintf(stderr,"[LDRSTATE] 15 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=15; g_e130_n=0; } g_e130_n++; } }
-@@ -50861,0 +51044,2 @@
+@@ -50991,0 +51177,2 @@
 +        /* E130-LDRSTATE 14 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=14){ fprintf(stderr,"[LDRSTATE] 14 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=14; g_e130_n=0; } g_e130_n++; } }
-@@ -50939,0 +51124,2 @@
+@@ -51069,0 +51257,2 @@
 +        /* E130-LDRSTATE 7 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=7){ fprintf(stderr,"[LDRSTATE] 7 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=7; g_e130_n=0; } g_e130_n++; } }
-@@ -51000,0 +51187,2 @@
+@@ -51130,0 +51320,2 @@
 +        /* E130-LDRSTATE 11 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=11){ fprintf(stderr,"[LDRSTATE] 11 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=11; g_e130_n=0; } g_e130_n++; } }
-@@ -51045,0 +51234,2 @@
+@@ -51175,0 +51367,2 @@
 +        /* E130-LDRSTATE 10 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=10){ fprintf(stderr,"[LDRSTATE] 10 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=10; g_e130_n=0; } g_e130_n++; } }
-@@ -51081,0 +51272,2 @@
+@@ -51211,0 +51405,2 @@
 +        /* E130-LDRSTATE 3 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=3){ fprintf(stderr,"[LDRSTATE] 3 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=3; g_e130_n=0; } g_e130_n++; } }
-@@ -51213,0 +51406,2 @@
+@@ -51343,0 +51539,2 @@
 +        /* E130-LDRSTATE 16 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=16){ fprintf(stderr,"[LDRSTATE] 16 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=16; g_e130_n=0; } g_e130_n++; } }
-@@ -51312,0 +51507,2 @@
+@@ -51442,0 +51640,2 @@
 +        /* E130-LDRSTATE 8 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=8){ fprintf(stderr,"[LDRSTATE] 8 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=8; g_e130_n=0; } g_e130_n++; } }
-@@ -51334,0 +51531,2 @@
+@@ -51464,0 +51664,2 @@
 +        /* E130-LDRSTATE 6 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=6){ fprintf(stderr,"[LDRSTATE] 6 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=6; g_e130_n=0; } g_e130_n++; } }
-@@ -51343,0 +51542,2 @@
+@@ -51473,0 +51675,2 @@
 +        /* E130-LDRSTATE 2 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ extern int g_e130_last, g_e130_n; if(g_e130_last!=2){ fprintf(stderr,"[LDRSTATE] 2 (anterior %d x%d)\n",g_e130_last,g_e130_n); g_e130_last=2; g_e130_n=0; } g_e130_n++; } }
-@@ -52208,0 +52409,6 @@
+@@ -52338,0 +52542,6 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (boot[4] ultimo antes da intro). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_0004476C #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -119556,0 +119763,6 @@
+@@ -119686,0 +119896,6 @@
 +        /* E104-912A0 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<12){ uint32_t _a=(uint32_t)ctx->gpr[3], _c=(uint32_t)ctx->gpr[4];
 +            int _ao=(_a>=0x10000u&&_a<0x4F000000u), _co=(_c>=0x10000u&&_c<0x4F000000u);
 +            fprintf(stderr,"[912A0] r3=0x%08X[+0=0x%08X,+4=0x%08X] r4=0x%08X[+0=0x%08X,+4=0x%08X] r5=0x%08X r6=0x%08X lr=0x%08X\n",
 +              _a,_ao?vm_read32(_a):0u,_ao?vm_read32(_a+4u):0u,_c,_co?vm_read32(_c):0u,_co?vm_read32(_c+4u):0u,(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],(uint32_t)ctx->lr); fflush(stderr); } } }
-@@ -131517,0 +131730,35 @@
+@@ -131647,0 +131863,35 @@
 +        /* E126-9EC0C-ENTRY */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _o=(uint32_t)ctx->gpr[3]; int _ok=(_o>=0x10000u&&_o<0x4F000000u);
@@ -353,91 +356,91 @@
 +            fprintf(stderr,"[9EC0C] obj=0x%08X w0=0x%08X parent=0x%08X parent_w0=0x%08X cls_idx=%u node=0x%08X child=0x%08X p2=0x%08X p3=0x%08X lr=0x%08X\n",_o,_ok?vm_read32(_o):0u,_p,_pk?vm_read32(_p):0u,_ci,_node,_node?_node-0x14u:0u,(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->lr);
 +            if(_pk){ char _sb[420]; int _sw=0; _sb[0]=0; for(int _i=0;_i<34;_i++) _sw+=snprintf(_sb+_sw,sizeof(_sb)-_sw,"%08X ",vm_read32(_p+0xB8u+_i*4u)); fprintf(stderr,"[9EC0C]   parent slots+0xB8: %s\n",_sb); }
 +            fflush(stderr); } } }
-@@ -131553,0 +131801 @@
+@@ -131683,0 +131934 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131554,0 +131803 @@
+@@ -131684,0 +131936 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_00065B5C",(uint32_t)0x0009EC70,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_00065B5C",(uint32_t)0x0009EC70,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131584,0 +131834 @@
+@@ -131714,0 +131967 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131585,0 +131836 @@
+@@ -131715,0 +131969 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_00099CDC",(uint32_t)0x0009ECEC,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_00099CDC",(uint32_t)0x0009ECEC,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131614,0 +131866 @@
+@@ -131744,0 +131999 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131615,0 +131868 @@
+@@ -131745,0 +132001 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131639,0 +131893 @@
+@@ -131769,0 +132026 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131640,0 +131895 @@
+@@ -131770,0 +132028 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131642,0 +131898 @@
+@@ -131772,0 +132031 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131643,0 +131900 @@
+@@ -131773,0 +132033 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000CEB20",(uint32_t)0x0009EDC8,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000CEB20",(uint32_t)0x0009EDC8,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131651,0 +131909 @@
+@@ -131781,0 +132042 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131652,0 +131911 @@
+@@ -131782,0 +132044 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000CF6C4",(uint32_t)0x0009EDEC,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000CF6C4",(uint32_t)0x0009EDEC,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131663,0 +131923 @@
+@@ -131793,0 +132056 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131664,0 +131925 @@
+@@ -131794,0 +132058 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_0009C104",(uint32_t)0x0009EE1C,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_0009C104",(uint32_t)0x0009EE1C,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131677,0 +131939 @@
+@@ -131807,0 +132072 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131678,0 +131941 @@
+@@ -131808,0 +132074 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131680,0 +131944 @@
+@@ -131810,0 +132077 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131681,0 +131946 @@
+@@ -131811,0 +132079 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000E4478",(uint32_t)0x0009EE60,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000E4478",(uint32_t)0x0009EE60,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131685,0 +131951 @@
+@@ -131815,0 +132084 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131686,0 +131953 @@
+@@ -131816,0 +132086 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000E5880",(uint32_t)0x0009EE74,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000E5880",(uint32_t)0x0009EE74,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131782,0 +132050 @@
+@@ -131912,0 +132183 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131783,0 +132052 @@
+@@ -131913,0 +132185 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_0009CA8C",(uint32_t)0x0009EFF8,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_0009CA8C",(uint32_t)0x0009EFF8,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131792,0 +132062 @@
+@@ -131922,0 +132195 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131793,0 +132064 @@
+@@ -131923,0 +132197 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131802,0 +132074 @@
+@@ -131932,0 +132207 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131803,0 +132076 @@
+@@ -131933,0 +132209 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","indirect",(uint32_t)_ctr0,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131808,0 +132082 @@
+@@ -131938,0 +132215 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131809,0 +132084 @@
+@@ -131939,0 +132217 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000E1B78",(uint32_t)0x0009F054,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000E1B78",(uint32_t)0x0009F054,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131815,0 +132091 @@
+@@ -131945,0 +132224 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131816,0 +132093 @@
+@@ -131946,0 +132226 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_000E1A7C",(uint32_t)0x0009F068,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_000E1A7C",(uint32_t)0x0009F068,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131824,0 +132102 @@
+@@ -131954,0 +132235 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131825,0 +132104 @@
+@@ -131955,0 +132237 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_00011088",(uint32_t)0x0009F08C,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_00011088",(uint32_t)0x0009F08C,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131856,0 +132136 @@
+@@ -131986,0 +132269 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131857,0 +132138 @@
+@@ -131987,0 +132271 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_00283328",(uint32_t)0x0009F0F4,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_00283328",(uint32_t)0x0009F0F4,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -131859,0 +132141 @@
+@@ -131989,0 +132274 @@
 +        { static int _cs_on=-1; if(_cs_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _cs_on=(_e&&*_e&&*_e!='0')?1:0; } uint64_t _b[32]; uint32_t _ctr0=(uint32_t)ctx->ctr; if(_cs_on){ for(int _i=1;_i<32;_i++) _b[_i]=ctx->gpr[_i]; }
-@@ -131860,0 +132143 @@
+@@ -131990,0 +132276 @@
 +          if(_cs_on){ static int _k=0; for(int _i=14;_i<32;_i++){ if(_b[_i]!=ctx->gpr[_i] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r%d: 0x%08X -> 0x%08X\n","func_00283290",(uint32_t)0x0009F100,_i,(uint32_t)_b[_i],(uint32_t)ctx->gpr[_i]); } } if(_b[1]!=ctx->gpr[1] && _k<40){ _k++; fprintf(stderr,"[CSAVE] callee=%s tgt=0x%08X r1: 0x%08X -> 0x%08X\n","func_00283290",(uint32_t)0x0009F100,(uint32_t)_b[1],(uint32_t)ctx->gpr[1]); } } }
-@@ -146369,0 +146653,4 @@
+@@ -146499,0 +146786,4 @@
 +        /* SCHEDARM-PROBE id=6 */
 +        { ps3_sa_on_enter(6, ctx); }
 +        /* POSTTHR-PROBE id=11 */
 +        { ps3_pt_on_enter(11, ctx); }
-@@ -147069,0 +147357,6 @@
+@@ -147199,0 +147490,6 @@
 +static int b71_legacy_icall(void) {
 +    /* E96 (2026-09-02): default natural; PS3_B71_LEGACY_ICALL=1 restores the July hacks for A/B. */
 +    static int on = -1;
 +    if (on < 0) { const char* e = getenv("PS3_B71_LEGACY_ICALL"); on = (e && *e && *e != '0') ? 1 : 0; }
 +    return on;
 +}
-@@ -147070,0 +147364,12 @@
+@@ -147200,0 +147497,12 @@
 +        /* FLIPPATH-PROBE id=2 */
 +        { ps3_flipp_on_enter(2, ctx); }
 +        /* MENUPRESENT-PROBE id=12 */
@@ -450,66 +453,67 @@
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_000B71B8 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -147829 +148134,2 @@
+@@ -147959 +148267,2 @@
 -          if (_ent) {
 +          /* E96-B71-NATURAL: repair/replenish/reuse only under PS3_B71_LEGACY_ICALL=1 */
 +          if (_ent && b71_legacy_icall()) {
-@@ -147831,2 +148136,0 @@
+@@ -147961,2 +148269,0 @@
 -            /* type 4 factory (0x400D6808 family) freelist often empty after first
 -             * WAD product — replenish before construct. */
-@@ -147853 +148157 @@
+@@ -147983 +148290 @@
 -          if ((uint32_t)ctx->gpr[3] == 0u && _ent) {
 +          if (b71_legacy_icall() && (uint32_t)ctx->gpr[3] == 0u && _ent) {
-@@ -148267,0 +148572,2 @@
+@@ -148397,0 +148705,2 @@
 +        /* SCHEDARM-PROBE id=9 */
 +        { ps3_sa_on_enter(9, ctx); }
-@@ -149953,0 +150260,2 @@
+@@ -150083,0 +150393,2 @@
 +        /* SCHEDARM-PROBE id=8 */
 +        { ps3_sa_on_enter(8, ctx); }
-@@ -149964,0 +150273,4 @@
+@@ -150094,0 +150406,4 @@
 +        /* SCHEDARM-PROBE id=7 */
 +        { ps3_sa_on_enter(7, ctx); }
 +        /* POSTTHR-PROBE id=12 */
 +        { ps3_pt_on_enter(12, ctx); }
-@@ -149986,0 +150299,4 @@
+@@ -150116,0 +150432,4 @@
 +        /* POSTTHR-PROBE id=6 */
 +        { ps3_pt_on_enter(6, ctx); }
 +        /* POSTTHR-R12-DISC B951C */
 +        { ps3_pt_disc_sample("B951C", ctx); }
-@@ -150019,0 +150336,2 @@
+@@ -150149,0 +150469,2 @@
 +        /* POSTTHR-R12-ICALL vt+0x40 */
 +        { ps3_pt_icall_log("vt+0x40", ctx); }
-@@ -150030,0 +150349,2 @@
+@@ -150160,0 +150482,2 @@
 +        /* POSTTHR-R12-ICALL vt+0x44 */
 +        { ps3_pt_icall_log("vt+0x44", ctx); }
-@@ -151694,0 +152015,2 @@
+@@ -151824,0 +152148,2 @@
 +        /* SCHEDARM-PROBE id=11 */
 +        { ps3_sa_on_enter(11, ctx); }
-@@ -151735,0 +152058,2 @@
+@@ -151865,0 +152191,2 @@
 +        /* SCHEDARM-PROBE id=10 */
 +        { ps3_sa_on_enter(10, ctx); }
-@@ -151742,0 +152067,6 @@
+@@ -151872,0 +152200,6 @@
 +        /* MENUPRESENT-PROBE id=6 */
 +        { ps3_mp_on_enter(6, ctx); }
 +        /* SCHEDARM-PROBE id=1 */
 +        { ps3_sa_on_enter(1, ctx); }
 +        /* POSTTHR-PROBE id=14 */
 +        { ps3_pt_on_enter(14, ctx); }
-@@ -167011,0 +167342,2 @@
+@@ -167142,0 +167476,2 @@
 +        /* POSTTHR-PROBE id=10 */
 +        { ps3_pt_on_enter(10, ctx); }
-@@ -167075,0 +167408,10 @@
+@@ -167206,0 +167542,11 @@
 +        /* TYPE15: match WAD path encoding 0x80000015. */
 +        { uint32_t _d = (uint32_t)ctx->gpr[1] + 0x70u;
 +          uint32_t _t = vm_read32(_d);
-+          if (_t == 0x15u) {
++          static int _hb = -1; if (_hb < 0) { const char* _e = getenv("PS3_TYPE15_HIGHBIT"); _hb = (_e && _e[0] == '1'); }
++          if (_hb && _t == 0x15u) {
 +            vm_write32(_d, _t | 0x80000000u);
 +            { static int _n=0; if(_n++<8)
 +                fprintf(stderr,"[TYPE15] CB56C type high-bit 0x15 -> 0x%08X (match WAD path)\n",
 +                  vm_read32(_d)); }
 +          }
 +        }
-@@ -167130,17 +167472,124 @@
+@@ -167261,17 +167607,124 @@
 -        ctx->gpr[4] = ctx->gpr[29] | ctx->gpr[29];
 -        ctx->gpr[0] = vm_read16(ctx->gpr[29] + 0x2);
 -        ctx->gpr[0] = (uint64_t)ppc_rlwinm((uint32_t)ctx->gpr[0], 2, 14, 29);
@@ -651,15 +655,15 @@
 +            }
 +          }
 +        }
-@@ -167500,0 +167950,2 @@
+@@ -167631,0 +168085,2 @@
 +        /* POSTTHR-PROBE id=9 */
 +        { ps3_pt_on_enter(9, ctx); }
-@@ -168333,0 +168785,4 @@
+@@ -168465,0 +168921,4 @@
 +        /* POSTTHR-PROBE id=7 */
 +        { ps3_pt_on_enter(7, ctx); }
 +        /* POSTTHR-R12-DISC CC9D0 */
 +        { ps3_pt_disc_sample("CC9D0", ctx); }
-@@ -168354,0 +168810,98 @@
+@@ -168486,0 +168946,98 @@
 +        /* TYPE15-UNSTICK-SKIP: CB56C shell/reuse product never advances;
 +         * parent list re-ticks these forever. Skip body + yield so pad/RSX
 +         * threads can run (menu bring-up). Default ON; PS3_TYPE15_UNSTICK=0. */
@@ -758,12 +762,12 @@
 +            _dn++;
 +          }
 +        }
-@@ -169287,0 +169841,4 @@
+@@ -169421,0 +169979,4 @@
 +        /* PRESENTLOOP-PROBE id=0 */
 +        { ps3_plp_on_enter(0, ctx); }
 +        /* POSTTHR-PROBE id=15 */
 +        { ps3_pt_on_enter(15, ctx); }
-@@ -169478,0 +170036,41 @@
+@@ -169612,0 +170174,41 @@
 +        /* INTROSEQ-PROBE: tick da FSM da intro, edge-triggered.
 +         * S=[TOC-0x5E70]: +00 idx filme, +04 sub-estado, +08 fade(float),
 +         * +10 flag timer-arrancado, +18 timer(u64 tick de partida).
@@ -805,13 +809,13 @@
 +            }
 +            _n++;
 +          } }
-@@ -169601,0 +170200,2 @@
+@@ -169735,0 +170338,2 @@
 +        /* SCHEDARM-PROBE id=16 */
 +        { ps3_sa_on_enter(16, ctx); }
-@@ -169624,0 +170225,2 @@
+@@ -169758,0 +170363,2 @@
 +        /* SCHEDARM-PROBE id=18 */
 +        { ps3_sa_on_enter(18, ctx); }
-@@ -169657,0 +170260,15 @@
+@@ -169791,0 +170398,15 @@
 +        /* MENUPRESENT-PROBE id=11 */
 +        { ps3_mp_on_enter(11, ctx); }
 +        /* PRESENTLOOP-PROBE id=1 */
@@ -827,17 +831,17 @@
 +            fprintf(stderr,"[INTROSEQ] enter func_000CE0A0 #%d guardslot=0x%08X guardobj=0x%08X u8+4=%u (!=0 => intro saltada)\n",
 +              _n,_gp,_go,_go?vm_read8(_go+4):0u);
 +            fflush(stderr); } } }
-@@ -169683,3 +170299,0 @@
+@@ -169817,3 +170437,0 @@
 -        /* E404-CE0A0-R31: CDE3C fragments clobber callee-saves; restore S/guard */
 -        ctx->gpr[30] = vm_read32(ctx->gpr[2] + -0x5E34);
 -        ctx->gpr[31] = vm_read32(ctx->gpr[2] + -0x5E70);
-@@ -282868,0 +283483,2 @@
+@@ -283002,0 +283621,2 @@
 +        /* POSTTHR-PROBE id=0 */
 +        { ps3_pt_on_enter(0, ctx); }
-@@ -282947,0 +283564,2 @@
+@@ -283081,0 +283702,2 @@
 +        /* POSTTHR-PROBE thr_end */
 +        { ps3_pt_mark_thr_end(); }
-@@ -291652,0 +292271,8 @@
+@@ -291786,0 +292409,8 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_OBJ14F"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static int _n=0; if(_n++<10){ uint32_t _h=(uint32_t)ctx->gpr[29]; uint32_t _obj=(_h>=0x1000u)?vm_read32(_h+0u):0u;
 +            fprintf(stderr,"[OBJ14F] #%d holder=0x%08X obj=*(holder+0)=0x%08X",_n,_h,_obj);
@@ -846,29 +850,29 @@
 +              char _s[20]; int _j=0; for(;_j<16;_j++){ char c=(char)vm_read8(_obj+_j); if(c<0x20||c>0x7E) break; _s[_j]=c; } _s[_j]=0;
 +              if(_j>2) fprintf(stderr," ascii='%s'",_s); }
 +            fprintf(stderr,"\\n"); fflush(stderr); } } }
-@@ -292646,0 +293273,2 @@
+@@ -292780,0 +293411,2 @@
 +        /* FLIPPATH-PROBE id=0 */
 +        { ps3_flipp_on_enter(0, ctx); }
-@@ -299473,0 +300102,2 @@
+@@ -299607,0 +300240,2 @@
 +        /* FLIPPATH-PROBE id=1 */
 +        { ps3_flipp_on_enter(1, ctx); }
-@@ -327252,0 +327883,3 @@
+@@ -327386,0 +328021,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-171] #%d r3=0x%08X r4=0x%08X\n", n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); fflush(stderr);} }
-@@ -327278 +327911,5 @@
+@@ -327412 +328049,5 @@
 -        ctx->gpr[0] = vm_read32(ctx->gpr[9] + 0x0);
 +        /* Task5 TYMAP: vtable slot is OPD; use ps3_call_opd before map lookup. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-VT] #%d opd_slot=0x%08X type_tag=0x%08X\n",
 +              n,(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[29]); fflush(stderr);} }
-@@ -327280,3 +327917 @@
+@@ -327414,3 +328055 @@
 -        ctx->ctr = (uint32_t)ctx->gpr[0];
 -        ctx->gpr[2] = vm_read32(ctx->gpr[9] + 0x4);
 -        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);
 +        ps3_call_opd(ctx, (uint32_t)ctx->gpr[9]); DRAIN_TRAMPOLINE(ctx);
-@@ -356310,0 +356946,9 @@
+@@ -356444,0 +357084,9 @@
 +        /* Task5 TYMAP: type-map lookup (map=r3, type=r4, out=r5). Compare map
 +         * against TOC+0xD8C (ICGLdr register map) and TOC-0x3A3C (171244 map). */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
@@ -878,28 +882,28 @@
 +            uint32_t m3a=vm_read32(ctx->gpr[2]+(uint32_t)(-0x3A3C));
 +            fprintf(stderr,"[TYMAP-LK] #%d map=0x%08X type=0x%08X d8c=0x%08X d90=0x%08X m3a3c=0x%08X same_d8c=%d same_d90=%d same_m3a=%d\n",
 +              n,map,ty,d8c,d90,m3a,map==d8c,map==d90,map==m3a); fflush(stderr);} } }
-@@ -356349 +356993,5 @@
+@@ -356483 +357131,5 @@
 -        ctx->gpr[0] = vm_read32(ctx->gpr[11] + 0x0);
 +        /* Task5 TYMAP: node+0x10 is an OPD (or direct code EA); use ps3_call_opd. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-HIT] #%d node=0x%08X opd=0x%08X type_key_via_r30_ish\n",
 +              n,(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[11]); fflush(stderr);} }
-@@ -356351,3 +356999 @@
+@@ -356485,3 +357137 @@
 -        ctx->ctr = (uint32_t)ctx->gpr[0];
 -        ctx->gpr[2] = vm_read32(ctx->gpr[11] + 0x4);
 -        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);
 +        ps3_call_opd(ctx, (uint32_t)ctx->gpr[11]); DRAIN_TRAMPOLINE(ctx);
-@@ -356355,0 +357002,3 @@
+@@ -356489,0 +357140,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<64)
 +            fprintf(stderr,"[TYMAP-RET] #%d r3=0x%08X\n", n, (uint32_t)ctx->gpr[3]); fflush(stderr);} }
-@@ -363060,0 +363710,4 @@
+@@ -363194,0 +363848,4 @@
 +        /* MENUPRESENT-PROBE id=0 */
 +        { ps3_mp_on_enter(0, ctx); }
 +        /* PRESENTLOOP-PROBE id=2 */
 +        { ps3_plp_on_enter(2, ctx); }
-@@ -447998,0 +448652,8 @@
+@@ -448132,0 +448790,8 @@
 +        /* Host gzip path for embedded EBOOT resources (see host_res_inflate.c). */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_HOSTRES"); on=(e&&*e&&*e!='0')?1:0;}
@@ -908,7 +912,7 @@
 +              n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6]);
 +            fflush(stderr);} }
 +        if (host_res_inflate(ctx)) return;
-@@ -519584,0 +520246,7 @@
+@@ -519718,0 +520384,7 @@
 +        /* E97-LIST236A1C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _p=(uint32_t)ctx->gpr[3]; uint32_t _head=vm_read32(0x0053EA54u); uint32_t _key=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+8u):0u;
@@ -916,43 +920,43 @@
 +            uint32_t _q=(_head>=0x10000u&&_head<0x4F000000u)?vm_read32(_head):0u; int _k=0;
 +            while(_q>=0x10000u && _q<0x4F000000u && _q!=_head && _k<60){ fprintf(stderr,"[LIST236A1C]   #%d node=0x%08X next=0x%08X prev=0x%08X key=0x%08X\n",_k,_q,vm_read32(_q),vm_read32(_q+4u),vm_read32(_q+8u)); _q=vm_read32(_q); _k++; }
 +            fprintf(stderr,"[LIST236A1C]   fim k=%d em 0x%08X %s\n",_k,_q,(_q==_head)?"cabeca":"NAO-cabeca"); fflush(stderr); } } }
-@@ -520810,0 +521479,6 @@
+@@ -520944,0 +521617,6 @@
 +        /* R31SRC-arg-func_00237CDC */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] arg-func_00237CDC r3=0x%08X r11=0x%08X %s\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11], ((uint32_t)ctx->gpr[3] == 0x00541178u) ? "CTRL=TOC" : "CTRL=outro"); fflush(stderr); } }
-@@ -521056,0 +521731,6 @@
+@@ -521190,0 +521869,6 @@
 +        /* R31SRC-arg-func_0023807C */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] arg-func_0023807C r3=0x%08X r11=0x%08X %s\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11], ((uint32_t)ctx->gpr[3] == 0x00541178u) ? "CTRL=TOC" : "CTRL=outro"); fflush(stderr); } }
-@@ -530490,0 +531171,3 @@
+@@ -530624,0 +531309,3 @@
 +        /* E116-240F4C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-240F4C] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -534445,0 +535129,3 @@
+@@ -534579,0 +535267,3 @@
 +        /* E116-244E40 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-244E40] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -536785,0 +537472,3 @@
+@@ -536919,0 +537610,3 @@
 +        /* E116-24771C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-24771C] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -537580,0 +538270,3 @@
+@@ -537714,0 +538408,3 @@
 +        /* E115-LVLTICK */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=4 || (_c%500)==0) fprintf(stderr,"[LVLTICK] #%ld r3=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -539981,0 +540674,5 @@
+@@ -540115,0 +540812,5 @@
 +        /* E111-ATTACH */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _cls[64]={0}; static long _tot=0; uint32_t _c=(uint32_t)ctx->gpr[4]; int _k=(_c>=0x10000u&&_c<0x4F000000u)?(vm_read16(_c+2u)&0x3F):-1; if(_k>=0)_cls[_k]++; _tot++;
 +            if(_k==15){ static int _n15=0; if(_n15++<12) fprintf(stderr,"[ATTACH15] parent=0x%08X child=0x%08X (attach classe 15 MDLX)\n",(uint32_t)ctx->gpr[3],_c); }
 +            if((_tot%400)==0){ char _b[300]; int _w=0; _b[0]=0; for(int _i=0;_i<40;_i++) if(_cls[_i]) _w+=snprintf(_b+_w,sizeof(_b)-_w,"%d:%ld ",_i,_cls[_i]); fprintf(stderr,"[ATTACH] por classe: %s\n",_b); } fflush(stderr); } }
-@@ -550612,0 +551310,10 @@
+@@ -550746,0 +551448,10 @@
 +        /* ALLOC-NULL-GUARD: 002637D8→00263040 can return 0 when a chunk arena
 +         * free-list is exhausted. Natural code stamps boundary tags at r3 without
 +         * null-check → EA 0 gets tags → freelist [node+4]=0x84xxxxxx → UNCOMMITTED
@@ -963,33 +967,33 @@
 +            fflush(stderr); } }
 +          { g_trampoline_fn = (void(*)(void*))func_00254E84; return; }
 +        }
-@@ -550779,0 +551487,4 @@
+@@ -550913,0 +551625,4 @@
 +        /* REL-PROBE REL-walker */
 +        { static int _r_on=-1; if(_r_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _r_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_r_on){ const char* ps3_dbg_sym(void*); uint32_t _o=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[REL-walker] walker=0x%08X obj=0x%08X refcnt(obj-4+0x74)=%d guest_lr=0x%08X ra1=%s ra2=%s ra3=%s\n", (uint32_t)ctx->gpr[3], _o, _o?(int)vm_read32(_o-4+0x74):-999, (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1)), ps3_dbg_sym(__builtin_return_address(2))); fflush(stderr);} }
-@@ -552414,0 +553126,6 @@
+@@ -552548,0 +553264,6 @@
 +        /* E95C-POOL */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ uint32_t _m=(uint32_t)ctx->gpr[3], _d=(uint32_t)ctx->gpr[4], _s=(uint32_t)ctx->gpr[5];
 +            uint32_t _m30=(_m>=0x10000u&&_m<0x4F000000u)?vm_read32(_m+0x30u):0u; uint32_t _p=_m30+0x34u;
 +            uint32_t _a4=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+4u):0xDEADu, _a8=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+8u):0xDEADu;
 +            fprintf(stderr,"[POOL] mgr=0x%08X desc=0x%08X w0=0x%08X r5=0x%08X m30=0x%08X [+4]=%u [+8]=%u %s\n",_m,_d,(_d>=0x10000u&&_d<0x4F000000u)?vm_read32(_d):0u,_s,_m30,_a4,_a8,(_a4==_a8)?"IGUAL(deflist)":"DIFERENTE(0x256ECC)"); fflush(stderr); } }
-@@ -552501,0 +553219,6 @@
+@@ -552635,0 +553357,6 @@
 +        /* E95B-DEFLIST */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ uint32_t _h=(uint32_t)ctx->gpr[27]; char _b[256]; int _k=0; _b[0]=0; uint32_t _n=(_h>=0x10000u&&_h<0x4F000000u)?vm_read32(_h):0u; int _s=0;
 +            while(_n>=0x10000u && _n<0x4F000000u && _n!=_h && _s<40){ uint32_t _d=vm_read32(_n+8u); uint32_t _c=(_d>=0x10000u&&_d<0x4F000000u)?vm_read16(_d+2u):0xFFFFu;
 +              _k+=snprintf(_b+_k,sizeof(_b)-_k,"%u ",_c); if(_k>230) break; _n=vm_read32(_n); _s++; }
 +            fprintf(stderr,"[DEFLIST] mgr=0x%08X desc=0x%08X r5=0x%08X head=0x%08X classes=[%s]\n",(uint32_t)ctx->gpr[24],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[28],_h,_b); fflush(stderr); } }
-@@ -558190,0 +558914,6 @@
+@@ -558324,0 +559052,6 @@
 +        /* MENUPRESENT-PROBE id=14 */
 +        { ps3_mp_on_enter(14, ctx); }
 +        /* SCHEDARM-PROBE id=3 */
 +        { ps3_sa_on_enter(3, ctx); }
 +        /* POSTTHR-PROBE id=1 */
 +        { ps3_pt_on_enter(1, ctx); }
-@@ -563481,0 +564211,16 @@
+@@ -563615,0 +564349,16 @@
 +        /* FREELIST-TAG-GUARD (alloc walk): same class as 263178. If arena is
 +         * null or free-head [arena+4] is a boundary tag (bit31), abort r3=0
 +         * instead of infinite OOB walk (hang in 41D5C→BACE8→262610 after
@@ -1006,10 +1010,10 @@
 +            ctx->gpr[3] = 0;
 +            return;
 +          } }
-@@ -563502,0 +564248,2 @@
+@@ -563636,0 +564386,2 @@
 +        { /* walk iteration cap — break freelist cycles that never return to arena */ }
 +        static int _fl_walk_iters = 0; _fl_walk_iters = 0;
-@@ -563503,0 +564251,8 @@
+@@ -563637,0 +564389,8 @@
 +        /* Fail-fast: 200k iters was ~seconds per corrupt alloc and stalled
 +         * B71B8 at CBC20 (0x19C alloc after WAD desync freelist trash). */
 +        if (++_fl_walk_iters > 10000) {
@@ -1018,7 +1022,7 @@
 +              10000, (uint32_t)ctx->gpr[3]); fflush(stderr); }
 +          { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +        }
-@@ -563504,0 +564260,8 @@
+@@ -563638,0 +564398,8 @@
 +        /* Null / low node mid-walk — list already dead. */
 +        { uint32_t nd=(uint32_t)ctx->gpr[10];
 +          if (nd == 0u || nd < 0x10000u) {
@@ -1027,7 +1031,7 @@
 +                nd); fflush(stderr); }
 +            { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +          } }
-@@ -563524,0 +564288,12 @@
+@@ -563658,0 +564426,12 @@
 +        /* FREELIST-TAG-GUARD: next slot holds tag or near-null → list desync.
 +         * Without this, walk spins forever on UNCOMMITTED 0x91/0x95/0x80. */
 +        { uint32_t nx=(uint32_t)ctx->gpr[3];
@@ -1040,7 +1044,7 @@
 +                nx, (uint32_t)ctx->gpr[10]); fflush(stderr); }
 +            { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +          } }
-@@ -563602,0 +564378,7 @@
+@@ -563736,0 +564516,7 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ARENASTK"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ uint32_t _r2=(uint32_t)ctx->gpr[2]; uint32_t _stk=vm_read32(_r2-0x20D8);
 +            uint32_t _base=_stk?vm_read32(_stk+0):0, _idx=_stk?vm_read32(_stk+4):0, _lim=_stk?vm_read32(_stk+8):0;
@@ -1048,16 +1052,16 @@
 +            static int _k=0; if(_k++<40) fprintf(stderr,"[ARENASTK] r2=0x%08X stk=0x%08X base=0x%08X idx=%u lim=%u arena=0x%08X%s\n",_r2,_stk,_base,_idx,_lim,_ar,(_idx>=_lim)?" OOB->NULL":"");
 +            /* E353k: log EVERY time the provider would return 0/bad, uncapped-ish, to see WHY */
 +            if(_ar==0u || _ar<0x10000u || _idx>=_lim){ static int _b=0; if(_b++<30) fprintf(stderr,"[ARENASTK-BAD] idx=%u lim=%u base=0x%08X base[idx]=0x%08X stk=0x%08X\n",_idx,_lim,_base,_ar,_stk); } } }
-@@ -563614,0 +564397,2 @@
+@@ -563748,0 +564535,2 @@
 +        { static int _r2b=-1; if(_r2b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_ARENA_ROOT2BP"); _r2b=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_r2b && (uint32_t)ctx->gpr[3]==0x40004020u){ static int _k=0; if(_k++<8){fprintf(stderr,"[ARENA-ROOT2BP] redirect Root->BP\n");fflush(stderr);} ctx->gpr[3]=0x43004020u; } }
-@@ -563894,0 +564679,2 @@
+@@ -564028,0 +564817,2 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_SCOPESTK"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ uint32_t _idx=(uint32_t)ctx->gpr[11]; static int _n=0; if(_n++<3000) fprintf(stderr,"[SCOPE-POPALL] tid=%lu idx=%u lr=0x%08X\n",(unsigned long)(uintptr_t)pthread_self(),(uint32_t)ctx->gpr[11],(uint32_t)ctx->lr); if(_idx>=118u){ static int _m=0; if(_m++<24) fprintf(stderr,"[SCOPE-POP] idx %u->%u caller-lr=0x%08X\n",_idx,_idx-1,(uint32_t)ctx->lr); } } }
-@@ -563907,0 +564694,2 @@
+@@ -564041,0 +564832,2 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_SCOPESTK"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ uint32_t _idx=(uint32_t)ctx->gpr[11]; static int _n=0; if(_n++<2500) fprintf(stderr,"[SCOPE-PUSHALL] tid=%lu idx=%u lr=0x%08X\n",(unsigned long)(uintptr_t)pthread_self(),(uint32_t)ctx->gpr[11],(uint32_t)ctx->lr); if(_idx>=118u){ static int _m=0; if(_m++<24) fprintf(stderr,"[SCOPE-PUSH] idx %u->%u caller-lr=0x%08X\n",_idx,_idx+1,(uint32_t)ctx->lr); } } }
-@@ -563913,0 +564702,10 @@
+@@ -564047,0 +564840,10 @@
 +        /* E353z SCOPE-CLAMP (DIAGNOSTIC, gated PS3_SCOPE_CLAMP, OFF by default):
 +         * this is the LEAVE (idx++). idx==lim means the scope stack is EMPTY;
 +         * letting idx go past lim underflows it and the provider (func_00262808)
@@ -1068,20 +1072,20 @@
 +          if(_c){ uint32_t _lim=vm_read32(ctx->gpr[10] + 0x8);
 +            if(_lim && (uint32_t)ctx->gpr[11] >= _lim){ static int _n=0; if(_n++<12) fprintf(stderr,"[SCOPE-CLAMP] leave would set idx=%u >= lim=%u -> clamp to %u\n",(uint32_t)ctx->gpr[11],_lim,_lim-1);
 +              ctx->gpr[11] = (uint64_t)(_lim-1); } } }
-@@ -564216,0 +565015,5 @@
+@@ -564350,0 +565153,5 @@
 +        { static int _e=-1; if(_e<0){extern char* getenv(const char*); const char* _ev=getenv("PS3_TRACE_ARENASTK"); _e=(_ev&&*_ev&&*_ev!='0')?1:0;}
 +          if(_e){ uint32_t _a=(uint32_t)ctx->gpr[3];
 +            if(_a==0u || _a<0x10000u || (_a&0x80000000u)){ static int _n=0; if(_n++<24){
 +              fprintf(stderr,"[ARENASTK] 263040 ENTRY BAD arena(r3)=0x%08X CALLER-lr=0x%08X r4=0x%08X r5=0x%08X r6=0x%08X r1=0x%08X\n",
 +                _a,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[1]); fflush(stderr);} } } }
-@@ -564268,2 +565071,4 @@
+@@ -564402,2 +565209,4 @@
 -              fprintf(stderr,"[FREELIST-TAG-GUARD] 263040 entry head=0x%08X -> abort r3=0\n",
 -                _head); fflush(stderr); }
 +              /* E353j: capture the caller (lr) + the this at r4/r5/r6/r7 so we can
 +               * walk upstream to who passes the string-byte this (0x61='a'). */
 +              fprintf(stderr,"[FREELIST-TAG-GUARD] 263040 entry head=0x%08X lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X r6=0x%08X r7=0x%08X -> abort r3=0\n",
 +                _head,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[7]); fflush(stderr); }
-@@ -564342,0 +565148,22 @@
+@@ -564476,0 +565286,22 @@
 +        /* FREELIST-TAG-GUARD: [node+4] must be a clean next pointer. When a
 +         * boundary-tag (bit31 set, form 0x8xxxxxxx) sits in the next slot,
 +         * walk is desynced (asset-map Task 3). Abort split with r3=0 instead
@@ -1104,7 +1108,7 @@
 +          ctx->gpr[1] = (int64_t)(int32_t)(ctx->gpr[1] + 0xA0);
 +          return;
 +        }
-@@ -565142,0 +565970,11 @@
+@@ -565276,0 +566108,11 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_RSZ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ uint32_t _ar=(uint32_t)ctx->gpr[3]; uint32_t _sz=(uint32_t)ctx->gpr[4]; uint32_t _np=(uint32_t)ctx->gpr[5]; uint32_t _lr=(uint32_t)ctx->lr;
 +            char _nm[24]; _nm[0]=0; if(_np>=0x10000u&&_np<0x4F000000u) for(int _i=0;_i<23;_i++){ unsigned char _c=(unsigned char)vm_read8(_np+_i); _nm[_i]=(char)_c; if(!_c)break; } _nm[23]=0;
@@ -1116,7 +1120,7 @@
 +            static int _k=0;
 +            if(_low || _covers_tab || _named){ if(_k++<400) fprintf(stderr,"[ROOTSIZE] arena=0x%08X size=0x%08X end=0x%08X nome=\"%s\" lr=0x%08X%s%s\n",_ar,_sz,_end,_nm,_lr,_low?" <<LOW>>":"",_covers_tab?" <<COVERS-OBJTAB>>":""); } } }
 +
-@@ -566539,0 +567378,9 @@
+@@ -566673,0 +567516,9 @@
 +        /* R31SRC-pre-virtual */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
@@ -1126,14 +1130,14 @@
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11],
 +                (uint32_t)ctx->gpr[9], (uint32_t)ctx->gpr[10],
 +                (uint32_t)ctx->ctr, (uint32_t)ctx->gpr[2]); fflush(stderr); } }
-@@ -566540,0 +567388,6 @@
+@@ -566674,0 +567526,6 @@
 +        /* R31SRC-pos-virtual */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] pos-virtual r3=0x%08X r11=0x%08X\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11]); fflush(stderr); } }
-@@ -596853,0 +597707,17 @@
+@@ -596987,0 +597845,17 @@
 +        /* E125-MATLIST */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _o=(uint32_t)ctx->gpr[3];
@@ -1664,7 +1668,7 @@
 +    if (!ps3_ty15fl_gate_on() || !ps3_ty15fl_is_factory(this_ea)) return;
 +    ps3_ty15fl_dump("post", this_ea, g_ps3_ty15fl_n);
 +}
-@@ -443,0 +918,23 @@
+@@ -443,0 +918,26 @@
 +/* TYPE15-SHELL-PROBE: conteudo do "shell" (this da 2a chamada interna de
 + * func_0039E794) antes/depois do construct real (PS3_TRACE_TYPE15_SHELL=1).
 + * Read-only. */
@@ -1688,21 +1692,24 @@
 +    fprintf(stderr, "\n");
 +    fflush(stderr);
 +}
-@@ -6868,0 +7366,4 @@
++
++
++
+@@ -6998,0 +7499,4 @@
 +        /* E115-T2TICK */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _m=(uint32_t)ctx->gpr[3]; int _ok=(_m>=0x10000u&&_m<0x4F000000u); int _cur=_ok?(int)(int8_t)vm_read8(_m+0xC8u):-99;
 +            fprintf(stderr,"[T2TICK] mgr=0x%08X cursor=%d stack0=0x%08X +0x80=0x%08X +0x38=0x%08X +0x84=0x%08X\n",_m,_cur,_ok?vm_read32(_m+0x48u):0u,_ok?vm_read32(_m+0x80u):0u,_ok?vm_read32(_m+0x38u):0u,_ok?vm_read32(_m+0x84u):0u); fflush(stderr); } } }
-@@ -7938,0 +8440,4 @@
+@@ -8068,0 +8573,4 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-GS] #%d GroupStartCtor r3=0x%08X r4=0x%08X\n",
 +              n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); fflush(stderr);} }
-@@ -21131,0 +21637,3 @@
+@@ -21261,0 +21770,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<16)
 +            fprintf(stderr,"[OPDISP-ENT] #%d r3=0x%08X r4=0x%08X r5=0x%08X\n",n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -23664,0 +24173,63 @@
+@@ -23795,0 +24307,63 @@
 +        return;
 +}
 +
@@ -1766,7 +1773,7 @@
 +                self, pool, lr, g_poolctor_n);
 +        poolctor_host_chain("ctor");
 +        fflush(stderr);
-@@ -23665,0 +24237,33 @@
+@@ -23796,0 +24371,8 @@
 +    }
 +    { /* Construcoes sas: so' as primeiras, para ver a forma do pool bom. */
 +      static int k = 0;
@@ -1775,7 +1782,7 @@
 +                  self, pool, lr, g_poolctor_n);
 +          fflush(stderr);
 +      } }
-+}
+@@ -23797,0 +24380,26 @@
 +static void poolctor_check(uint32_t mgr, uint32_t pool, uint32_t node) {
 +    if (poolctor_sane(pool)) return;
 +    static int n = 0;
@@ -1800,49 +1807,49 @@
 +            g_poolctor_n);
 +    poolctor_host_chain("pop ");
 +    fflush(stderr);
-@@ -23666,0 +24271 @@
++}
 +/* ===================== fim POOLCTOR-PROBE ============================= */
-@@ -23668,0 +24274,4 @@
+@@ -23799,0 +24408,4 @@
 +        /* POOLCTOR-PROBE: r3/r4/r5 ainda sao os argumentos aqui. */
 +        if (poolctor_on()) poolctor_note((uint32_t)ctx->gpr[3],
 +                                         (uint32_t)ctx->gpr[5],
 +                                         (uint32_t)ctx->lr);
-@@ -23851,0 +24461,4 @@
+@@ -23984,0 +24597,4 @@
 +        /* POOLCTOR-PROBE: gpr[3] e' o pool, gpr[30] o gestor, gpr[29] o no. */
 +        if (poolctor_on()) poolctor_check((uint32_t)ctx->gpr[30],
 +                                          (uint32_t)ctx->gpr[3],
 +                                          (uint32_t)ctx->gpr[29]);
-@@ -24053,0 +24667,5 @@
+@@ -24188,0 +24805,5 @@
 +        /* E98-LIST70 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<8){ uint32_t _o=(uint32_t)ctx->gpr[3], _s=_o+0x70u; uint32_t _q=(_s>=0x10000u&&_s<0x4F000000u)?vm_read32(_s):0u; int _k=0; char _b[400]; int _w=0; _b[0]=0;
 +            while(_q>=0x10000u && _q<0x4F000000u && _q!=_s && _k<60){ if(_k<10) _w+=snprintf(_b+_w,sizeof(_b)-_w,"0x%08X(st=%u,f=0x%04X,next=0x%08X) ",_q,vm_read8(_q+10u),vm_read16(_q+8u),vm_read32(_q)); _q=vm_read32(_q); _k++; }
 +            fprintf(stderr,"[LIST70] obj=0x%08X sent=0x%08X nos=%d fim=%s(0x%08X) %s\n",_o,_s,_k,(_q==_s)?"cabeca":"NAO-cabeca",_q,_b); fflush(stderr); } } }
-@@ -30947,0 +31566 @@
+@@ -31087,0 +31709 @@
 +extern "C" uint64_t g_acc30_it = 0; extern "C" uint32_t g_acc30_path[64] = {0};
-@@ -30948,0 +31568,2 @@
+@@ -31088,0 +31711,2 @@
 +        g_acc30_it = 0; /* E387: cycle counter reset per lookup (fragments may re-enter func_002ACC30) */
 +        extern uint32_t g_keyhash_namep; g_keyhash_namep = (uint32_t)ctx->gpr[4];
-@@ -30968,0 +31590,5 @@
+@@ -31108,0 +31733,5 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_KEYHASH"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static int _n=0; static int _cap=-1; if(_cap<0){ const char* c=getenv("PS3_TRACE_KEYHASH_N"); _cap=(c&&*c)?atoi(c):120; } if(_n++<_cap){ uint32_t _nm=g_keyhash_namep; char _s[40]; int _j=0;
 +            for(;_j<32;_j++){ char c=(char)vm_read8(_nm+_j); if(c<0x20||c>0x7E) break; _s[_j]=c; } _s[_j]=0;
 +            { uint32_t _g=vm_read32(0x0053FBDCu), _idx=_g?vm_read32(_g+8):0, _arr=_g?vm_read32(_g+4):0, _tb=_arr?vm_read32(_arr+_idx*4):0; fprintf(stderr,"[KEYHASH] #%d map(r3)=0x%08X key(r4)=0x%08X namep=0x%08X name='%s'  g=0x%08X idx=%u tbl[idx]=0x%08X\n",
 +              _n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],_nm,_s  ,_g,_idx,_tb); } fflush(stderr);} } }
-@@ -32546,0 +33173,5 @@
+@@ -32686,0 +33316,5 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ARRE"); _o=(e&&*e&&*e!='0')?1:0; }
 +          if(_o && (uint32_t)ctx->gpr[4]==0x0E611058u){ uint32_t m=(uint32_t)ctx->gpr[3];
 +            fprintf(stderr,"[ARRE-LOOKUP] key=0x0E611058 map(r3)=0x%08X words: %08X %08X %08X %08X lr=0x%08X r5=0x%08X\n",m,vm_read32(m),vm_read32(m+4),vm_read32(m+8),vm_read32(m+12),(uint32_t)ctx->lr,(uint32_t)ctx->gpr[5]); } }
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_KEYREG"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static unsigned long _n=0; _n++; if(_n<=6||(_n%200)==0) fprintf(stderr,"[KEYREG] LOOKUP #%lu r3=0x%08X r4=0x%08X\n",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); } }
-@@ -32648,0 +33280,2 @@
+@@ -32788,0 +33423,2 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_KEYREG"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static unsigned long _n=0; _n++; if(_n<=6||(_n%200)==0) fprintf(stderr,"[KEYREG] INSERT #%lu r3=0x%08X r4=0x%08X\n",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); } }
-@@ -34098,0 +34732,3 @@
+@@ -34238,0 +34875,3 @@
 +        /* POPH-PROBE */
 +        { static int _q_on=-1; if(_q_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _q_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_q_on){ const char* ps3_dbg_sym(void*); (void)ps3_dbg_sym; fprintf(stderr,"[POPH] payload=0x%08X w0=0x%08X classidx(+2)=0x%04X +6=0x%04X\n", (uint32_t)ctx->gpr[4], vm_read32(ctx->gpr[4]), vm_read16(ctx->gpr[4]+2), vm_read16(ctx->gpr[4]+6)); fflush(stderr);} }
-@@ -34210,0 +34847,7 @@
+@@ -34350,0 +34990,7 @@
 +        /* WADLD-T1: nome do membro type-1 antes de func_002B2BA0 */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; static int cap=-1; if(cap<0){ const char* c=getenv("PS3_TRACE_TYMAP_N"); cap=(c&&*c)?atoi(c):80; } if(n++<cap){
@@ -1850,43 +1857,43 @@
 +            char nm[24]; int i; for(i=0;i<20;i++){ uint8_t c=vm_read8(np+i); if(!c){nm[i]=0; break;} nm[i]=(c>=32&&c<127)?(char)c:'.'; }
 +            nm[20]=0;
 +            fprintf(stderr,"[WADLD-T1] #%d name='%s' namep=0x%08X buf=0x%08X\n", n, nm, np, bp); fflush(stderr);} } }
-@@ -34216 +34859 @@
+@@ -34356 +35002 @@
 -          if(on){ static int n=0; if(n++<80){
 +          if(on){ static int n=0; static int cap=-1; if(cap<0){ const char* c=getenv("PS3_TRACE_TYMAP_N"); cap=(c&&*c)?atoi(c):80; } if(n++<cap){
-@@ -35391,0 +36035,4 @@
+@@ -35531,0 +36178,4 @@
 +        /* MENUPRESENT-PROBE id=1 */
 +        { ps3_mp_on_enter(1, ctx); }
 +        /* PRESENTLOOP-PROBE id=3 */
 +        { ps3_plp_on_enter(3, ctx); }
-@@ -35662,0 +36310,2 @@
+@@ -35802,0 +36453,2 @@
 +        /* SCHEDARM-PROBE id=14 */
 +        { ps3_sa_on_enter(14, ctx); }
-@@ -35667,0 +36317,4 @@
+@@ -35807,0 +36460,4 @@
 +        /* MENUPRESENT-PROBE id=8 */
 +        { ps3_mp_on_enter(8, ctx); }
 +        /* SCHEDARM-PROBE id=4 */
 +        { ps3_sa_on_enter(4, ctx); }
-@@ -36134,0 +36788,5 @@
+@@ -36274,0 +36931,5 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_NAMELOOKUP"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static int _n=0; if(_n++<24){ uint32_t _nm=(uint32_t)ctx->gpr[31]; char _s[40]; int _j=0; for(;_j<32;_j++){char c=(char)vm_read8(_nm+_j); if(c<0x20||c>0x7E)break; _s[_j]=c;} _s[_j]=0;
 +            uint32_t _mgr=vm_read32((uint32_t)ctx->gpr[2]-0x14A0);
 +            fprintf(stderr,"[NAMELOOKUP] #%d name='%s' AB23C_result=0x%08X mgr(*r2-0x14A0)=0x%08X mgr+0x58=0x%08X mgr+0x5C=0x%08X\n",
 +              _n,_s,(uint32_t)ctx->gpr[29],_mgr,(_mgr>=0x10000u&&_mgr<0x4F000000u)?vm_read32(_mgr+0x58):0xDEADBEEFu,(_mgr>=0x10000u&&_mgr<0x4F000000u)?vm_read32(_mgr+0x5C):0xDEADBEEFu); fflush(stderr);} } }
-@@ -36287,0 +36946,4 @@
+@@ -36427,0 +37089,4 @@
 +        /* POSTTHR-PROBE id=5 */
 +        { ps3_pt_on_enter(5, ctx); }
 +        /* POSTTHR-R12-DISC 2B2DD0 */
 +        { ps3_pt_disc_sample("2B2DD0", ctx); }
-@@ -36416,0 +37079,6 @@
+@@ -36556,0 +37222,6 @@
 +        /* FLIPPATH-PROBE id=3 */
 +        { ps3_flipp_on_enter(3, ctx); }
 +        /* MENUPRESENT-PROBE id=13 */
 +        { ps3_mp_on_enter(13, ctx); }
 +        /* POSTTHR-PROBE id=2 */
 +        { ps3_pt_on_enter(2, ctx); }
-@@ -37482,0 +38151 @@
+@@ -37622,0 +38294 @@
 +        /* E418b-EOFD submit */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_EOFD"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ uint32_t _op=(uint32_t)ctx->gpr[3]; uint32_t _fo=_op?vm_read32(_op+4u):0u, _io=_op?vm_read32(_op+8u):0u, _fl=_op?vm_read32(_op+0xCu):0u; uint32_t _sz=_op?vm_read32(_op+0x10u):0u, _pos=_op?vm_read32(_op+0x14u):0u; uint32_t _dn=(_io>=0x10000u&&_io<0xF0000000u)?vm_read32(_io+0x90u):0xFFFFFFFFu; static int _k=0; if(_k++<4000){ fprintf(stderr,"[EOFD] submit #%d op=0x%08X fo=0x%08X io=0x%08X fl=0x%08X size=0x%X pos=0x%X n=%u\n",_k,_op,_fo,_io,_fl,_sz,_pos,(uint32_t)ctx->gpr[5]); fflush(stderr);} } }
-@@ -37500,0 +38170,25 @@
+@@ -37640,0 +38313,25 @@
 +        /* AREAD-HLE: fulfill from movie_io when op is backed by F2B FO
 +         * (FO+0x38 = mfd) or op+0x4 is already a movie_io token. Natural
 +         * dearch FO (m2v) has FO+0x38=0 → decline → natural body. */
@@ -1912,17 +1919,16 @@
 +            }
 +          }
 +        }
-@@ -37667,0 +38362,5 @@
+@@ -37807,0 +38505,5 @@
 +
 +/* FIOS-CANCEL-YIELD decls (C linkage; must be namespace scope) */
 +extern "C" void ppu_giant_lock_release(void);
 +extern "C" void ppu_giant_lock_acquire(void);
 +extern "C" void ps3recomp_giant_lock_yield_sleep1(void);
-@@ -37669,0 +38369,2 @@
+@@ -37809,0 +38512,2 @@
 +        /* E132-RELEASE */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<12){ uint32_t _s=(uint32_t)ctx->gpr[3]; int _ok=(_s>=0x10000u&&_s<0x4F000000u);
 +            fprintf(stderr,"[STREAM-RELEASE] stream=0x%08X fh(+4)=0x%08X op(+8)=0x%08X lr=0x%08X\n",_s,_ok?vm_read32(_s+4u):0u,_ok?vm_read32(_s+8u):0u,(uint32_t)ctx->lr); } } }
-@@ -37867,0 +38569,26 @@
-+
+@@ -38008,0 +38713,26 @@
 +
 +/* E414-STICKY-OWNER: owner (op+0xB8 user slot) recorded at publish time, checked at the restore site. */
 +static uint32_t e414_op[64], e414_owner[64];
@@ -1948,7 +1954,8 @@
 +      fprintf(stderr,"[FIOSSCHED] STICKY-OWNER-MISMATCH #%d io=0x%08X published-for=0x%08X polled-by=0x%08X (not restored)\n",_n,io,ow,slot);
 +      fflush(stderr); } } }
 +  return 0; }
-@@ -37869,0 +38597,21 @@
++
+@@ -38009,0 +38740,21 @@
 +        /* FIOS-OPEN-PROBE(4224): poll do estado 1. io=[container+8]; se 0 a
 +         * funcao sai por func_002B4308 e nao ha nada para esperar.
 +         * done=[io+0x90] e' a palavra de conclusao da op FIOS. */
@@ -1970,7 +1977,7 @@
 +                _io?"":"  <-- SEM OP PARA POLLAR");
 +              fflush(stderr); }
 +            _n++; } }
-@@ -37880,0 +38629,14 @@
+@@ -38020,0 +38772,14 @@
 +        /* STICKY-RESTORE: if guest done word was cleared after the producer
 +         * published it (observed RAWMEM 1 at CBret, 0 at first poll with no
 +         * write32 to the EA), re-materialize from the host sticky table. */
@@ -1985,7 +1992,7 @@
 +                fprintf(stderr,"[FIOSSCHED] STICKY-RESTORE #%d io=0x%08X\n",_n,_io);
 +                fflush(stderr); } } }
 +          } }
-@@ -37893,0 +38656,10 @@
+@@ -38033,0 +38799,10 @@
 +        /* FIOS-OPEN-PROBE(4274): ramo 'done' do poll. Alcancavel apenas com
 +         * [ [container+8] + 0x90 ] != 0 -- logo esta linha E' a prova de que
 +         * func_002B4224 observou a palavra de conclusao. */
@@ -1996,7 +2003,7 @@
 +            fprintf(stderr,"[FIOSOPEN] 002B4274 DONE #%d container=0x%08X io=0x%08X done=0x%08X\n",
 +              _n,_c,_io,_io?vm_read32(_io+0x90):0u);
 +            fflush(stderr); } } }
-@@ -37894,0 +38667,138 @@
+@@ -38034,0 +38810,138 @@
 +        /* F2B-RESTATUS: after F2B open, 0030B058 may re-queue dearch and stamp
 +         * op+44=0x8001070A. 6610 then returns that error and 4274 takes the
 +         * 002B4330 failure path (ICALL-BAD "/wad", freelist desync). Re-assert
@@ -2135,9 +2142,9 @@
 +        /* STICKY-CONSUME */
 +        { uint32_t _io=vm_read32((uint32_t)ctx->gpr[31]+8u);
 +          if(_io) ps3_fios_sticky_consume(_io); }
-@@ -37900,0 +38811 @@
+@@ -38040,0 +38954 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<16){ uint32_t op=(uint32_t)ctx->gpr[31]; fprintf(stderr,"[DONE-4274] #%d wait_ret(r3)=0x%08X op=0x%08X op+4=0x%08X op+8(h)=0x%08X op+0xC=0x%08X op+0x10=0x%08X\n",_n,(uint32_t)ctx->gpr[3],op,vm_read32(op+4),vm_read32(op+8),vm_read32(op+0xC),vm_read32(op+0x10)); } } }
-@@ -37951,0 +38863,21 @@
+@@ -38091,0 +39006,21 @@
 +        /* FIOS-OPEN-PROBE(4340): entrada do open de media. r3=container,
 +         * r4=nome cru, r5=flags. Ramo: 0x10=/wad/%s%s, 0x20=/_movies/%s.m2v,
 +         * 0x200=so busy-poll. container esperado = obj+0x62C. */
@@ -2159,7 +2166,7 @@
 +            fprintf(stderr,"[FIOSOPEN] 002B4340 #%d container=0x%08X obj=0x%08X delta=0x%X nome='%s' flags=0x%08X ramo=%s\n",
 +              _n,_c,_obj,_obj?(_c-_obj):0u,_nm,_f,_br);
 +            fflush(stderr); } } }
-@@ -38006,0 +38939,15 @@
+@@ -38146,0 +39082,15 @@
 +        /* FIOS-OPEN-PROBE(pre-43C0): pedido de open FIOS. r5 e' o
 +         * caminho ja' passado a minusculas por func_002B3890. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
@@ -2175,7 +2182,7 @@
 +              _n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],_pt,
 +              (uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[7]);
 +            fflush(stderr); } } }
-@@ -38007,0 +38955,11 @@
+@@ -38147,0 +39098,11 @@
 +        /* FIOS-OPEN-PROBE(pos-43C0): retorno do open. ret==0 => F2 do
 +         * plano. [container+4]=obj+0x630 (objecto de ficheiro),
 +         * [container+8]=obj+0x634 = ret (escrito logo a seguir). */
@@ -2187,18 +2194,18 @@
 +              _n,(uint32_t)ctx->gpr[3],_c,vm_read32(_c+4),vm_read32(_c+8),
 +              ((uint32_t)ctx->gpr[3]==0u)?"  <-- OPEN DEVOLVEU 0 (F2)":"");
 +            fflush(stderr); } } }
-@@ -38019,0 +38978 @@
+@@ -38159,0 +39121 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<40) fprintf(stderr,"[441C] entry r31(op)=0x%08X op+4=0x%08X op+8=0x%08X op+0xC=0x%08X\n",(uint32_t)ctx->gpr[31],vm_read32((uint32_t)ctx->gpr[31]+4),vm_read32((uint32_t)ctx->gpr[31]+8),vm_read32((uint32_t)ctx->gpr[31]+0xC)); } }
-@@ -38024 +38982,0 @@
+@@ -38164 +39125,0 @@
 -        uint64_t _op = ctx->gpr[31]; /* E405-441C-OP-SNAP: live op from 4340 */
-@@ -38028,0 +38987 @@
+@@ -38168,0 +39130 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<40) fprintf(stderr,"[441C] poll-ret r3=0x%08X op+4=0x%08X op+8=0x%08X op+0xC=0x%08X\n",(uint32_t)ctx->gpr[3],vm_read32((uint32_t)ctx->gpr[31]+4),vm_read32((uint32_t)ctx->gpr[31]+8),vm_read32((uint32_t)ctx->gpr[31]+0xC)); } }
-@@ -38032 +38991 @@
+@@ -38172 +39134 @@
 -        ctx->gpr[0] = vm_read32((uint32_t)_op + 0x4);
 +        ctx->gpr[0] = vm_read32(ctx->gpr[31] + 0x4);
-@@ -38044,0 +39004 @@
+@@ -38184,0 +39147 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<40) fprintf(stderr,"[441C] tail r0=0x%016llX r11=0x%016llX r9=0x%016llX -> r3=0x%08X\n",(unsigned long long)ctx->gpr[0],(unsigned long long)ctx->gpr[11],(unsigned long long)ctx->gpr[9],(uint32_t)ctx->gpr[3]); } }
-@@ -38060,0 +39021,14 @@
+@@ -38200,0 +39164,14 @@
 +        /* FIOS-OPEN-PROBE(4490): beacon do 2o helper (partilha 0030D578).
 +         * Serve para atribuir as linhas de 0030D5CC a origem certa. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
@@ -2213,9 +2220,9 @@
 +            fprintf(stderr,"[FIOSOPEN] 002B4490 #%d container=0x%08X nome='%s' flags=0x%08X\n",
 +              _n,(uint32_t)ctx->gpr[3],_nm,(uint32_t)ctx->gpr[5]);
 +            fflush(stderr); } } }
-@@ -38160,0 +39135 @@
+@@ -38300,0 +39278 @@
 +        /* E418b-EOFD poll */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_EOFD"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ uint32_t _op=(uint32_t)ctx->gpr[3]; uint32_t _fo=_op?vm_read32(_op+4u):0u, _io=_op?vm_read32(_op+8u):0u, _fl=_op?vm_read32(_op+0xCu):0u; uint32_t _sz=_op?vm_read32(_op+0x10u):0u, _pos=_op?vm_read32(_op+0x14u):0u; uint32_t _dn=(_io>=0x10000u&&_io<0xF0000000u)?vm_read32(_io+0x90u):0xFFFFFFFFu; static unsigned long _n=0; static int _c=0; static uint32_t _l[7]={0,0,0,0,0,0,0}; _n++; int _ch=(_l[0]!=_op||_l[1]!=_fo||_l[2]!=_io||_l[3]!=_dn||_l[4]!=_fl||_l[5]!=_sz||_l[6]!=_pos); if((_ch && _c++<4000) || (_n%10000)==0){ fprintf(stderr,"[EOFD] poll #%lu%s op=0x%08X fo=0x%08X io=0x%08X done=0x%08X fl=0x%08X size=0x%X pos=0x%X\n",_n,_ch?" CHANGE":" beat",_op,_fo,_io,_dn,_fl,_sz,_pos); fflush(stderr);} _l[0]=_op;_l[1]=_fo;_l[2]=_io;_l[3]=_dn;_l[4]=_fl;_l[5]=_sz;_l[6]=_pos; } }
-@@ -38311,0 +39287,13 @@
+@@ -38451,0 +39430,13 @@
 +        /* WAVDRV-PROBE: entrada do open real do .wav. r3=sub (caminho em
 +         * sub+0), r6=modo. fsobj=[[TOC-0x1460]+0x118] (== objecto do video). */
 +        if (wavdrv_on()) { static int _wn=0; if(_wn++<12){
@@ -2229,7 +2236,7 @@
 +                (uint32_t)ctx->gpr[7],_fs);
 +            fflush(stderr);
 +        } }
-@@ -38341,0 +39330,9 @@
+@@ -38481,0 +39473,9 @@
 +        /* WAVDRV-PROBE: argumentos exactos do open de membro. */
 +        if (wavdrv_on()) { static int _wn=0; if(_wn++<12){
 +            uint32_t _buf=(uint32_t)ctx->gpr[5];
@@ -2239,7 +2246,7 @@
 +                (uint32_t)ctx->gpr[7]);
 +            fflush(stderr);
 +        } }
-@@ -38342,0 +39340,7 @@
+@@ -38482,0 +39483,7 @@
 +        /* WAVDRV-PROBE: retorno do open de membro (op handle). */
 +        if (wavdrv_on()) { static int _wn=0; if(_wn++<12){
 +            fprintf(stderr,"[WAVDRV] 002B47D4 0030D578ret #%d op=0x%08X%s\n",
@@ -2247,7 +2254,7 @@
 +                ((uint32_t)ctx->gpr[3]==0u)?"  <-- SEM OP/ERRO":"");
 +            fflush(stderr);
 +        } }
-@@ -38346,0 +39351,8 @@
+@@ -38486,0 +39494,8 @@
 +        /* WAVDRV-PROBE: resultado decodificado. !=0 => devolve -2 e sai
 +         * a mensagem "couldn't open file"; ==0 => open OK. */
 +        if (wavdrv_on()) { static int _wn=0; if(_wn++<12){
@@ -2256,38 +2263,38 @@
 +                _wn,_rc,(_rc!=0u)?"FAIL(-2) couldn't open":"OK(0)");
 +            fflush(stderr);
 +        } }
-@@ -41086,0 +42099,6 @@
+@@ -41226,0 +42242,6 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (boot[2] antes da intro). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_002B6C40 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -41848,0 +42867,6 @@
+@@ -41988,0 +43010,6 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (boot[3] antes da intro). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_002B7644 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -44365,0 +45390,5 @@
+@@ -44505,0 +45533,5 @@
 +        /* Task5: WAD member type-loader dispatch. type=u16 header; table[type] OPD. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<64){
 +            uint32_t ty=(uint32_t)ctx->gpr[3], hdr=(uint32_t)ctx->gpr[31], buf=(uint32_t)ctx->gpr[30];
 +            fprintf(stderr,"[WADLD-CALL] #%d type=%u hdr=0x%08X buf=0x%08X\n", n, ty, hdr, buf); fflush(stderr);} } }
-@@ -44373 +45402,4 @@
+@@ -44513 +45545,4 @@
 -        ctx->gpr[0] = vm_read32(ctx->gpr[9] + 0x0);
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<64)
 +            fprintf(stderr,"[WADLD-OPD] #%d opd=0x%08X code_peek=0x%08X\n",
 +              n,(uint32_t)ctx->gpr[9], vm_read32(ctx->gpr[9]+0x0)); fflush(stderr);} }
-@@ -44375,3 +45407 @@
+@@ -44515,3 +45550 @@
 -        ctx->ctr = (uint32_t)ctx->gpr[0];
 -        ctx->gpr[2] = vm_read32(ctx->gpr[9] + 0x4);
 -        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);
 +        ps3_call_opd(ctx, (uint32_t)ctx->gpr[9]); DRAIN_TRAMPOLINE(ctx);
-@@ -44566,32 +45596 @@
+@@ -44706,32 +45739 @@
 -        if (((ctx->cr >> 0) & 2)) {
 -          /* E413-SKIP-AREAD: ring already has a header; do not AREAD-HLE */
 -          uint32_t _st=vm_read32((uint32_t)ctx->gpr[31]+0x1A8u);
@@ -2321,17 +2328,17 @@
 -              return; } }
 -          g_trampoline_fn = (void(*)(void*))func_002B9F54; return; }
 +        if (((ctx->cr >> 0) & 2)) { g_trampoline_fn = (void(*)(void*))func_002B9F54; return; }
-@@ -44868,0 +45868,2 @@
+@@ -45008,0 +46011,2 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<12){ uint32_t b=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[T21-2BA3F0] #%d r3=0x%08X buf(r4)=0x%08X words: %08X %08X %08X %08X %08X %08X lr=0x%08X ts1B0=%u\n",_n,(uint32_t)ctx->gpr[3],b,vm_read32(b),vm_read32(b+4),vm_read32(b+8),vm_read32(b+12),vm_read32(b+16),vm_read32(b+20),(uint32_t)ctx->lr,vm_read32(0x00869570u+0x1B0u)); } } }
-@@ -44921,0 +45923,6 @@
+@@ -45061,0 +46066,6 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (boot[1] antes da intro). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_002BA4B4 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -45122,0 +46130,7 @@
+@@ -45262,0 +46273,7 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; static int cap=-1; if(cap<0){ const char* c=getenv("PS3_TRACE_TYMAP_N"); cap=(c&&*c)?atoi(c):80; } if(n++<cap){
 +            uint32_t ts=(uint32_t)ctx->gpr[31];
@@ -2339,25 +2346,25 @@
 +              n, ts, vm_read32(ts+0x1CC), vm_read32(ts+0x1AC), vm_read32(ts+0x1B0), vm_read32(ts+0x1C8), vm_read32(ts+0x1BC), vm_read32(ts+0x1C4), vm_read32(ts+0x1D4), (uint32_t)ctx->lr); fflush(stderr);} } }
 +        f2b_stream_ensure((uint32_t)ctx->gpr[31]);
 +        f2b_stream_eof_try_complete((uint32_t)ctx->gpr[31]);
-@@ -45180 +46194 @@
+@@ -45320 +46337 @@
 -        /* E418e-TICK B */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static uint64_t _l29=~0ull,_l27=~0ull; static int _c=0; static unsigned long _n=0; _n++; if((ctx->gpr[29]!=_l29 || ctx->gpr[27]!=_l27) && _c++<400){ _l29=ctx->gpr[29]; _l27=ctx->gpr[27]; fprintf(stderr,"[TICK] test-r29 fn=? #%lu r29=0x%llX r27=0x%llX r26=0x%llX state=%u\n",_n,(unsigned long long)ctx->gpr[29],(unsigned long long)ctx->gpr[27],(unsigned long long)ctx->gpr[26],vm_read32((uint32_t)ctx->gpr[31]+0x1CCu)); fflush(stderr);} } }
 +        /* E418e-TICK B */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static uint64_t _l29=~0ull,_l27=~0ull; static int _c=0; static unsigned long _n=0; _n++; if((ctx->gpr[29]!=_l29 || ctx->gpr[27]!=_l27) && _c++<400){ _l29=ctx->gpr[29]; _l27=ctx->gpr[27]; fprintf(stderr,"[TICK] test-r29 fn=func_002BA76C #%lu r29=0x%llX r27=0x%llX r26=0x%llX state=%u\n",_n,(unsigned long long)ctx->gpr[29],(unsigned long long)ctx->gpr[27],(unsigned long long)ctx->gpr[26],vm_read32((uint32_t)ctx->gpr[31]+0x1CCu)); fflush(stderr);} } }
-@@ -45191,0 +46206,5 @@
+@@ -45331,0 +46349,5 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_DONE880"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ uint32_t _ts=(uint32_t)ctx->gpr[31]; static int _k=0; if(_k++<12)
 +            fprintf(stderr,"[DONE880] ts=0x%08X state(1CC)=%u rem(1AC)=0x%X body(1D4)=0x%X f1C8=0x%X f1C4=0x%X file_pos=%u/%u\n",
 +              _ts, vm_read32(_ts+0x1CC), vm_read32(_ts+0x1AC), vm_read32(_ts+0x1D4), vm_read32(_ts+0x1C8), vm_read32(_ts+0x1C4),
 +              g_f2b_fill_file_pos, g_f2b_fill_sz); fflush(stderr);} }
-@@ -45197 +46216 @@
+@@ -45337 +46359 @@
 -        /* E418e-TICK C */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _c=0; if(_c++<64){ fprintf(stderr,"[TICK] done fn=? #%d -> state 0, return 0\n",_c); fflush(stderr);} } }
 +        /* E418e-TICK C */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _c=0; if(_c++<64){ fprintf(stderr,"[TICK] done fn=func_002BA76C #%d -> state 0, return 0\n",_c); fflush(stderr);} } }
-@@ -45281,0 +46301 @@
+@@ -45421,0 +46444 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ST23"); _o=(_e&&*_e&&*_e!='0')?1:0;} if(_o){ static int _k=0; if(_k++<10) fprintf(stderr,"[ST23] BA960-vtret ts=0x%%08X r25=0x%X\n",(uint32_t)ctx->gpr[31],(uint32_t)ctx->gpr[25]); } }
-@@ -45286 +46306,2 @@
+@@ -45426 +46449,2 @@
 -        ctx->gpr[3] = ctx->gpr[31] + (int64_t)(0x64);
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ST23"); _o=(_e&&*_e&&*_e!='0')?1:0;} if(_o){ static int _k=0; if(_k++<10) fprintf(stderr,"[ST23] BA990-resource-start ts=0x%%08X\n",(uint32_t)ctx->gpr[31]); } }
 +                ctx->gpr[3] = ctx->gpr[31] + (int64_t)(0x64);
-@@ -45289,0 +46311,9 @@
+@@ -45429,0 +46454,9 @@
 +        /* E368: this is THE gate for state=2 (the loader phase that walks a WAD's records).
 +         * func_002B4224(ts+0x64) != 0 -> set state=2; ==0 -> bail to func_002BA824.
 +         * Console runs LglScA in state=2; we stay in state=1 -> this must be returning 0. */
@@ -2367,19 +2374,19 @@
 +              _n,(uint32_t)ctx->gpr[3], ((uint32_t)ctx->gpr[3]?"-> SET state=2":"-> BAIL (stay state=1)"),
 +              _ts, vm_read32(_ts+0x74), vm_read32(_ts+0x1CC),
 +              (vm_read32(_ts+0x1A8)>=0x10000u)?vm_read32(vm_read32(_ts+0x1A8)+0x10u):0xFFFFFFFFu); fflush(stderr);} } }
-@@ -45300,0 +46331,6 @@
+@@ -45440,0 +46474,6 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ST23"); _o=(_e&&*_e&&*_e!='0')?1:0;} if(_o){ static int _k=0; _k++; if(_k<=6||_k%50==0) { uint32_t _st=vm_read32(ctx->gpr[31]+0x1A8u); fprintf(stderr,"[ST23] BA9BC #%d rem=0x%X ring(1A8)=0x%08X avail(+10)=0x%X F2Bfill=0x%08X F2Bfp=%u/%u mfd=0x%X natural=%d\n",_k,vm_read32(ctx->gpr[31]+0x1AC),_st,(_st>=0x10000u&&_st<0x4F000000u)?vm_read32(_st+0x10u):0xFFFFFFFFu,g_f2b_fill_stream,g_f2b_fill_file_pos,g_f2b_fill_sz,g_f2b_fill_mfd,f2b_natural_on()); }
 +        { static int _dmp=0; if(_dmp++<3){ uint32_t _st=vm_read32(ctx->gpr[31]+0x1A8u); uint32_t _rb=(_st>=0x10000u)?vm_read32(_st):0; uint32_t _cur=(_st>=0x10000u)?vm_read32(_st+0x8u):0;
 +            if(_rb>=0x10000u && _rb<0x4F000000u){ fprintf(stderr,"[RINGDUMP] base=0x%08X cursor=0x%X [base+0..32]:",_rb,_cur); for(int _i=0;_i<32;_i++) fprintf(stderr," %02X",(unsigned)vm_read8(_rb+_i)); fprintf(stderr,"\n");
 +              fprintf(stderr,"[RINGDUMP] [base+cursor..+32]:"); for(int _i=0;_i<32;_i++) fprintf(stderr," %02X",(unsigned)vm_read8(_rb+_cur+_i)); fprintf(stderr,"\n"); fflush(stderr);} } } } }
 +                /* F2B multi-MB: state-2 header needs avail>0x1F; refill before wait. */
 +        f2b_stream_ensure((uint32_t)ctx->gpr[31]);
-@@ -45302 +46338 @@
+@@ -45442 +46481 @@
 -        /* E418c-ST2 */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ST2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ const uint32_t _ts=0x00869570u; uint32_t _st=vm_read32(_ts+0x1A8u); uint32_t _v[12]; _v[0]=_st; for(int _i=0;_i<8;_i++) _v[1+_i]=(_st>=0x10000u&&_st<0xF0000000u)?vm_read32(_st+4u*_i):0u; _v[9]=vm_read32(_ts+0x1ACu); _v[10]=vm_read32(_ts+0x1CCu); _v[11]=vm_read32(_ts+0x1C8u); static uint32_t _l[12]; static int _c=0; static unsigned long _n=0; _n++; int _ch=0; for(int _i=0;_i<12;_i++) if(_l[_i]!=_v[_i]){ _ch=1; _l[_i]=_v[_i]; } if((_ch && _c++<3000) || (_n%20000)==0){ fprintf(stderr,"[ST2] ? #%lu%s st=0x%08X +00=%08X +04=%08X +08=%08X +0C=%08X avail(+10)=%08X +14=%08X +18=%08X +1C=%08X rem=0x%X state=%u f1C8=0x%X\n",_n,_ch?" CHANGE":" beat",_v[0],_v[1],_v[2],_v[3],_v[4],_v[5],_v[6],_v[7],_v[8],_v[9],_v[10],_v[11]); fflush(stderr);} } }
 +        /* E418d-ST2Z */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ST2Z"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ const uint32_t _ts=0x00869570u; uint32_t _rem=vm_read32(_ts+0x1ACu); if(_rem==0u){ uint32_t _st=vm_read32(_ts+0x1A8u); uint32_t _v[12]; _v[0]=_st; for(int _i=0;_i<8;_i++) _v[1+_i]=(_st>=0x10000u&&_st<0xF0000000u)?vm_read32(_st+4u*_i):0u; _v[9]=_rem; _v[10]=vm_read32(_ts+0x1CCu); _v[11]=vm_read32(_ts+0x1C8u); static uint32_t _l[12]; static int _c=0; static unsigned long _n=0; _n++; int _ch=0; for(int _i=0;_i<12;_i++) if(_l[_i]!=_v[_i]){ _ch=1; _l[_i]=_v[_i]; } if((_ch && _c++<3000) || (_n%5000)==0){ fprintf(stderr,"[ST2Z] func_002BA9BC #%lu%s st=0x%08X base=%08X total=%08X cursor=%08X ring=%08X avail=%08X +14=%08X +18=%08X +1C=%08X rem=0x%X state=%u f1C8=0x%X\n",_n,_ch?" CHANGE":" beat",_v[0],_v[1],_v[2],_v[3],_v[4],_v[5],_v[6],_v[7],_v[8],_v[9],_v[10],_v[11]); fflush(stderr);} } } }
-@@ -45333,0 +46370 @@
+@@ -45473,0 +46513 @@
 +        /* E418e-TICK A */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static unsigned long _n=0; _n++; if(_n<=64 || (_n%5000)==0){ fprintf(stderr,"[TICK] set-r29 #%lu state=%u avail=0x%X rem=0x%X\n",_n,vm_read32((uint32_t)ctx->gpr[31]+0x1CCu),vm_read32(vm_read32((uint32_t)ctx->gpr[31]+0x1A8u)+0x10u),vm_read32((uint32_t)ctx->gpr[31]+0x1ACu)); fflush(stderr);} } }
-@@ -45382,0 +46420,148 @@
+@@ -45522,0 +46563,148 @@
 +        /* F2B-BODY-CLAMP + DESYNC-STOP: header size (aligned → r29/1D4) cannot
 +         * exceed remaining stream (ring avail + unread FO). After ~010 the ring
 +         * can still desync (next expected TXR_chest…); bad headers yield ASCII
@@ -2528,35 +2535,35 @@
 +                ctx->gpr[29] = _stream_left;
 +            }
 +        }
-@@ -45428,0 +46614,3 @@
+@@ -45568,0 +46757,3 @@
 +        /* F2B multi-MB: refill before body step if ring empty (else wait forever). */
 +        f2b_stream_ensure((uint32_t)ctx->gpr[31]);
 +        f2b_stream_eof_try_complete((uint32_t)ctx->gpr[31]);
-@@ -45462,0 +46651,6 @@
+@@ -45602,0 +46794,6 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<40){
 +            uint32_t hdr=(uint32_t)ctx->gpr[3], buf=(uint32_t)ctx->gpr[4];
 +            uint16_t ty=vm_read16(hdr+0x0);
 +            fprintf(stderr,"[WADLD-BODY] #%d hdr=0x%08X buf=0x%08X type16=%u name4=0x%08X\n",
 +              n, hdr, buf, ty, vm_read32(hdr+0x8)); fflush(stderr);} } }
-@@ -45535,0 +46730 @@
+@@ -45675,0 +46873 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<8) fprintf(stderr,"[BAD10] #%d entry desc(r3)=0x%08X flags(r4)=0x%08X lr=0x%08X\n",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); } }
-@@ -45576,0 +46772 @@
+@@ -45716,0 +46915 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<8){ uint32_t ts=0x00869570u; fprintf(stderr,"[BAD10] #%d after open: r3=0x%08X flags=0x%08X ts+0x74=0x%08X ts+0x64=0x%08X state=%u\n",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[28],vm_read32(ts+0x74),vm_read32(ts+0x64),vm_read32(ts+0x1CC)); } } }
-@@ -46322,0 +47519,2 @@
+@@ -46462,0 +47662,2 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<40) fprintf(stderr,"[ENTER-2BBA64] #%d size(r3)=0x%08X override*(0x0053FFC8)=0x%08X r5=0x%08X lr=0x%08X\n",_n,(uint32_t)ctx->gpr[3],vm_read32(0x0053FFC8u),(uint32_t)ctx->gpr[5],(uint32_t)ctx->lr); } }
 +        { static int _b=-1; if(_b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_BBA64"); _b=(_e&&*_e&&*_e!='0')?1:0;} if(_b){ static int _k=0; if(_k++<12) fprintf(stderr,"[BBA64] ENTRY r3=0x%08X r27=0x%08X r29=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31]); } }
-@@ -46353,0 +47552 @@
+@@ -46493,0 +47695 @@
 +        { static int _b=-1; if(_b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_BBA64"); _b=(_e&&*_e&&*_e!='0')?1:0;} if(_b){ static int _k=0; if(_k++<12) fprintf(stderr,"[BBA64] RET-BC40 r3=0x%08X r27=0x%08X r29=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31]); } }
-@@ -46377,0 +47577 @@
+@@ -46517,0 +47720 @@
 +        { static int _b=-1; if(_b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_BBA64"); _b=(_e&&*_e&&*_e!='0')?1:0;} if(_b){ static int _k=0; if(_k++<12) fprintf(stderr,"[BBA64] RET-BC28 r3=0x%08X r27=0x%08X r29=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31]); } }
-@@ -46381,0 +47582 @@
+@@ -46521,0 +47725 @@
 +        { static int _b=-1; if(_b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_BBA64"); _b=(_e&&*_e&&*_e!='0')?1:0;} if(_b){ static int _k=0; if(_k++<12) fprintf(stderr,"[BBA64] RET-BC08 r3=0x%08X r27=0x%08X r29=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31]); } }
-@@ -46396,0 +47598 @@
+@@ -46536,0 +47741 @@
 +        { static int _b=-1; if(_b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_BBA64"); _b=(_e&&*_e&&*_e!='0')?1:0;} if(_b){ static int _k=0; if(_k++<12) fprintf(stderr,"[BBA64] CREATE-263878 r3=0x%08X r27=0x%08X r29=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31]); } }
-@@ -50864,0 +52067 @@
+@@ -51004,0 +52210 @@
 +        /* E146-CB */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<80){ uint32_t _o=vm_read32(0x00540054u); fprintf(stderr,"[VDECCB] msg=%u +0x60c=%u +4=%u\n",(uint32_t)ctx->gpr[4],vm_read32(_o+0x60cu),vm_read32(_o+4u)); } } }
-@@ -51207,0 +52411,7 @@
+@@ -51347,0 +52554,7 @@
 +        /* SMPD-PROBE#D: entrada do MovieStop (func_002BFF88), TODOS os ramos (<1 / 1..0xA / 0xB) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2564,7 +2571,7 @@
 +            fprintf(stderr,"[STOPENTRY] func_002BFF88 obj=0x%08X st620=%u\n",
 +              (uint32_t)ctx->gpr[31],(unsigned)ctx->gpr[0]);
 +            fflush(stderr); } } }
-@@ -51262,0 +52473,8 @@
+@@ -51402,0 +52616,8 @@
 +        /* SMPD-PROBE#C: MovieStop antes do write st620=0 (r3/r4 ja setados p/ broadcast SMPD/0x1C) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2573,7 +2580,7 @@
 +            fprintf(stderr,"[STOP] SMPD obj=0x%08X prev_st620=%u r3=0x%08X r4=0x%08X ->0\n",
 +              (uint32_t)ctx->gpr[31], _prev_st620, (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[4]);
 +            fflush(stderr); } } }
-@@ -51345,0 +52564,24 @@
+@@ -51485,0 +52707,24 @@
 +        /* INTROSEQ-PROBE: beacon de entrada (Play(): a cauda escreve st620=1). So leitura. */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_INTROSEQ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2598,7 +2605,7 @@
 +              (uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],
 +              (_obj && vm_read32(_obj+0x620))?"  <-- SAI CEDO (st620!=0)":"");
 +            fflush(stderr); } } }
-@@ -51573,0 +52816,12 @@
+@@ -51713,0 +52959,12 @@
 +        /* MENUPRESENT-PROBE id=9 */
 +        { ps3_mp_on_enter(9, ctx); }
 +        /* SMPD-PROBE#FLAG: caminho ate' ao gate 0x002C05F8 (host-only, nao toca guest) */
@@ -2611,10 +2618,10 @@
 +          if(_on){ static int _n=0; if(_n++<3){
 +            fprintf(stderr,"[INTROSEQ] enter func_002C0508 #%d\n", _n);
 +            fflush(stderr); } } }
-@@ -51641,0 +52896,2 @@
+@@ -51781,0 +53039,2 @@
 +        /* SMPD-PROBE#FLAGSET: entrou pelo retry do estado 1 */
 +        _smpd_from05C8 = 1;
-@@ -51663,0 +52920,17 @@
+@@ -51803,0 +53063,17 @@
 +        /* SMPD-PROBE#B: gate 0x002C05F8 alcancado pelo retry 0x002C05C8 (estado 1) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2632,7 +2639,7 @@
 +                (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],
 +                ((unsigned)ctx->gpr[0]!=0)?"adv":"wait",g_movie_eos_ea);
 +              fflush(stderr); } } } }
-@@ -51710,0 +52984,8 @@
+@@ -51850,0 +53127,8 @@
 +        /* SMPD-PROBE#E: gate EOS do estado 4 (0x002C069C), 1o a jusante do estado 3 */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2641,7 +2648,7 @@
 +              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],
 +              ((unsigned)ctx->gpr[0]!=0)?"adv":"wait");
 +            fflush(stderr); } } }
-@@ -51776,0 +53058,9 @@
+@@ -51916,0 +53201,9 @@
 +        /* SMPD-PROBE#G: gate EOS do estado 10 (0x002C0788), SO pos-arme */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2651,7 +2658,7 @@
 +                (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],
 +                ((unsigned)ctx->gpr[0]!=0)?"adv":"wait",g_movie_eos_ea);
 +              fflush(stderr); } } } }
-@@ -51799,0 +53090,8 @@
+@@ -51939,0 +53233,8 @@
 +        /* SMPD-PROBE#A: gate EOS do estado 1 (0x002C07D8) -- brief nao listava este site */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_SMPD"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2660,19 +2667,19 @@
 +              (uint32_t)ctx->gpr[30],(uint32_t)(ctx->gpr[30]+0x744),(unsigned)ctx->gpr[0],
 +              ((unsigned)ctx->gpr[0]!=0)?"adv":"wait");
 +            fflush(stderr); } } }
-@@ -51886,0 +53185,2 @@
+@@ -52026,0 +53328,2 @@
 +        /* E145-CLOCK */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<40){ uint32_t _o=(uint32_t)ctx->gpr[30]; union{uint32_t u; float f;} _a,_b; _a.u=vm_read32(_o+0x778u); _b.u=vm_read32(_o+0x77Cu);
 +            fprintf(stderr,"[CLOCK] r9=%u r22=%u r29=%u r31=%u +0x774=%u +0x778=%.4f +0x77c=%.2f +0x76c=%u +0x60c=%u\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[22],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31],vm_read32(_o+0x774u),_a.f,_b.f,vm_read32(_o+0x76Cu),vm_read32(_o+0x60Cu)); } } }
-@@ -52066,0 +53367,2 @@
+@@ -52206,0 +53510,2 @@
 +        /* E145-CLOCK */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<40){ uint32_t _o=(uint32_t)ctx->gpr[30]; union{uint32_t u; float f;} _a,_b; _a.u=vm_read32(_o+0x778u); _b.u=vm_read32(_o+0x77Cu);
 +            fprintf(stderr,"[CLOCK] r9=%u r22=%u r29=%u r31=%u +0x774=%u +0x778=%.4f +0x77c=%.2f +0x76c=%u +0x60c=%u\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[22],(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[31],vm_read32(_o+0x774u),_a.f,_b.f,vm_read32(_o+0x76Cu),vm_read32(_o+0x60Cu)); } } }
-@@ -78849,0 +80152,5 @@
+@@ -78990,0 +80296,5 @@
 +        /* E100-DACCC */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<40){ uint32_t _h=(uint32_t)ctx->gpr[3], _k=(uint32_t)ctx->gpr[4]; uint32_t _q=(_h>=0x10000u&&_h<0x4F000000u)?vm_read32(_h):0u; int _j=0, _f=-1; uint32_t _first=_q;
 +            while(_q>=0x10000u && _q<0x4F000000u && _q!=_h && _j<300){ if(_f<0 && vm_read32(_q+8u)==_k) _f=_j; _q=vm_read32(_q); _j++; }
 +            fprintf(stderr,"[DACCC] head=0x%08X key=0x%08X nos=%d circular=%s found_at=%d first=0x%08X fim=0x%08X lr=0x%08X\n",_h,_k,_j,(_q==_h)?"sim":"NAO",_f,_first,_q,(uint32_t)ctx->lr); fflush(stderr); } } }
-@@ -78945,0 +80253,7 @@
+@@ -79086,0 +80397,7 @@
 +        /* E101-DAE20 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<12){ uint32_t _c=(uint32_t)ctx->gpr[3]; char _b[200]; int _w=0; _b[0]=0;
@@ -2680,29 +2687,29 @@
 +            uint32_t _g=vm_read32(0x0053F58Cu); uint32_t _m=(_g>=0x10000u&&_g<0x4F000000u)?vm_read32(_g+0x3Cu):0u; int _ti=-1; for(int _i=0;_i<40;_i++) if(vm_read32(0x00868D48u+_i*4u)==_m){_ti=_i;break;}
 +            fprintf(stderr,"[DAE20] cache=0x%08X obj=0x%08X p3=0x%08X p4=0x%08X cache[0..9]=[%s] mgr=0x%08X T[%d] cursor=%d stack0=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],_b,_m,_ti,
 +              (_m>=0x10000u&&_m<0x4F000000u)?(int)(int8_t)vm_read8(_m+0xC8u):-99,(_m>=0x10000u&&_m<0x4F000000u)?vm_read32(_m+0x48u):0u,(uint32_t)ctx->lr); fflush(stderr); } } }
-@@ -79104,0 +80419,6 @@
+@@ -79245,0 +80563,6 @@
 +        /* E114-R25DIFF */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<10){ uint32_t _r25=(uint32_t)ctx->gpr[25],_r15=(uint32_t)ctx->gpr[15];
 +            fprintf(stderr,"[R25DIFF] r25=0x%08X *r25(word0)=0x%08X r15(arraybase)=0x%08X *r15(cont)=0x%08X r31=0x%08X r0=0x%08X r10=0x%08X\n",
 +              _r25,(_r25>=0x10000u&&_r25<0x4F000000u)?vm_read32(_r25):0xDEADu,_r15,(_r15>=0x10000u&&_r15<0x4F000000u)?vm_read32(_r15):0xDEADu,
 +              (uint32_t)ctx->gpr[31],(uint32_t)ctx->gpr[0],(uint32_t)ctx->gpr[10]); fflush(stderr); } } }
-@@ -84627,0 +85948,2 @@
+@@ -84768,0 +86092,2 @@
 +        /* F2B: refill+clamp before ring advance. */
 +        f2b_stream_pre_consume(ctx);
-@@ -84645,0 +85968,2 @@
+@@ -84786,0 +86112,2 @@
 +        /* F2B: refill+clamp before cursor skip (same class as 1480). */
 +        f2b_stream_pre_consume(ctx);
-@@ -84677,0 +86002,2 @@
+@@ -84818,0 +86146,2 @@
 +        /* F2B: ring copy sibling of 1480. */
 +        f2b_stream_pre_consume(ctx);
-@@ -84816,0 +86143,2 @@
+@@ -84957,0 +86287,2 @@
 +        /* F2B-STREAM-REFILL + CLAMP (shared pre_consume). */
 +        f2b_stream_pre_consume(ctx);
-@@ -99346,0 +100675,2 @@
+@@ -99487,0 +100819,2 @@
 +        /* FLIPPATH-PROBE id=4 */
 +        { ps3_flipp_on_enter(4, ctx); }
-@@ -100381,0 +101712,17 @@
+@@ -100522,0 +101856,17 @@
 +        /* E380: this iterates a callback list (r31: +4=end, +8=cursor, +0xC=element->OPD).
 +         * When an entry's OPD code is garbage (==1) we get ICALL-BAD. Dump the WHOLE list on the
 +         * first bad entry: how many entries, which are valid, and which one is broken. */
@@ -2720,7 +2727,7 @@
 +              fprintf(stderr,"[CBLIST]   [%2d] @0x%08X opd=0x%08X code=0x%08X %s\n",_k,_p,_opd,_code,
 +                (_code<0x1000u)?"<== BAD":""); }
 +            fflush(stderr); } } }
-@@ -123652,0 +125000,11 @@
+@@ -123793,0 +125144,11 @@
 +        /* FIOS-SCHED-PROBE(complete) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_FIOSSCHED"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2732,7 +2739,7 @@
 +              _op?vm_read32(_op+0x90):0u);
 +            fflush(stderr); } } }
 +        /* E151-DONE */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<120){ uint32_t _op=(uint32_t)ctx->gpr[3]; int _ok=(_op>=0x10000u&&_op<0x4F000000u); uint32_t _fh=_ok?vm_read32(_op+0x98u):0u; char _p[48]; _p[0]=0; if(_fh>=0x10000u&&_fh<0x4F000000u){ uint32_t _pp=vm_read32(_fh+0x30u); if(_pp>=0x10000u&&_pp<0x4F000000u){ for(int _i=0;_i<47;_i++){ _p[_i]=(char)vm_read8(_pp+_i); if(!_p[_i]) break; } _p[47]=0; } } fprintf(stderr,"[FIOSOP] done op=0x%08X tipo=0x%X status=0x%08X r4=%u path='%s' op+0x30=0x%08X op+0x34=0x%08X lr=0x%08X\n",_op,_ok?vm_read32(_op+0x40u):0u,_ok?vm_read32(_op+0x44u):0u,(uint32_t)ctx->gpr[4],_p, _ok?vm_read32(_op+0x30u):0u, _ok?vm_read32(_op+0x34u):0u, (uint32_t)ctx->lr); } } }
-@@ -123723,0 +125082,9 @@
+@@ -123864,0 +125226,9 @@
 +        /* FIOS-SCHED-PROBE(done90) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_FIOSSCHED"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -2742,7 +2749,7 @@
 +              _n,_op,(unsigned)(ctx->gpr[11]&0xFFFFFFFFu),
 +              _op?vm_read32(_op+0x40):0u);
 +            fflush(stderr); } } }
-@@ -123731,0 +125099,11 @@
+@@ -123872,0 +125243,11 @@
 +        if (((uint32_t)ctx->gpr[11]) != 0u) {
 +            ps3_fios_sticky_publish((uint32_t)ctx->gpr[31]);
 +            e414_owner_note((uint32_t)ctx->gpr[31], vm_read32((uint32_t)ctx->gpr[31] + 0xB8u)); /* E414-STICKY-OWNER */
@@ -2754,16 +2761,16 @@
 +        { ppu_giant_lock_release();
 +          ps3recomp_giant_lock_yield_sleep1();
 +          ppu_giant_lock_acquire(); }
-@@ -125375,0 +126754,4 @@
+@@ -125516,0 +126898,4 @@
 +        /* E137-SCHED */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<10){ uint32_t _s=(uint32_t)ctx->gpr[3]; int _ok=(_s>=0x10000u&&_s<0x4F000000u);
 +            fprintf(stderr,"[SCHED] r3=0x%08X w0..7=%08X %08X %08X %08X %08X %08X %08X %08X +0x16C=%u lr=0x%08X\n",_s,_ok?vm_read32(_s):0u,_ok?vm_read32(_s+4u):0u,_ok?vm_read32(_s+8u):0u,_ok?vm_read32(_s+12u):0u,_ok?vm_read32(_s+16u):0u,_ok?vm_read32(_s+20u):0u,_ok?vm_read32(_s+24u):0u,_ok?vm_read32(_s+28u):0u,_ok?vm_read32(_s+0x16Cu):0u,(uint32_t)ctx->lr); } } }
 +        /* E135-ALLOC-ENTRY */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on && (uint32_t)ctx->lr==0x0030D0ECu){ static int _k=0; if(_k++<8){ uint32_t _s=(uint32_t)ctx->gpr[3],_a=(uint32_t)ctx->gpr[4]; int _ok=(_a>=0x10000u&&_a<0x4F000000u);
 +            fprintf(stderr,"[ALLOC-ENTRY] sched=0x%08X attr=0x%08X attr+0x14=0x%08X attr[0..3]=%08X %08X %08X %08X freelist=0x%08X\n",_s,_a,_ok?vm_read32(_a+0x14u):0u,_ok?vm_read32(_a):0u,_ok?vm_read32(_a+4u):0u,_ok?vm_read32(_a+8u):0u,_ok?vm_read32(_a+12u):0u,vm_read32(_s+0x200u)); } } }
-@@ -125447,0 +126830 @@
+@@ -125588,0 +126974 @@
 +        /* E136-POP */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<16) fprintf(stderr,"[FLPOP] lwarx ea=0x%08X head(r10)=0x%08X r0=0x%08X mem=0x%08X rsv_valid=%d rsv_addr=0x%08X\n",(uint32_t)ctx->gpr[11],(uint32_t)ctx->gpr[10],(uint32_t)ctx->gpr[0],vm_read32((uint32_t)ctx->gpr[11]),(int)ctx->reserve_valid,(uint32_t)ctx->reserve_addr); } }
-@@ -125450,0 +126834 @@
+@@ -125591,0 +126978 @@
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<16) fprintf(stderr,"[FLPOP] stwcx ea=0x%08X next(r9)=0x%08X cr0.eq=%d mem_after=0x%08X\n",(uint32_t)ctx->gpr[11],(uint32_t)ctx->gpr[9],(int)((ctx->cr>>28)&2?1:0),vm_read32((uint32_t)ctx->gpr[11])); } }
-@@ -128723,0 +130108,10 @@
+@@ -128864,0 +130252,10 @@
 +        /* E131-MOVIEIO-RELEASE: submit de um op FIOS de CLOSE (tipo 0xD, fh em op+0x98) para um fh que o F2B serve
 +         * pelo movieio -> libertar o slot host (fiel ao close do console). Medido: o dtor do fh (func_0031F540) NAO e'
 +         * chamado no fecho normal em nenhum dos lados; o que o guest faz e' submeter o op 0xD (FUN_0030d0ac -> 0030b058). */
@@ -2774,18 +2781,18 @@
 +              if(_tr) fprintf(stderr,"[MOVIEIO-RELEASE] op=0x%08X fh=0x%08X mfd=0x%08X lr=0x%08X\n",_op,_fh,_m,(uint32_t)ctx->lr);
 +              movie_io_close(_m); f2b_fo_mfd_del(_fh); } } }
 +        /* E150-SUBMIT */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<120){ uint32_t _op=(uint32_t)ctx->gpr[4]; int _ok=(_op>=0x10000u&&_op<0x4F000000u); uint32_t _fh=_ok?vm_read32(_op+0x98u):0u; char _p[48]; _p[0]=0; if(_fh>=0x10000u&&_fh<0x4F000000u){ uint32_t _pp=vm_read32(_fh+0x30u); if(_pp>=0x10000u&&_pp<0x4F000000u){ for(int _i=0;_i<47;_i++){ _p[_i]=(char)vm_read8(_pp+_i); if(!_p[_i]) break; } _p[47]=0; } } fprintf(stderr,"[FIOSOP] submit op=0x%08X tipo=0x%X fh=0x%08X path='%s' lr=0x%08X op+0x30=0x%08X op+0x34=0x%08X lr=0x%08X media=0x%08X media+0x30=0x%08X fh+0x30=0x%08X op+0x1c=0x%08X op+0x48=0x%08X\n",_op,_ok?vm_read32(_op+0x40u):0u,_fh,_p,(uint32_t)ctx->lr, _ok?vm_read32(_op+0x30u):0u, _ok?vm_read32(_op+0x34u):0u, (uint32_t)ctx->lr, (_ok&&_fh>=0x10000u)?vm_read32(_fh+0x8u):0u, (_ok&&_fh>=0x10000u&&vm_read32(_fh+0x8u)>=0x10000u)?vm_read32(vm_read32(_fh+0x8u)+0x30u):0u, (_ok&&_fh>=0x10000u)?vm_read32(_fh+0x30u):0u, _ok?vm_read32(_op+0x1Cu):0u, _ok?vm_read32(_op+0x48u):0u); if(_ok&&_fh>=0x10000u&&vm_read32(_fh+0x8u)>=0x10000u&&(vm_read32(_op+0x40u)==9u||vm_read32(_op+0x40u)==0xDu)){ uint32_t _m=vm_read32(_fh+0x8u); fprintf(stderr,"[FIOSOP] FH@0x%08X:",_fh); for(int _i=0;_i<0x30;_i++) fprintf(stderr," %08X",vm_read32(_fh+4u*_i)); fprintf(stderr,"\n"); } } } }
-@@ -130541 +131935 @@
+@@ -130682 +132079 @@
 -        /* E412-FOSIZE dispatch */ { static int _on=-1, _cap=400, _n=0; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_FOSIZE"); _on=(_e&&*_e&&*_e!='0')?1:0; const char* _c=getenv("PS3_TRACE_FOSIZE_CAP"); if(_c&&*_c) _cap=atoi(_c); } if(_on && _n++<_cap){ uint32_t _op=(uint32_t)ctx->gpr[31]; uint32_t _fo=_op?vm_read32(_op+0x98u):0u; fprintf(stderr,"[FOSIZE] disp fn=? tgt=0x%08X op=0x%08X st=%u status=0x%08X FO=0x%08X op80=0x%llX FO48=0x%llX\n",(uint32_t)ctx->ctr,_op,_op?vm_read32(_op+0xC8u):0u,(uint32_t)ctx->gpr[10],_fo,_op?(unsigned long long)vm_read64(_op+0x80u):0ull,(_fo>=0x10000u&&_fo<0xF0000000u)?(unsigned long long)vm_read64(_fo+0x48u):0ull); fflush(stderr);} }
 +        /* E412-FOSIZE dispatch */ { static int _on=-1, _cap=400, _n=0; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_FOSIZE"); _on=(_e&&*_e&&*_e!='0')?1:0; const char* _c=getenv("PS3_TRACE_FOSIZE_CAP"); if(_c&&*_c) _cap=atoi(_c); } if(_on && _n++<_cap){ uint32_t _op=(uint32_t)ctx->gpr[31]; uint32_t _fo=_op?vm_read32(_op+0x98u):0u; fprintf(stderr,"[FOSIZE] disp fn=func_0030C828 tgt=0x%08X op=0x%08X st=%u status=0x%08X FO=0x%08X op80=0x%llX FO48=0x%llX\n",(uint32_t)ctx->ctr,_op,_op?vm_read32(_op+0xC8u):0u,(uint32_t)ctx->gpr[10],_fo,_op?(unsigned long long)vm_read64(_op+0x80u):0ull,(_fo>=0x10000u&&_fo<0xF0000000u)?(unsigned long long)vm_read64(_fo+0x48u):0ull); fflush(stderr);} }
-@@ -130676 +132070 @@
+@@ -130817 +132214 @@
 -        /* E412-FOSIZE case7-store */ { static int _on=-1, _cap=400, _n=0; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_FOSIZE"); _on=(_e&&*_e&&*_e!='0')?1:0; const char* _c=getenv("PS3_TRACE_FOSIZE_CAP"); if(_c&&*_c) _cap=atoi(_c); } if(_on && _n++<_cap){ fprintf(stderr,"[FOSIZE] CASE7 fn=? FO=0x%08X FO+0x48 <- 0x%llX op=0x%08X\n",(uint32_t)ctx->gpr[4],(unsigned long long)ctx->gpr[0],(uint32_t)ctx->gpr[31]); fflush(stderr);} }
 +        /* E412-FOSIZE case7-store */ { static int _on=-1, _cap=400, _n=0; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_FOSIZE"); _on=(_e&&*_e&&*_e!='0')?1:0; const char* _c=getenv("PS3_TRACE_FOSIZE_CAP"); if(_c&&*_c) _cap=atoi(_c); } if(_on && _n++<_cap){ fprintf(stderr,"[FOSIZE] CASE7 fn=func_0030C828 FO=0x%08X FO+0x48 <- 0x%llX op=0x%08X\n",(uint32_t)ctx->gpr[4],(unsigned long long)ctx->gpr[0],(uint32_t)ctx->gpr[31]); fflush(stderr);} }
-@@ -131256,0 +132651,2 @@
+@@ -131397,0 +132795,2 @@
 +        /* E134-CLOSE-ENTRY */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<10){ uint32_t _s=(uint32_t)ctx->gpr[3],_fh=(uint32_t)ctx->gpr[5]; int _ok=(_s>=0x10000u&&_s<0x4F000000u), _fok=(_fh>=0x10000u&&_fh<0x4F000000u);
 +            fprintf(stderr,"[CLOSE-ENTRY] sched=0x%08X +0x16C=%u freelist(+0x200)=0x%08X fh=0x%08X fh+8=0x%08X fh+0x10=0x%08X fh+0x14=0x%08X fh+0x18=0x%08X fh+0x28=0x%08X lr=0x%08X\n",_s,_ok?vm_read32(_s+0x16Cu):0u,_ok?vm_read32(_s+0x200u):0u,_fh,_fok?vm_read32(_fh+8u):0u,_fok?vm_read32(_fh+0x10u):0u,_fok?vm_read32(_fh+0x14u):0u,_fok?vm_read32(_fh+0x18u):0u,_fok?vm_read32(_fh+0x28u):0u,(uint32_t)ctx->lr); } } }
-@@ -131279,0 +132676 @@
+@@ -131420,0 +132820 @@
 +        /* E134-OPALLOC */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<10) fprintf(stderr,"[CLOSE-OPALLOC] op(r3)=0x%08X\n",(uint32_t)ctx->gpr[3]); } }
-@@ -131558,116 +132955,371 @@
+@@ -131699,116 +133099,371 @@
 -        vm_write32(ctx->gpr[31] + 0xC, ctx->gpr[9]);
 -        { g_trampoline_fn = (void(*)(void*))func_0030D3B0; return; }
 -}
@@ -3273,7 +3280,7 @@
 +              }
 +            }
 +          } }
-@@ -131697,0 +133350,16 @@
+@@ -131838,0 +133494,16 @@
 +        /* F2B-KEEP-DONE: re-assert host success after field setup; 0030B058
 +         * still runs (links op to media/container) but may stamp
 +         * op+44=0x8001070A from dearch reject. RESTATUS in 4274 clears it
@@ -3290,7 +3297,7 @@
 +              fflush(stderr); } }
 +          }
 +        }
-@@ -133198,0 +134867,7 @@
+@@ -133339,0 +135011,7 @@
 +        /* FIOS-SCHED-PROBE(sched) */
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* _e=getenv("PS3_TRACE_FIOSSCHED"); _on=(_e&&*_e&&*_e!='0')?1:0;}
@@ -3298,11 +3305,11 @@
 +            fprintf(stderr,"[FIOSSCHED] sched #%d entrou func_0030ED68 r3=0x%08X\n",
 +              _n,(uint32_t)ctx->gpr[3]);
 +            fflush(stderr); } } }
-@@ -152012,0 +153688,3 @@
+@@ -152153,0 +153832,3 @@
 +        /* E116-31FDE0 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-31FDE0] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -153393,0 +155072,7 @@
+@@ -153534,0 +155216,7 @@
 +        /* Task5 TYMAP: dump register-side map pointers vs lookup TOC-0x3A3C. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_TYMAP")||getenv("PS3_TRACE_SHREG"))?1:0;}
 +          if(on){ static int n=0; if(n++<8){
@@ -3310,22 +3317,22 @@
 +            uint32_t m3a=vm_read32(ctx->gpr[2]+(uint32_t)(-0x3A3C));
 +            fprintf(stderr,"[TYMAP-REG] #%d type=0xF85F9B1E d8c=0x%08X d90=0x%08X d94=0x%08X m3a3c=0x%08X d8c_eq_m3a=%d d90_eq_m3a=%d\n",
 +              n,d8c,d90,d94,m3a,d8c==m3a,d90==m3a); fflush(stderr);} } }
-@@ -153428,0 +155114,3 @@
+@@ -153569,0 +155258,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_LDRSH")||getenv("PS3_TRACE_TYMAP"))?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[LDRSH] #%d entry r3=0x%08X r4=0x%08X\n", n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); fflush(stderr);} }
-@@ -159280,0 +160969 @@
+@@ -159421,0 +161113 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-32854C] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -159508,0 +161198 @@
+@@ -159649,0 +161342 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-328B18] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -159991,0 +161682 @@
+@@ -160132,0 +161826 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-329490] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -227056,0 +228748,4 @@
+@@ -227197,0 +228892,4 @@
 +        /* SCHEDARM-PROBE id=13 */
 +        { ps3_sa_on_enter(13, ctx); }
 +        /* POSTTHR-PROBE id=4 */
 +        { ps3_pt_on_enter(4, ctx); }
-@@ -247322,0 +249018,8 @@
+@@ -247463,0 +249162,8 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_OOBARG")?1:0;}
 +          if(on){ uint32_t oa[8]; int ok, obad=0;
 +            for(ok=0;ok<8;ok++){ oa[ok]=(uint32_t)ctx->gpr[3+ok]; if(oa[ok]>=0xFFF00000u) obad=1; }
@@ -3334,23 +3341,23 @@
 +                oa[0],oa[1],oa[2],oa[3],oa[4],oa[5],oa[6],oa[7],
 +                (uint32_t)ctx->gpr[1],(uint32_t)ctx->gpr[2],(uint32_t)ctx->lr);
 +              fflush(stderr);} } } }
-@@ -274420,0 +276124,4 @@
+@@ -274561,0 +276268,4 @@
 +        /* D9D0-PROBE */
 +        { static int _z_on=-1; if(_z_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _z_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_z_on){ const char* ps3_dbg_sym(void*); uint32_t _o=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[D9D0] mgr=0x%08X obj=0x%08X obj-4->+0x74(refcnt)=%d flags=0x%04X lr=0x%08X ra1=%s ra2=%s ra3=%s ra4=%s ra5=%s\n", (uint32_t)ctx->gpr[3], _o, (int)vm_read32(_o-4+0x74), vm_read16(_o+4), (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1)), ps3_dbg_sym(__builtin_return_address(2)), ps3_dbg_sym(__builtin_return_address(3)), ps3_dbg_sym(__builtin_return_address(4))); fflush(stderr);} }
-@@ -274970,0 +276678,5 @@
+@@ -275111,0 +276822,5 @@
 +        /* E04C-PROBE */
 +        { static int _a_on=-1; if(_a_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _a_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_a_on){ const char* ps3_dbg_sym(void*); static unsigned long _a_n=0; uint32_t _o=(uint32_t)ctx->gpr[4]; uint32_t _par=_o?vm_read32(_o+0x18):0; uint32_t _f14=_o?vm_read32(_o+0x14):0; _a_n++;
 +            if(_par==0x42F84EA0u || _par==0x42F84EA4u || _a_n<=40 || (_a_n%500)==0)
 +              fprintf(stderr,"[ACQ] #%lu obj=0x%08X parent(+0x18)=0x%08X +0x14=0x%08X -> %s lr=0x%08X ra1=%s ra2=%s\n", _a_n, _o, _par, _f14, (_par&&!_f14)?"ADDREF":"nao", (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1))); fflush(stderr);} }
-@@ -275033,0 +276746,4 @@
+@@ -275174,0 +276890,4 @@
 +        /* REL-PROBE REL-mgr */
 +        { static int _r_on=-1; if(_r_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _r_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_r_on){ const char* ps3_dbg_sym(void*); uint32_t _o=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[REL-mgr] walker=0x%08X obj=0x%08X refcnt(obj-4+0x74)=%d guest_lr=0x%08X ra1=%s ra2=%s ra3=%s\n", (uint32_t)ctx->gpr[3], _o, _o?(int)vm_read32(_o-4+0x74):-999, (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1)), ps3_dbg_sym(__builtin_return_address(2))); fflush(stderr);} }
-@@ -275574,0 +277291,151 @@
+@@ -275715,0 +277435,151 @@
 +        return;
 +}
 +
@@ -3502,7 +3509,7 @@
 +    /* Head is sentinel but prev stale → just fix prev. */
 +    if (head == sent) {
 +        vm_write32(sent + 4u, sent);
-@@ -275575,0 +277443,92 @@
+@@ -275716,0 +277587,92 @@
 +    }
 +
 +    /* Head invalid → empty circular (shells, freelist template inherit). */
@@ -3595,7 +3602,7 @@
 +            cur = nx;
 +        }
 +    }
-@@ -275577,0 +277537,369 @@
+@@ -275718,0 +277681,369 @@
 +/* If factory+0x48 has a live product list, return product (hdr+4). */
 +extern "C" uint32_t ps3_factory_reuse_product(uint32_t fo) {
 +    if (!fo || fo >= 0x4F000000u) return 0;
@@ -3965,7 +3972,7 @@
 +    return 1;
 +}
 +
-@@ -275578,0 +277907,10 @@
+@@ -275720,0 +278052,10 @@
 +        /* E95-REG */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ uint32_t _m=(uint32_t)ctx->gpr[3], _d=(uint32_t)ctx->gpr[4];
@@ -3976,10 +3983,10 @@
 +              uint32_t _ent=(_tm>=0x10000u&&_tm<0x4F000000u)?vm_read32(_tm+_idx*4u):0xDEADu;
 +              fprintf(stderr,"[REG] T[%d] mgr=0x%08X desc=0x%08X w0=0x%08X cur=%d prod=0x%08X d4=%u tmidx=%u tm=0x%08X ent=0x%08X\n",
 +                _ti,_m,_d,_w0,_cur,_prod,_idx,vm_read32(_m+0x44u),_tm,_ent); fflush(stderr); } } }
-@@ -275580,0 +277919,2 @@
+@@ -275722,0 +278064,2 @@
 +        /* TYPE15-FL-SLOT-PROBE pre */
 +        { ps3_ty15fl_pre((uint32_t)ctx->gpr[3]); }
-@@ -275581,0 +277922,20 @@
+@@ -275723,0 +278067,20 @@
 +        { uint32_t _o=(uint32_t)ctx->gpr[10];
 +          if (_o >= 0x10000u && _o < 0x4F000000u)
 +            ps3_factory_snap_vt(_o, vm_read32(_o)); }
@@ -4000,19 +4007,19 @@
 +              (int)(int8_t)vm_read8(fo+0xC8),
 +              d?vm_read32(d):0u, d?vm_read16(d+2):0u);
 +            fflush(stderr);} } }
-@@ -275638,0 +277999,6 @@
+@@ -275780,0 +278144,6 @@
 +        /* TYPE15-SHELL-PROBE pre */
 +        uint32_t __ty15_shell_this = (uint32_t)ctx->gpr[3];
 +        if (ps3_ty15shell_gate_on()) {
 +          g_ps3_ty15shell_n++;
 +          ps3_ty15shell_dump("pre", __ty15_shell_this, g_ps3_ty15shell_n, 0, 0u);
 +        }
-@@ -275641,0 +278008,4 @@
+@@ -275783,0 +278153,4 @@
 +        /* TYPE15-SHELL-PROBE post */
 +        if (ps3_ty15shell_gate_on()) {
 +          ps3_ty15shell_dump("post", __ty15_shell_this, g_ps3_ty15shell_n, 1, (uint32_t)ctx->gpr[3]);
 +        }
-@@ -275642,0 +278013,38 @@
+@@ -275784,0 +278158,38 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_FACTORY"); _on=(e&&*e&&*e!='0')?1:0;}
 +          if(_on){ static int _n=0;
@@ -4051,10 +4058,10 @@
 +            ps3_type15_freelist_replenish();
 +          }
 +        }
-@@ -275643,0 +278052,2 @@
+@@ -275785,0 +278197,2 @@
 +        /* TYPE15-FL-SLOT-PROBE post */
 +        { ps3_ty15fl_post((uint32_t)ctx->gpr[29]); }
-@@ -308888,0 +311299,8 @@
+@@ -309030,0 +311444,8 @@
 +        /* SS-LOOP: insert helper entry */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4063,11 +4070,11 @@
 +            fprintf(stderr,"[SS-INSFN] #%d tbl=0x%08X flag=%d rec=0x%08X\n",
 +              n,(uint32_t)ctx->gpr[3],(int32_t)ctx->gpr[5],
 +              (uint32_t)ctx->gpr[6]); fflush(stderr);} }
-@@ -311978,0 +314397,3 @@
+@@ -312120,0 +314542,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=(getenv("PS3_TRACE_SHADERSRC")||getenv("PS3_TRACE_TYMAP"))?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[SHADERSRC] #%d N=%d obj=0x%08X\n", n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -311982,0 +314404,7 @@
+@@ -312124,0 +314549,7 @@
 +        /* SS-LOOP */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4075,7 +4082,7 @@
 +          if(on && ((ctx->cr >> 0) & 4)){ static int n=0; if(n++<16)
 +            fprintf(stderr,"[SS-BIG] #%d N=%d obj=0x%08X (N>0x4EC4)\n",
 +              n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -311995,0 +314424,7 @@
+@@ -312137,0 +314569,7 @@
 +        /* SS-LOOP */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4083,7 +4090,7 @@
 +          if(on && ((ctx->cr >> 0) & 8)){ static int n=0; if(n++<16)
 +            fprintf(stderr,"[SS-CAP] #%d N=%d obj=0x%08X (capacity LT)\n",
 +              n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -311997,0 +314433,7 @@
+@@ -312139,0 +314578,7 @@
 +        /* SS-LOOP */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4091,7 +4098,7 @@
 +          if(on && (!((ctx->cr >> 0) & 4))){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[SS-EMPTY] #%d N=%d obj=0x%08X skip-loop\n",
 +              n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -312024,0 +314467,8 @@
+@@ -312166,0 +314612,8 @@
 +        /* SS-LOOP: record key */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4100,7 +4107,7 @@
 +            fprintf(stderr,"[SS-REC] #%d i=%d key=0x%08X N=%d obj=0x%08X\n",
 +              n,(int32_t)ctx->gpr[28],(uint32_t)ctx->gpr[0],
 +              (int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -312057,0 +314508,9 @@
+@@ -312199,0 +314653,9 @@
 +        /* SS-LOOP: insert */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4110,7 +4117,7 @@
 +            fprintf(stderr,"[SS-INS] #%d tot=%d i=%d key@b0=0x%08X N=%d\n",
 +              n,tot,(int32_t)ctx->gpr[28],
 +              vm_read32(ctx->gpr[1]+0xB0),(int32_t)ctx->gpr[25]); fflush(stderr);} }
-@@ -312064,0 +314524,8 @@
+@@ -312206,0 +314669,8 @@
 +        /* SS-LOOP: loop done */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4119,32 +4126,32 @@
 +            fprintf(stderr,"[SS-DONE] #%d i=%d N=%d obj=0x%08X\n",
 +              n,(int32_t)ctx->gpr[28],(int32_t)ctx->gpr[25],
 +              (uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -387317,0 +389785,3 @@
+@@ -387459,0 +389930,3 @@
 +        /* E116-41ADC8 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-41ADC8] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -392182,0 +394653,6 @@
+@@ -392324,0 +394798,6 @@
 +        /* E88-PUSHALL push1 */
 +        { static int _pa_on=-1; if(_pa_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_PUSHALL"); _pa_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_pa_on){ uint32_t _m=(uint32_t)ctx->gpr[3]; uint32_t _o=((uint32_t)ctx->gpr[4] ? (uint32_t)ctx->gpr[4]-4u : 0u); char _buf[256]; int _k=0; _buf[0]=0;
 +            if(_o>=0x10000u && _o<0x4F000000u){ uint32_t _h=_o+128; uint32_t _p=vm_read32(_h); int _n=0;
 +              while(_p && _p!=_h && _n<40 && _p>=0x10000u && _p<0x4F000000u){ uint32_t _c=vm_read32(_p+8); uint32_t _w=_c?vm_read32(_c+4):0; _k+=snprintf(_buf+_k,sizeof(_buf)-_k,"%u ",(_w>>16)&0xFFF); if(_k>200)break; _p=vm_read32(_p); _n++; } }
 +            fprintf(stderr,"[PUSHALL] push1 mgr=0x%08X cursor=%d obj=0x%08X w0=0x%08X filhos-subtag=[%s]\n", _m, (int)(int8_t)vm_read8(_m+0xC8), _o, (_o>=0x10000u&&_o<0x4F000000u)?vm_read32(_o+4):0, _buf); fflush(stderr);} }
-@@ -392438,0 +394915,6 @@
+@@ -392580,0 +395060,6 @@
 +        /* E88-PUSHALL pop1 */
 +        { static int _pa_on=-1; if(_pa_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_PUSHALL"); _pa_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_pa_on){ uint32_t _m=(uint32_t)ctx->gpr[3]; uint32_t _o=(((int8_t)vm_read8((uint32_t)ctx->gpr[3]+0xC8)>=0) ? vm_read32((uint32_t)ctx->gpr[3]+0x48u+(uint32_t)((int8_t)vm_read8((uint32_t)ctx->gpr[3]+0xC8))*4u) : 0u); char _buf[256]; int _k=0; _buf[0]=0;
 +            if(_o>=0x10000u && _o<0x4F000000u){ uint32_t _h=_o+128; uint32_t _p=vm_read32(_h); int _n=0;
 +              while(_p && _p!=_h && _n<40 && _p>=0x10000u && _p<0x4F000000u){ uint32_t _c=vm_read32(_p+8); uint32_t _w=_c?vm_read32(_c+4):0; _k+=snprintf(_buf+_k,sizeof(_buf)-_k,"%u ",(_w>>16)&0xFFF); if(_k>200)break; _p=vm_read32(_p); _n++; } }
 +            fprintf(stderr,"[PUSHALL] pop1 mgr=0x%08X cursor=%d obj=0x%08X w0=0x%08X filhos-subtag=[%s]\n", _m, (int)(int8_t)vm_read8(_m+0xC8), _o, (_o>=0x10000u&&_o<0x4F000000u)?vm_read32(_o+4):0, _buf); fflush(stderr);} }
-@@ -404998,0 +407481,6 @@
+@@ -405140,0 +407626,6 @@
 +        /* E88-PUSHALL pop22 */
 +        { static int _pa_on=-1; if(_pa_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_PUSHALL"); _pa_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_pa_on){ uint32_t _m=(uint32_t)ctx->gpr[3]; uint32_t _o=(((int8_t)vm_read8((uint32_t)ctx->gpr[3]+0xC8)>=0) ? vm_read32((uint32_t)ctx->gpr[3]+0x48u+(uint32_t)((int8_t)vm_read8((uint32_t)ctx->gpr[3]+0xC8))*4u) : 0u); char _buf[256]; int _k=0; _buf[0]=0;
 +            if(_o>=0x10000u && _o<0x4F000000u){ uint32_t _h=_o+56; uint32_t _p=vm_read32(_h); int _n=0;
 +              while(_p && _p!=_h && _n<40 && _p>=0x10000u && _p<0x4F000000u){ uint32_t _c=vm_read32(_p+8); uint32_t _w=_c?vm_read32(_c+4):0; _k+=snprintf(_buf+_k,sizeof(_buf)-_k,"%u ",(_w>>16)&0xFFF); if(_k>200)break; _p=vm_read32(_p); _n++; } }
 +            fprintf(stderr,"[PUSHALL] pop22 mgr=0x%08X cursor=%d obj=0x%08X w0=0x%08X filhos-subtag=[%s]\n", _m, (int)(int8_t)vm_read8(_m+0xC8), _o, (_o>=0x10000u&&_o<0x4F000000u)?vm_read32(_o+4):0, _buf); fflush(stderr);} }
-@@ -406034,0 +408523,7 @@
+@@ -406176,0 +408668,7 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<40) fprintf(stderr,"[ENTER-42AF18] #%d r3=0x%08X r4=0x%08X lr=0x%08X\n",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); } }
 +        /* E88-PUSHALL push22 */
 +        { static int _pa_on=-1; if(_pa_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_PUSHALL"); _pa_on=(_e&&*_e&&*_e!='0')?1:0; }
@@ -4152,18 +4159,18 @@
 +            if(_o>=0x10000u && _o<0x4F000000u){ uint32_t _h=_o+56; uint32_t _p=vm_read32(_h); int _n=0;
 +              while(_p && _p!=_h && _n<40 && _p>=0x10000u && _p<0x4F000000u){ uint32_t _c=vm_read32(_p+8); uint32_t _w=_c?vm_read32(_c+4):0; _k+=snprintf(_buf+_k,sizeof(_buf)-_k,"%u ",(_w>>16)&0xFFF); if(_k>200)break; _p=vm_read32(_p); _n++; } }
 +            fprintf(stderr,"[PUSHALL] push22 mgr=0x%08X cursor=%d obj=0x%08X w0=0x%08X filhos-subtag=[%s]\n", _m, (int)(int8_t)vm_read8(_m+0xC8), _o, (_o>=0x10000u&&_o<0x4F000000u)?vm_read32(_o+4):0, _buf); fflush(stderr);} }
-@@ -408021,0 +410517,4 @@
+@@ -408163,0 +410662,4 @@
 +        /* CA14-PROBE */
 +        { static int _c_on=-1; if(_c_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _c_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_c_on){ const char* ps3_dbg_sym(void*); uint32_t _o=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[CA14] release-WAD walker=0x%08X obj=0x%08X w0=0x%08X refcnt(+0x2c)=%d guest_lr=0x%08X ra1=%s ra2=%s ra3=%s ra4=%s\n", (uint32_t)ctx->gpr[3], _o, _o?vm_read32(_o-4):0, _o?(int)vm_read32(_o-4+0x2c):-999, (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1)), ps3_dbg_sym(__builtin_return_address(2)), ps3_dbg_sym(__builtin_return_address(3))); fflush(stderr);} }
-@@ -443409,0 +445909,2 @@
+@@ -443551,0 +446054,2 @@
 +        /* E149-VOICE */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<10){ uint32_t _v=(uint32_t)ctx->gpr[3]; uint32_t _T3=vm_read32(0x5410FCu),_T2=vm_read32(0x5410F8u); uint32_t _t3=_T3+_v*0x300u,_t2=_T2+_v*0x200u; int _ok=(_v<0xC0u);
 +            fprintf(stderr,"[VOICE] t300=0x%08X v=%u t300+0x10=0x%X +0x14=0x%X +0x18=0x%X +0x104=%u t200+0=%u +0x1c=0x%X +0x24=%u lr=0x%08X\n",_T3,_v,_ok?vm_read32(_t3+0x10u):0u,_ok?vm_read32(_t3+0x14u):0u,_ok?vm_read32(_t3+0x18u):0u,_ok?vm_read32(_t3+0x104u):0u,_ok?vm_read32(_t2):0u,_ok?vm_read32(_t2+0x1cu):0u,_ok?vm_read32(_t2+0x24u):0u,(uint32_t)ctx->lr); } } }
-@@ -452006,0 +454508,2 @@
+@@ -452148,0 +454653,2 @@
 +        /* E147-SND */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<40){ uint32_t _s=(uint32_t)ctx->gpr[3]; int _ok=(_s>=0x10000u&&_s<0x4F000000u); uint32_t _i=_ok?vm_read32(_s+0x1ecu):0u; uint32_t _b=_s+_i*0x308u;
 +            fprintf(stderr,"[SNDTIME] stream=0x%08X idx=%u +0x519=%u estado=%u samples(+0x154)=%u rate=0x%08X +0x22=0x%X +0x134=%u +0x148=%u +0x1b0=%u +0x1b4=%u +0x1b8=0x%X +0x1bc=%u +0x1c4=0x%X +0x1f0=0x%X +0x13c=%u\n",_s,_i,_ok?vm_read8(_b+0x519u):0u,_ok?vm_read32(_b+0x358u):0u,_ok?vm_read32(_s+0x154u):0u,_ok?vm_read32(_b+0x364u):0u,_ok?vm_read8(_s+0x22u):0u,_ok?vm_read32(_s+0x134u):0u,_ok?vm_read32(_s+0x148u):0u,_ok?vm_read32(_s+0x1b0u):0u,_ok?vm_read32(_s+0x1b4u):0u,_ok?vm_read32(_s+0x1b8u):0u,_ok?vm_read32(_s+0x1bcu):0u,_ok?vm_read32(_s+0x1c4u):0u,_ok?vm_read32(_s+0x1f0u):0u,_ok?vm_read32(_s+0x13cu):0u); } } }
-@@ -454871,0 +457375,12 @@
+@@ -455013,0 +457520,12 @@
 +        /* SND-OPEN-PROBE: entrada da API de open do snd_stream (chamada pelo Play).
 +         * params+0xCC = ponteiro do caminho; params+0xD4 = fonte em memoria. */
 +        if (snd_probe_on()) { static int _n = 0; if (_n++ < 8) {
@@ -4176,7 +4183,7 @@
 +            snd_probe_scan("0045E230 params", _p, 0x100u);
 +            fflush(stderr);
 +        } }
-@@ -458311,0 +460827,22 @@
+@@ -458453,0 +460972,22 @@
 +        /* SND-OPEN-PROBE: entrada do open REAL do snd_stream.
 +         * sub = stream + [stream+0x1E8]*0x308 + 0x220; o ramo depende de
 +         * [sub+0x110]&2: 0 -> func_004618A0 (driver [[TOC+0x750]]),
@@ -4199,7 +4206,7 @@
 +            snd_probe_scan("00461658 stream", _st, 0x220u);
 +            fflush(stderr);
 +        } }
-@@ -458467,0 +461005,12 @@
+@@ -458609,0 +461150,12 @@
 +        /* SND-OPEN-PROBE: ramo A do open, mesmo antes da chamada indirecta.
 +         * r31 = sub-objecto do stream; driver = [[TOC+0x750]]. */
 +        if (snd_probe_on()) { static int _n = 0; if (_n++ < 8) {
@@ -4212,7 +4219,7 @@
 +            snd_probe_opd("004618A0 open()", _dB);
 +            fflush(stderr);
 +        } }
-@@ -458490,0 +461040,10 @@
+@@ -458632,0 +461185,10 @@
 +        /* SND-OPEN-PROBE: bloco de FALHA do open -- daqui sai a mensagem
 +         * "snd_stream: couldn't open file %s" (fmt em TOC+0x74C). */
 +        if (snd_probe_on()) { static int _n = 0; if (_n++ < 16) {
@@ -4223,7 +4230,7 @@
 +            snd_probe_scan("004618EC sub", _sub, 0x310u);
 +            fflush(stderr);
 +        } }
-@@ -459021,0 +461581,2 @@
+@@ -459163,0 +461726,2 @@
 +        /* E153-STRUPD */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<30){ uint32_t _s=(uint32_t)ctx->gpr[3]; int _ok=(_s>=0x10000u&&_s<0x4F000000u); union{uint32_t u; float f;} _a,_c; _a.u=_ok?vm_read32(_s+0x1f0u):0u; uint32_t _cp=vm_read32(0x541178u+0x1afu*4u); _c.u=(_cp>=0x10000u&&_cp<0x4F000000u)?vm_read32(_cp):0u;
 +            uint32_t _B=0x47CA9B80u; fprintf(stderr,"[BLK] %08X %08X %08X %08X | %08X %08X %08X %08X\n",vm_read32(_B),vm_read32(_B+4),vm_read32(_B+8),vm_read32(_B+12),vm_read32(_B+16),vm_read32(_B+20),vm_read32(_B+24),vm_read32(_B+28)); fprintf(stderr,"[STRUPD] lr=0x%08X stream=0x%08X +0x1f0=%g const=%g +0x1b8=%u +0x22=0x%X +0x1b4=%u +0x148=%u +0x154=%u +0x1c4=0x%X\n",(uint32_t)ctx->lr,_s,_a.f,_c.f,_ok?vm_read32(_s+0x1b8u):0u,_ok?vm_read8(_s+0x22u):0u,_ok?vm_read32(_s+0x1b4u):0u,_ok?vm_read32(_s+0x148u):0u,_ok?vm_read32(_s+0x154u):0u,_ok?vm_read32(_s+0x1c4u):0u); } } }
 --- a/ppu_recomp_002.cpp
@@ -4396,41 +4403,41 @@
 @@ -317 +302 @@
 -/* lifter-rev: 5b004fc7 */
 +/* lifter-rev: 72a50b5e */
-@@ -322810,0 +322796,6 @@
+@@ -322940,0 +322926,6 @@
 +        /* MENUPRESENT-PROBE id=7 */
 +        { ps3_mp_on_enter(7, ctx); }
 +        /* SCHEDARM-PROBE id=0 */
 +        { ps3_sa_on_enter(0, ctx); }
 +        /* POSTTHR-PROBE id=13 */
 +        { ps3_pt_on_enter(13, ctx); }
-@@ -328591,0 +328583,2 @@
+@@ -328721,0 +328713,2 @@
 +        /* POSTTHR-PROBE id=8 */
 +        { ps3_pt_on_enter(8, ctx); }
-@@ -421001 +420994 @@
+@@ -421131 +421124 @@
 -        ctx->gpr[31] = _cs_31;
 +        ctx->gpr[31] = vm_read64(ctx->gpr[1] + 0x260); /* E419b-CS31 ld r31,0x260(r1) */
-@@ -429128,0 +429122 @@
+@@ -429259,0 +429253 @@
 +extern "C" void ps3_type15_note_resolve(uint32_t idx, uint32_t obj, uint32_t vt);
-@@ -429146,0 +429141,4 @@
+@@ -429277,0 +429272,4 @@
 +        /* Type-0x15 factory: snapshot live vt; repair if stomped (SNDX path). */
 +        /* Snapshot live type-0x15 factory; do NOT repair+re-enter expand here —
 +         * object may be mid-stomp. Repair is for CB56C post-WAD only. */
 +        { ps3_type15_note_resolve((uint32_t)ctx->gpr[0], (uint32_t)ctx->gpr[11], (uint32_t)ctx->gpr[9]); }
-@@ -441060,0 +441059 @@
+@@ -441191,0 +441190 @@
 +        /* E136-HEAP */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<16) fprintf(stderr,"[FLPOP] saida HEAP r3=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[31]); } }
-@@ -441102,0 +441102 @@
+@@ -441233,0 +441233 @@
 +        /* E136-RET0-A */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<16) fprintf(stderr,"[FLPOP] saida RET0-A r3=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[31]); } }
-@@ -441107,0 +441108 @@
+@@ -441238,0 +441239 @@
 +        /* E136-RET0-B */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<16) fprintf(stderr,"[FLPOP] saida RET0-B r3=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[31]); } }
-@@ -445757,0 +445759 @@
+@@ -445888,0 +445890 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-328860] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -445842,0 +445845 @@
+@@ -445973,0 +445976 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-328978] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -445956,0 +445960 @@
+@@ -446087,0 +446091 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-328B08] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -445980,0 +445985 @@
+@@ -446111,0 +446116 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); const char* e=getenv("PS3_TRACE_A1CHAIN"); const char* e2=getenv("PS3_TRACE_MC"); on=((e&&*e&&*e!='0')||(e2&&*e2&&*e2!='0'))?1:0;} if(on){ static int n=0; if(n++<48) fprintf(stderr,"[MC-328E50] #%d lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X\n", n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]); fflush(stderr);} }
-@@ -492923,0 +492929,8 @@
+@@ -493054,0 +493060,8 @@
 +        /* SS-LOOP: grow done -> resume */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4439,14 +4446,14 @@
 +            fprintf(stderr,"[SS-GROW] #%d N=%d newbase=0x%08X end=0x%08X\n",
 +              n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[24],
 +              (uint32_t)ctx->gpr[0]); fflush(stderr);} }
-@@ -512948,0 +512962,6 @@
+@@ -513079,0 +513093,6 @@
 +        /* FIOS-42A1D4-EMPTY: count byte at obj+0x80 is signed-negative
 +         * (empty table). Intencao = saltar o walk da lista e tomar o
 +         * epilogo de 0042A0C8/0042A118 com r28=0 (ret r3=r28+4=4).
 +         * Sem isto vai-se para o meio de 0042A118 que percorre r28+0x38
 +         * com r28=0 -> EA absoluta 0x38 -> lixo -> UNCOMMITTED 0x676C7367.
 +         * Always-on correctness fix; log when PS3_TRACE_FIOSOPEN=1. */
-@@ -512952 +512971,22 @@
+@@ -513083 +513102,22 @@
 -        { g_trampoline_fn = (void(*)(void*))func_0042A118; return; }
 +        { static int _on=-1; if(_on<0){const char* e=getenv("PS3_TRACE_FIOSOPEN");
 +            _on=(e&&*e&&*e!='0')?1:0;}
@@ -4512,7 +4519,7 @@
 @@ -315 +300 @@
 -/* lifter-rev: 5b004fc7 */
 +/* lifter-rev: 72a50b5e */
-@@ -36699,0 +36685,9 @@
+@@ -36831,0 +36817,9 @@
 +        { static int _d=-1; if(_d<0){extern char* getenv(const char*); const char* _e=getenv("PS3_DUMP_CANCEL_OP"); _d=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_d){ uint32_t op=(uint32_t)ctx->gpr[31]; static int _k=0; if(_k++<40){
 +            fprintf(stderr,"[CANCEL-OP] #%d op=0x%08X +0=0x%08X +4=0x%08X +8=0x%08X +C=0x%08X +30=0x%08X +40=0x%08X +44=0x%08X\n",
@@ -4522,26 +4529,26 @@
 +            if(o4>=0x10000u && o4<0x4F000000u){ char pth[64]; int j=0; for(;j<48;j++){ char c=(char)vm_read8(o4+0x60+j); if(c<0x20||c>0x7E) break; pth[j]=c;} pth[j]=0;
 +              if(j>3) fprintf(stderr,"[CANCEL-OP]    +4->+0x60 str='%s'\n",pth); }
 +            fflush(stderr); } } }
-@@ -36707 +36701,2 @@
+@@ -36839 +36833,2 @@
 -        { ppu_giant_lock_release();
 +        { static int _yg=-1; if(_yg<0){ const char* e=getenv("PS3_FIOS_DONE_YIELD"); _yg=(e&&*e&&*e!='0')?1:0; } if(_yg){ /* E401: paliativo OFF por default -- a consola nao cede aqui (oracle_optail) */
 +          ppu_giant_lock_release();
-@@ -36714 +36709 @@
+@@ -36846 +36841 @@
 -          fflush(stderr); }
 +          fflush(stderr); } }
-@@ -37953 +37948 @@
+@@ -38085 +38080 @@
 -        /* E418e-TICK B */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static uint64_t _l29=~0ull,_l27=~0ull; static int _c=0; static unsigned long _n=0; _n++; if((ctx->gpr[29]!=_l29 || ctx->gpr[27]!=_l27) && _c++<400){ _l29=ctx->gpr[29]; _l27=ctx->gpr[27]; fprintf(stderr,"[TICK] test-r29 fn=? #%lu r29=0x%llX r27=0x%llX r26=0x%llX state=%u\n",_n,(unsigned long long)ctx->gpr[29],(unsigned long long)ctx->gpr[27],(unsigned long long)ctx->gpr[26],vm_read32((uint32_t)ctx->gpr[31]+0x1CCu)); fflush(stderr);} } }
 +        /* E418e-TICK B */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static uint64_t _l29=~0ull,_l27=~0ull; static int _c=0; static unsigned long _n=0; _n++; if((ctx->gpr[29]!=_l29 || ctx->gpr[27]!=_l27) && _c++<400){ _l29=ctx->gpr[29]; _l27=ctx->gpr[27]; fprintf(stderr,"[TICK] test-r29 fn=func_002BA808 #%lu r29=0x%llX r27=0x%llX r26=0x%llX state=%u\n",_n,(unsigned long long)ctx->gpr[29],(unsigned long long)ctx->gpr[27],(unsigned long long)ctx->gpr[26],vm_read32((uint32_t)ctx->gpr[31]+0x1CCu)); fflush(stderr);} } }
-@@ -37970 +37965 @@
+@@ -38102 +38097 @@
 -        /* E418e-TICK C */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _c=0; if(_c++<64){ fprintf(stderr,"[TICK] done fn=? #%d -> state 0, return 0\n",_c); fflush(stderr);} } }
 +        /* E418e-TICK C */ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_TICK2"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _c=0; if(_c++<64){ fprintf(stderr,"[TICK] done fn=func_002BA808 #%d -> state 0, return 0\n",_c); fflush(stderr);} } }
-@@ -38129,0 +38125 @@
+@@ -38261,0 +38257 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<12){ uint32_t ts=0x00869570u; fprintf(stderr,"[BAD78] %s #%d r3=0x%08X r28(flags)=0x%08X ts+0x74=0x%08X ts+0x64=0x%08X state=%u rem=0x%08X\n","entry",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[28],vm_read32(ts+0x74),vm_read32(ts+0x64),vm_read32(ts+0x1CC),vm_read32(ts+0x1AC)); } } }
-@@ -38144,0 +38141 @@
+@@ -38276,0 +38273 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<12){ uint32_t ts=0x00869570u; fprintf(stderr,"[BAD78] %s #%d r3=0x%08X r28(flags)=0x%08X ts+0x74=0x%08X ts+0x64=0x%08X state=%u rem=0x%08X\n","after-open",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[28],vm_read32(ts+0x74),vm_read32(ts+0x64),vm_read32(ts+0x1CC),vm_read32(ts+0x1AC)); } } }
-@@ -38152,0 +38150 @@
+@@ -38284,0 +38282 @@
 +        { static int _o=-1; if(_o<0){ const char* e=getenv("PS3_TRACE_ENTERS"); _o=(e&&*e&&*e!='0')?1:0; } if(_o){ static int _n=0; if(_n++<12){ uint32_t ts=0x00869570u; fprintf(stderr,"[BAD78] %s #%d r3=0x%08X r28(flags)=0x%08X ts+0x74=0x%08X ts+0x64=0x%08X state=%u rem=0x%08X\n","CLOSE(sync fail)",_n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[28],vm_read32(ts+0x74),vm_read32(ts+0x64),vm_read32(ts+0x1CC),vm_read32(ts+0x1AC)); } } }
-@@ -299585,0 +299584,8 @@
+@@ -299717,0 +299716,8 @@
 +        /* SS-LOOP: post-grow resume */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4550,7 +4557,7 @@
 +            fprintf(stderr,"[SS-RESUME] #%d N=%d obj=0x%08X base=0x%08X\n",
 +              n,(int32_t)ctx->gpr[25],(uint32_t)ctx->gpr[26],
 +              (uint32_t)vm_read32(ctx->gpr[26]+0x4)); fflush(stderr);} }
-@@ -299613,0 +299620,8 @@
+@@ -299745,0 +299752,8 @@
 +        /* SS-LOOP: rec on resume fragment */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4559,7 +4566,7 @@
 +            fprintf(stderr,"[SS-REC2] #%d i=%d key=0x%08X N=%d\n",
 +              n,(int32_t)ctx->gpr[28],(uint32_t)ctx->gpr[0],
 +              (int32_t)ctx->gpr[25]); fflush(stderr);} }
-@@ -299646,0 +299661,9 @@
+@@ -299778,0 +299793,9 @@
 +        /* SS-LOOP: insert on resume fragment */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4569,7 +4576,7 @@
 +            fprintf(stderr,"[SS-INS2] #%d tot=%d i=%d key=0x%08X N=%d\n",
 +              n,tot,(int32_t)ctx->gpr[28],
 +              vm_read32(ctx->gpr[1]+0xB0),(int32_t)ctx->gpr[25]); fflush(stderr);} }
-@@ -299653,0 +299677,8 @@
+@@ -299785,0 +299809,8 @@
 +        /* SS-LOOP: done on resume fragment */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_SHADERSRC"); const char* e2=getenv("PS3_TRACE_TYMAP");
@@ -4578,9 +4585,9 @@
 +            fprintf(stderr,"[SS-DONE2] #%d i=%d N=%d obj=0x%08X\n",
 +              n,(int32_t)ctx->gpr[28],(int32_t)ctx->gpr[25],
 +              (uint32_t)ctx->gpr[26]); fflush(stderr);} }
-@@ -414312 +414342,0 @@
+@@ -414444 +414474,0 @@
 -loc_0043E1E4:
-@@ -414632 +414661,0 @@
+@@ -414764 +414793,0 @@
 -loc_0043E1E4:
 --- a/ppu_recomp_006.cpp
 +++ b/ppu_recomp_006.cpp

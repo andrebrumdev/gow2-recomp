@@ -46,7 +46,15 @@ def func_span(t: str):
 
 def patch_highbit(t: str) -> str:
     marker = "[TYPE15] CB56C type high-bit"
+    if "PS3_TYPE15_HIGHBIT" in t:
+        return t
     if marker in t:
+        # older lift: the block is there, always on -> gate it (OFF by default)
+        old_if = "          if (_t == 0x15u) {\n            vm_write32(_d, _t | 0x80000000u);"
+        if old_if in t:
+            return t.replace(old_if,
+                "          static int _hb = -1; if (_hb < 0) { const char* _e = getenv(\"PS3_TYPE15_HIGHBIT\"); _hb = (_e && _e[0] == '1'); }\n"
+                "          if (_hb && _t == 0x15u) {\n            vm_write32(_d, _t | 0x80000000u);", 1)
         return t
     span = func_span(t)
     if span is None:
@@ -61,9 +69,15 @@ def patch_highbit(t: str) -> str:
         raise SystemExit("highbit needle missing: leitura vm_read16(r1+0x72) nao "
                          "encontrada apos a chamada a func_002A49BC")
     insert = '''        /* TYPE15: match WAD path encoding 0x80000015. */
+        /* PS3_TYPE15_HIGHBIT=1 only (bring-up aid, OFF by default since
+         * 2026-09-23): bit 31 makes func_0039E090 skip the type-21 scope and
+         * hand back the root default object, a 0x50-byte lite object with no
+         * node pool, so every music request aborted (menu/pause/bg*.vpk never
+         * streamed) and the mix clipped. */
         { uint32_t _d = (uint32_t)ctx->gpr[1] + 0x70u;
           uint32_t _t = vm_read32(_d);
-          if (_t == 0x15u) {
+          static int _hb = -1; if (_hb < 0) { const char* _e = getenv("PS3_TYPE15_HIGHBIT"); _hb = (_e && _e[0] == '1'); }
+          if (_hb && _t == 0x15u) {
             vm_write32(_d, _t | 0x80000000u);
             { static int _n=0; if(_n++<8)
                 fprintf(stderr,"[TYPE15] CB56C type high-bit 0x15 -> 0x%08X (match WAD path)\\n",

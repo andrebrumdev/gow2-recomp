@@ -49,7 +49,10 @@ SITES = [("CD7B4", "func_000CD7B4"), ("2D3DBC", "func_002D3DBC"),
          # CB56C builds a desc (2A49BC) and asks TABLE[desc.u16@+2]->vslot(0x14)
          # for the handle it stores at obj+8; TABLE = *(TOC-0x5EA0).
          ("2A8E64", "func_002A8E64"), ("2A87D0", "func_002A87D0"),
-         ("2A88BC", "func_002A88BC"), ("CB56C", "func_000CB56C")]
+         ("2A88BC", "func_002A88BC"), ("CB56C", "func_000CB56C"),
+         # the generic create picks registry[*(h+0x24) + *(h+0x44)*12][idx],
+         # idx = *(scope[*(s8)(h+0xC8)] + 0x20) (func_0039E090); log it for type 21.
+         ("39E794", "func_0039E794")]
 
 HELPER = r'''
 /* SNDSTREAM-PROBE helper (PS3_TRACE_SNDSTREAM=1) */
@@ -116,6 +119,28 @@ static void ps3_sndstream_probe(const char* site, ppu_context* ctx) {
         fprintf(stderr, "[SNDSTREAM] 2A5024 ch=0x%08X desc=0x%08X pool=0x%08X lr=0x%llX\n",
                 (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5],
                 (unsigned long long)ctx->lr);
+        fflush(stderr);
+        return;
+    }
+    if (site[0] == '3' && site[1] == '9') {   /* 39E794, type 21 only */
+        const uint32_t tbl = vm_read32((uint32_t)ctx->gpr[2] - 0x5EA0);
+        const uint32_t h = (uint32_t)ctx->gpr[3];
+        if (!tbl || h != vm_read32(tbl + 21u * 4u)) return;
+        const uint32_t dsc = (uint32_t)ctx->gpr[4];
+        const int depth = (int)(signed char)vm_read8((uint64_t)(h + 0xC8));
+        const uint32_t row = vm_read32(h + 0x44);
+        const uint32_t rows = vm_read32(h + 0x24);
+        const uint32_t rowbase = rows ? vm_read32(rows + row * 12u) : 0;
+        lines++;
+        fprintf(stderr, "[SNDSTREAM] 39E794 h21=0x%08X desc=0x%08X w0=0x%08X depth=%d row=%u rows=0x%08X lr=0x%llX\n",
+                h, dsc, dsc ? vm_read32(dsc) : 0, depth, row, rows, (unsigned long long)ctx->lr);
+        for (int k = 0; k <= depth + 1 && k < 8; k++) {
+            const uint32_t sc = vm_read32(h + 0x48 + 4u * (uint32_t)k);
+            const uint32_t idx = sc ? vm_read32(sc + 0x20) : 0xFFFFFFFFu;
+            const uint32_t o = (rowbase && idx < 4096u) ? vm_read32(rowbase + idx * 4u) : 0;
+            fprintf(stderr, "[SNDSTREAM]    scope[%d]=0x%08X idx=%u reg[row][idx]=0x%08X vt=0x%08X\n",
+                    k, sc, idx, o, o ? vm_read32(o - 4) : 0);
+        }
         fflush(stderr);
         return;
     }
