@@ -54,7 +54,7 @@
 +extern "C" void ppu_giant_lock_acquire(void);
 +/* M1 disc budget: shared across CC9D0/CB56C DISC lines (cap 20). */
 +static int g_ps3_type15_disc_n = 0;
-@@ -451,0 +445,106 @@
+@@ -451,0 +445,44 @@
 +
 +/* FLIPPATH-PROBE: R7 enter counters pre vs post R_Perm (PS3_TRACE_FLIPPATH=1) */
 +#include <signal.h>
@@ -99,7 +99,7 @@
 +    }
 +    fflush(stderr);
 +}
-+
+@@ -452,0 +490,62 @@
 +/* ENCADEAMENTO (defeito medido em 2026-07-30): signal() SUBSTITUI o handler,
 + * nao o acumula -- ver a nota longa em patch_29af0_switch_probe.py (commit
 + * 09c3850). Guardar o handler anterior e chama-lo no fim mantem a cadeia
@@ -161,6 +161,7 @@
 +    if ((g % 10000ull) == 0) ps3_flipp_dump_summary();
 +}
 +/* FLIPPATH-PROBE end helpers */
++
 @@ -1029,0 +1129,2 @@
 +extern "C" int host_res_inflate(ppu_context* ctx);
 +
@@ -501,19 +502,7 @@
 @@ -167142,0 +167476,2 @@
 +        /* POSTTHR-PROBE id=10 */
 +        { ps3_pt_on_enter(10, ctx); }
-@@ -167206,0 +167542,11 @@
-+        /* TYPE15: match WAD path encoding 0x80000015. */
-+        { uint32_t _d = (uint32_t)ctx->gpr[1] + 0x70u;
-+          uint32_t _t = vm_read32(_d);
-+          static int _hb = -1; if (_hb < 0) { const char* _e = getenv("PS3_TYPE15_HIGHBIT"); _hb = (_e && _e[0] == '1'); }
-+          if (_hb && _t == 0x15u) {
-+            vm_write32(_d, _t | 0x80000000u);
-+            { static int _n=0; if(_n++<8)
-+                fprintf(stderr,"[TYPE15] CB56C type high-bit 0x15 -> 0x%08X (match WAD path)\n",
-+                  vm_read32(_d)); }
-+          }
-+        }
-@@ -167261,17 +167607,124 @@
+@@ -167277,17 +167612,124 @@
 -        ctx->gpr[4] = ctx->gpr[29] | ctx->gpr[29];
 -        ctx->gpr[0] = vm_read16(ctx->gpr[29] + 0x2);
 -        ctx->gpr[0] = (uint64_t)ppc_rlwinm((uint32_t)ctx->gpr[0], 2, 14, 29);
@@ -655,15 +644,15 @@
 +            }
 +          }
 +        }
-@@ -167631,0 +168085,2 @@
+@@ -167647,0 +168090,2 @@
 +        /* POSTTHR-PROBE id=9 */
 +        { ps3_pt_on_enter(9, ctx); }
-@@ -168465,0 +168921,4 @@
+@@ -168481,0 +168926,4 @@
 +        /* POSTTHR-PROBE id=7 */
 +        { ps3_pt_on_enter(7, ctx); }
 +        /* POSTTHR-R12-DISC CC9D0 */
 +        { ps3_pt_disc_sample("CC9D0", ctx); }
-@@ -168486,0 +168946,98 @@
+@@ -168502,0 +168951,98 @@
 +        /* TYPE15-UNSTICK-SKIP: CB56C shell/reuse product never advances;
 +         * parent list re-ticks these forever. Skip body + yield so pad/RSX
 +         * threads can run (menu bring-up). Default ON; PS3_TYPE15_UNSTICK=0. */
@@ -762,12 +751,12 @@
 +            _dn++;
 +          }
 +        }
-@@ -169421,0 +169979,4 @@
+@@ -169437,0 +169984,4 @@
 +        /* PRESENTLOOP-PROBE id=0 */
 +        { ps3_plp_on_enter(0, ctx); }
 +        /* POSTTHR-PROBE id=15 */
 +        { ps3_pt_on_enter(15, ctx); }
-@@ -169612,0 +170174,41 @@
+@@ -169628,0 +170179,41 @@
 +        /* INTROSEQ-PROBE: tick da FSM da intro, edge-triggered.
 +         * S=[TOC-0x5E70]: +00 idx filme, +04 sub-estado, +08 fade(float),
 +         * +10 flag timer-arrancado, +18 timer(u64 tick de partida).
@@ -809,13 +798,13 @@
 +            }
 +            _n++;
 +          } }
-@@ -169735,0 +170338,2 @@
+@@ -169751,0 +170343,2 @@
 +        /* SCHEDARM-PROBE id=16 */
 +        { ps3_sa_on_enter(16, ctx); }
-@@ -169758,0 +170363,2 @@
+@@ -169774,0 +170368,2 @@
 +        /* SCHEDARM-PROBE id=18 */
 +        { ps3_sa_on_enter(18, ctx); }
-@@ -169791,0 +170398,15 @@
+@@ -169807,0 +170403,15 @@
 +        /* MENUPRESENT-PROBE id=11 */
 +        { ps3_mp_on_enter(11, ctx); }
 +        /* PRESENTLOOP-PROBE id=1 */
@@ -831,17 +820,17 @@
 +            fprintf(stderr,"[INTROSEQ] enter func_000CE0A0 #%d guardslot=0x%08X guardobj=0x%08X u8+4=%u (!=0 => intro saltada)\n",
 +              _n,_gp,_go,_go?vm_read8(_go+4):0u);
 +            fflush(stderr); } } }
-@@ -169817,3 +170437,0 @@
+@@ -169833,3 +170442,0 @@
 -        /* E404-CE0A0-R31: CDE3C fragments clobber callee-saves; restore S/guard */
 -        ctx->gpr[30] = vm_read32(ctx->gpr[2] + -0x5E34);
 -        ctx->gpr[31] = vm_read32(ctx->gpr[2] + -0x5E70);
-@@ -283002,0 +283621,2 @@
+@@ -283018,0 +283626,2 @@
 +        /* POSTTHR-PROBE id=0 */
 +        { ps3_pt_on_enter(0, ctx); }
-@@ -283081,0 +283702,2 @@
+@@ -283097,0 +283707,2 @@
 +        /* POSTTHR-PROBE thr_end */
 +        { ps3_pt_mark_thr_end(); }
-@@ -291786,0 +292409,8 @@
+@@ -291802,0 +292414,8 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_OBJ14F"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ static int _n=0; if(_n++<10){ uint32_t _h=(uint32_t)ctx->gpr[29]; uint32_t _obj=(_h>=0x1000u)?vm_read32(_h+0u):0u;
 +            fprintf(stderr,"[OBJ14F] #%d holder=0x%08X obj=*(holder+0)=0x%08X",_n,_h,_obj);
@@ -850,29 +839,29 @@
 +              char _s[20]; int _j=0; for(;_j<16;_j++){ char c=(char)vm_read8(_obj+_j); if(c<0x20||c>0x7E) break; _s[_j]=c; } _s[_j]=0;
 +              if(_j>2) fprintf(stderr," ascii='%s'",_s); }
 +            fprintf(stderr,"\\n"); fflush(stderr); } } }
-@@ -292780,0 +293411,2 @@
+@@ -292796,0 +293416,2 @@
 +        /* FLIPPATH-PROBE id=0 */
 +        { ps3_flipp_on_enter(0, ctx); }
-@@ -299607,0 +300240,2 @@
+@@ -299623,0 +300245,2 @@
 +        /* FLIPPATH-PROBE id=1 */
 +        { ps3_flipp_on_enter(1, ctx); }
-@@ -327386,0 +328021,3 @@
+@@ -327402,0 +328026,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-171] #%d r3=0x%08X r4=0x%08X\n", n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4]); fflush(stderr);} }
-@@ -327412 +328049,5 @@
+@@ -327428 +328054,5 @@
 -        ctx->gpr[0] = vm_read32(ctx->gpr[9] + 0x0);
 +        /* Task5 TYMAP: vtable slot is OPD; use ps3_call_opd before map lookup. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-VT] #%d opd_slot=0x%08X type_tag=0x%08X\n",
 +              n,(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[29]); fflush(stderr);} }
-@@ -327414,3 +328055 @@
+@@ -327430,3 +328060 @@
 -        ctx->ctr = (uint32_t)ctx->gpr[0];
 -        ctx->gpr[2] = vm_read32(ctx->gpr[9] + 0x4);
 -        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);
 +        ps3_call_opd(ctx, (uint32_t)ctx->gpr[9]); DRAIN_TRAMPOLINE(ctx);
-@@ -356444,0 +357084,9 @@
+@@ -356460,0 +357089,9 @@
 +        /* Task5 TYMAP: type-map lookup (map=r3, type=r4, out=r5). Compare map
 +         * against TOC+0xD8C (ICGLdr register map) and TOC-0x3A3C (171244 map). */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
@@ -882,28 +871,28 @@
 +            uint32_t m3a=vm_read32(ctx->gpr[2]+(uint32_t)(-0x3A3C));
 +            fprintf(stderr,"[TYMAP-LK] #%d map=0x%08X type=0x%08X d8c=0x%08X d90=0x%08X m3a3c=0x%08X same_d8c=%d same_d90=%d same_m3a=%d\n",
 +              n,map,ty,d8c,d90,m3a,map==d8c,map==d90,map==m3a); fflush(stderr);} } }
-@@ -356483 +357131,5 @@
+@@ -356499 +357136,5 @@
 -        ctx->gpr[0] = vm_read32(ctx->gpr[11] + 0x0);
 +        /* Task5 TYMAP: node+0x10 is an OPD (or direct code EA); use ps3_call_opd. */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<32)
 +            fprintf(stderr,"[TYMAP-HIT] #%d node=0x%08X opd=0x%08X type_key_via_r30_ish\n",
 +              n,(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[11]); fflush(stderr);} }
-@@ -356485,3 +357137 @@
+@@ -356501,3 +357142 @@
 -        ctx->ctr = (uint32_t)ctx->gpr[0];
 -        ctx->gpr[2] = vm_read32(ctx->gpr[11] + 0x4);
 -        ps3_indirect_call(ctx); DRAIN_TRAMPOLINE(ctx);
 +        ps3_call_opd(ctx, (uint32_t)ctx->gpr[11]); DRAIN_TRAMPOLINE(ctx);
-@@ -356489,0 +357140,3 @@
+@@ -356505,0 +357145,3 @@
 +        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_TYMAP")?1:0;}
 +          if(on){ static int n=0; if(n++<64)
 +            fprintf(stderr,"[TYMAP-RET] #%d r3=0x%08X\n", n, (uint32_t)ctx->gpr[3]); fflush(stderr);} }
-@@ -363194,0 +363848,4 @@
+@@ -363210,0 +363853,4 @@
 +        /* MENUPRESENT-PROBE id=0 */
 +        { ps3_mp_on_enter(0, ctx); }
 +        /* PRESENTLOOP-PROBE id=2 */
 +        { ps3_plp_on_enter(2, ctx); }
-@@ -448132,0 +448790,8 @@
+@@ -448148,0 +448795,8 @@
 +        /* Host gzip path for embedded EBOOT resources (see host_res_inflate.c). */
 +        { static int on=-1; if(on<0){extern char* getenv(const char*);
 +            const char* e=getenv("PS3_TRACE_HOSTRES"); on=(e&&*e&&*e!='0')?1:0;}
@@ -912,7 +901,7 @@
 +              n,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6]);
 +            fflush(stderr);} }
 +        if (host_res_inflate(ctx)) return;
-@@ -519718,0 +520384,7 @@
+@@ -519734,0 +520389,7 @@
 +        /* E97-LIST236A1C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _p=(uint32_t)ctx->gpr[3]; uint32_t _head=vm_read32(0x0053EA54u); uint32_t _key=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+8u):0u;
@@ -920,43 +909,43 @@
 +            uint32_t _q=(_head>=0x10000u&&_head<0x4F000000u)?vm_read32(_head):0u; int _k=0;
 +            while(_q>=0x10000u && _q<0x4F000000u && _q!=_head && _k<60){ fprintf(stderr,"[LIST236A1C]   #%d node=0x%08X next=0x%08X prev=0x%08X key=0x%08X\n",_k,_q,vm_read32(_q),vm_read32(_q+4u),vm_read32(_q+8u)); _q=vm_read32(_q); _k++; }
 +            fprintf(stderr,"[LIST236A1C]   fim k=%d em 0x%08X %s\n",_k,_q,(_q==_head)?"cabeca":"NAO-cabeca"); fflush(stderr); } } }
-@@ -520944,0 +521617,6 @@
+@@ -520960,0 +521622,6 @@
 +        /* R31SRC-arg-func_00237CDC */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] arg-func_00237CDC r3=0x%08X r11=0x%08X %s\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11], ((uint32_t)ctx->gpr[3] == 0x00541178u) ? "CTRL=TOC" : "CTRL=outro"); fflush(stderr); } }
-@@ -521190,0 +521869,6 @@
+@@ -521206,0 +521874,6 @@
 +        /* R31SRC-arg-func_0023807C */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] arg-func_0023807C r3=0x%08X r11=0x%08X %s\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11], ((uint32_t)ctx->gpr[3] == 0x00541178u) ? "CTRL=TOC" : "CTRL=outro"); fflush(stderr); } }
-@@ -530624,0 +531309,3 @@
+@@ -530640,0 +531314,3 @@
 +        /* E116-240F4C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-240F4C] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -534579,0 +535267,3 @@
+@@ -534595,0 +535272,3 @@
 +        /* E116-244E40 */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-244E40] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -536919,0 +537610,3 @@
+@@ -536935,0 +537615,3 @@
 +        /* E116-24771C */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=3 || (_c%200)==0) fprintf(stderr,"[EFX-24771C] #%ld r3=0x%08X r4=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -537714,0 +538408,3 @@
+@@ -537730,0 +538413,3 @@
 +        /* E115-LVLTICK */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _c=0; _c++; if(_c<=4 || (_c%500)==0) fprintf(stderr,"[LVLTICK] #%ld r3=0x%08X lr=0x%08X\n",_c,(uint32_t)ctx->gpr[3],(uint32_t)ctx->lr); fflush(stderr); } }
-@@ -540115,0 +540812,5 @@
+@@ -540131,0 +540817,5 @@
 +        /* E111-ATTACH */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static long _cls[64]={0}; static long _tot=0; uint32_t _c=(uint32_t)ctx->gpr[4]; int _k=(_c>=0x10000u&&_c<0x4F000000u)?(vm_read16(_c+2u)&0x3F):-1; if(_k>=0)_cls[_k]++; _tot++;
 +            if(_k==15){ static int _n15=0; if(_n15++<12) fprintf(stderr,"[ATTACH15] parent=0x%08X child=0x%08X (attach classe 15 MDLX)\n",(uint32_t)ctx->gpr[3],_c); }
 +            if((_tot%400)==0){ char _b[300]; int _w=0; _b[0]=0; for(int _i=0;_i<40;_i++) if(_cls[_i]) _w+=snprintf(_b+_w,sizeof(_b)-_w,"%d:%ld ",_i,_cls[_i]); fprintf(stderr,"[ATTACH] por classe: %s\n",_b); } fflush(stderr); } }
-@@ -550746,0 +551448,10 @@
+@@ -550762,0 +551453,10 @@
 +        /* ALLOC-NULL-GUARD: 002637D8→00263040 can return 0 when a chunk arena
 +         * free-list is exhausted. Natural code stamps boundary tags at r3 without
 +         * null-check → EA 0 gets tags → freelist [node+4]=0x84xxxxxx → UNCOMMITTED
@@ -967,33 +956,33 @@
 +            fflush(stderr); } }
 +          { g_trampoline_fn = (void(*)(void*))func_00254E84; return; }
 +        }
-@@ -550913,0 +551625,4 @@
+@@ -550929,0 +551630,4 @@
 +        /* REL-PROBE REL-walker */
 +        { static int _r_on=-1; if(_r_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_LGLSC"); _r_on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_r_on){ const char* ps3_dbg_sym(void*); uint32_t _o=(uint32_t)ctx->gpr[4];
 +            fprintf(stderr,"[REL-walker] walker=0x%08X obj=0x%08X refcnt(obj-4+0x74)=%d guest_lr=0x%08X ra1=%s ra2=%s ra3=%s\n", (uint32_t)ctx->gpr[3], _o, _o?(int)vm_read32(_o-4+0x74):-999, (uint32_t)ctx->lr, ps3_dbg_sym(__builtin_return_address(0)), ps3_dbg_sym(__builtin_return_address(1)), ps3_dbg_sym(__builtin_return_address(2))); fflush(stderr);} }
-@@ -552548,0 +553264,6 @@
+@@ -552564,0 +553269,6 @@
 +        /* E95C-POOL */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ uint32_t _m=(uint32_t)ctx->gpr[3], _d=(uint32_t)ctx->gpr[4], _s=(uint32_t)ctx->gpr[5];
 +            uint32_t _m30=(_m>=0x10000u&&_m<0x4F000000u)?vm_read32(_m+0x30u):0u; uint32_t _p=_m30+0x34u;
 +            uint32_t _a4=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+4u):0xDEADu, _a8=(_p>=0x10000u&&_p<0x4F000000u)?vm_read32(_p+8u):0xDEADu;
 +            fprintf(stderr,"[POOL] mgr=0x%08X desc=0x%08X w0=0x%08X r5=0x%08X m30=0x%08X [+4]=%u [+8]=%u %s\n",_m,_d,(_d>=0x10000u&&_d<0x4F000000u)?vm_read32(_d):0u,_s,_m30,_a4,_a8,(_a4==_a8)?"IGUAL(deflist)":"DIFERENTE(0x256ECC)"); fflush(stderr); } }
-@@ -552635,0 +553357,6 @@
+@@ -552651,0 +553362,6 @@
 +        /* E95B-DEFLIST */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ uint32_t _h=(uint32_t)ctx->gpr[27]; char _b[256]; int _k=0; _b[0]=0; uint32_t _n=(_h>=0x10000u&&_h<0x4F000000u)?vm_read32(_h):0u; int _s=0;
 +            while(_n>=0x10000u && _n<0x4F000000u && _n!=_h && _s<40){ uint32_t _d=vm_read32(_n+8u); uint32_t _c=(_d>=0x10000u&&_d<0x4F000000u)?vm_read16(_d+2u):0xFFFFu;
 +              _k+=snprintf(_b+_k,sizeof(_b)-_k,"%u ",_c); if(_k>230) break; _n=vm_read32(_n); _s++; }
 +            fprintf(stderr,"[DEFLIST] mgr=0x%08X desc=0x%08X r5=0x%08X head=0x%08X classes=[%s]\n",(uint32_t)ctx->gpr[24],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[28],_h,_b); fflush(stderr); } }
-@@ -558324,0 +559052,6 @@
+@@ -558340,0 +559057,6 @@
 +        /* MENUPRESENT-PROBE id=14 */
 +        { ps3_mp_on_enter(14, ctx); }
 +        /* SCHEDARM-PROBE id=3 */
 +        { ps3_sa_on_enter(3, ctx); }
 +        /* POSTTHR-PROBE id=1 */
 +        { ps3_pt_on_enter(1, ctx); }
-@@ -563615,0 +564349,16 @@
+@@ -563631,0 +564354,16 @@
 +        /* FREELIST-TAG-GUARD (alloc walk): same class as 263178. If arena is
 +         * null or free-head [arena+4] is a boundary tag (bit31), abort r3=0
 +         * instead of infinite OOB walk (hang in 41D5C→BACE8→262610 after
@@ -1010,10 +999,10 @@
 +            ctx->gpr[3] = 0;
 +            return;
 +          } }
-@@ -563636,0 +564386,2 @@
+@@ -563652,0 +564391,2 @@
 +        { /* walk iteration cap — break freelist cycles that never return to arena */ }
 +        static int _fl_walk_iters = 0; _fl_walk_iters = 0;
-@@ -563637,0 +564389,8 @@
+@@ -563653,0 +564394,8 @@
 +        /* Fail-fast: 200k iters was ~seconds per corrupt alloc and stalled
 +         * B71B8 at CBC20 (0x19C alloc after WAD desync freelist trash). */
 +        if (++_fl_walk_iters > 10000) {
@@ -1022,7 +1011,7 @@
 +              10000, (uint32_t)ctx->gpr[3]); fflush(stderr); }
 +          { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +        }
-@@ -563638,0 +564398,8 @@
+@@ -563654,0 +564403,8 @@
 +        /* Null / low node mid-walk — list already dead. */
 +        { uint32_t nd=(uint32_t)ctx->gpr[10];
 +          if (nd == 0u || nd < 0x10000u) {
@@ -1031,7 +1020,7 @@
 +                nd); fflush(stderr); }
 +            { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +          } }
-@@ -563658,0 +564426,12 @@
+@@ -563674,0 +564431,12 @@
 +        /* FREELIST-TAG-GUARD: next slot holds tag or near-null → list desync.
 +         * Without this, walk spins forever on UNCOMMITTED 0x91/0x95/0x80. */
 +        { uint32_t nx=(uint32_t)ctx->gpr[3];
@@ -1044,7 +1033,7 @@
 +                nx, (uint32_t)ctx->gpr[10]); fflush(stderr); }
 +            { g_trampoline_fn = (void(*)(void*))func_002627EC; return; }
 +          } }
-@@ -563736,0 +564516,7 @@
+@@ -563752,0 +564521,7 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_ARENASTK"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ uint32_t _r2=(uint32_t)ctx->gpr[2]; uint32_t _stk=vm_read32(_r2-0x20D8);
 +            uint32_t _base=_stk?vm_read32(_stk+0):0, _idx=_stk?vm_read32(_stk+4):0, _lim=_stk?vm_read32(_stk+8):0;
@@ -1052,16 +1041,16 @@
 +            static int _k=0; if(_k++<40) fprintf(stderr,"[ARENASTK] r2=0x%08X stk=0x%08X base=0x%08X idx=%u lim=%u arena=0x%08X%s\n",_r2,_stk,_base,_idx,_lim,_ar,(_idx>=_lim)?" OOB->NULL":"");
 +            /* E353k: log EVERY time the provider would return 0/bad, uncapped-ish, to see WHY */
 +            if(_ar==0u || _ar<0x10000u || _idx>=_lim){ static int _b=0; if(_b++<30) fprintf(stderr,"[ARENASTK-BAD] idx=%u lim=%u base=0x%08X base[idx]=0x%08X stk=0x%08X\n",_idx,_lim,_base,_ar,_stk); } } }
-@@ -563748,0 +564535,2 @@
+@@ -563764,0 +564540,2 @@
 +        { static int _r2b=-1; if(_r2b<0){extern char* getenv(const char*); const char* _e=getenv("PS3_ARENA_ROOT2BP"); _r2b=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_r2b && (uint32_t)ctx->gpr[3]==0x40004020u){ static int _k=0; if(_k++<8){fprintf(stderr,"[ARENA-ROOT2BP] redirect Root->BP\n");fflush(stderr);} ctx->gpr[3]=0x43004020u; } }
-@@ -564028,0 +564817,2 @@
+@@ -564044,0 +564822,2 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_SCOPESTK"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ uint32_t _idx=(uint32_t)ctx->gpr[11]; static int _n=0; if(_n++<3000) fprintf(stderr,"[SCOPE-POPALL] tid=%lu idx=%u lr=0x%08X\n",(unsigned long)(uintptr_t)pthread_self(),(uint32_t)ctx->gpr[11],(uint32_t)ctx->lr); if(_idx>=118u){ static int _m=0; if(_m++<24) fprintf(stderr,"[SCOPE-POP] idx %u->%u caller-lr=0x%08X\n",_idx,_idx-1,(uint32_t)ctx->lr); } } }
-@@ -564041,0 +564832,2 @@
+@@ -564057,0 +564837,2 @@
 +        { static int _o=-1; if(_o<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_SCOPESTK"); _o=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_o){ uint32_t _idx=(uint32_t)ctx->gpr[11]; static int _n=0; if(_n++<2500) fprintf(stderr,"[SCOPE-PUSHALL] tid=%lu idx=%u lr=0x%08X\n",(unsigned long)(uintptr_t)pthread_self(),(uint32_t)ctx->gpr[11],(uint32_t)ctx->lr); if(_idx>=118u){ static int _m=0; if(_m++<24) fprintf(stderr,"[SCOPE-PUSH] idx %u->%u caller-lr=0x%08X\n",_idx,_idx+1,(uint32_t)ctx->lr); } } }
-@@ -564047,0 +564840,10 @@
+@@ -564063,0 +564845,10 @@
 +        /* E353z SCOPE-CLAMP (DIAGNOSTIC, gated PS3_SCOPE_CLAMP, OFF by default):
 +         * this is the LEAVE (idx++). idx==lim means the scope stack is EMPTY;
 +         * letting idx go past lim underflows it and the provider (func_00262808)
@@ -1072,20 +1061,20 @@
 +          if(_c){ uint32_t _lim=vm_read32(ctx->gpr[10] + 0x8);
 +            if(_lim && (uint32_t)ctx->gpr[11] >= _lim){ static int _n=0; if(_n++<12) fprintf(stderr,"[SCOPE-CLAMP] leave would set idx=%u >= lim=%u -> clamp to %u\n",(uint32_t)ctx->gpr[11],_lim,_lim-1);
 +              ctx->gpr[11] = (uint64_t)(_lim-1); } } }
-@@ -564350,0 +565153,5 @@
+@@ -564366,0 +565158,5 @@
 +        { static int _e=-1; if(_e<0){extern char* getenv(const char*); const char* _ev=getenv("PS3_TRACE_ARENASTK"); _e=(_ev&&*_ev&&*_ev!='0')?1:0;}
 +          if(_e){ uint32_t _a=(uint32_t)ctx->gpr[3];
 +            if(_a==0u || _a<0x10000u || (_a&0x80000000u)){ static int _n=0; if(_n++<24){
 +              fprintf(stderr,"[ARENASTK] 263040 ENTRY BAD arena(r3)=0x%08X CALLER-lr=0x%08X r4=0x%08X r5=0x%08X r6=0x%08X r1=0x%08X\n",
 +                _a,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[1]); fflush(stderr);} } } }
-@@ -564402,2 +565209,4 @@
+@@ -564418,2 +565214,4 @@
 -              fprintf(stderr,"[FREELIST-TAG-GUARD] 263040 entry head=0x%08X -> abort r3=0\n",
 -                _head); fflush(stderr); }
 +              /* E353j: capture the caller (lr) + the this at r4/r5/r6/r7 so we can
 +               * walk upstream to who passes the string-byte this (0x61='a'). */
 +              fprintf(stderr,"[FREELIST-TAG-GUARD] 263040 entry head=0x%08X lr=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X r6=0x%08X r7=0x%08X -> abort r3=0\n",
 +                _head,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[6],(uint32_t)ctx->gpr[7]); fflush(stderr); }
-@@ -564476,0 +565286,22 @@
+@@ -564492,0 +565291,22 @@
 +        /* FREELIST-TAG-GUARD: [node+4] must be a clean next pointer. When a
 +         * boundary-tag (bit31 set, form 0x8xxxxxxx) sits in the next slot,
 +         * walk is desynced (asset-map Task 3). Abort split with r3=0 instead
@@ -1108,7 +1097,7 @@
 +          ctx->gpr[1] = (int64_t)(int32_t)(ctx->gpr[1] + 0xA0);
 +          return;
 +        }
-@@ -565276,0 +566108,11 @@
+@@ -565292,0 +566113,11 @@
 +        { static int _on=-1; if(_on<0){extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_RSZ"); _on=(_e&&*_e&&*_e!='0')?1:0;}
 +          if(_on){ uint32_t _ar=(uint32_t)ctx->gpr[3]; uint32_t _sz=(uint32_t)ctx->gpr[4]; uint32_t _np=(uint32_t)ctx->gpr[5]; uint32_t _lr=(uint32_t)ctx->lr;
 +            char _nm[24]; _nm[0]=0; if(_np>=0x10000u&&_np<0x4F000000u) for(int _i=0;_i<23;_i++){ unsigned char _c=(unsigned char)vm_read8(_np+_i); _nm[_i]=(char)_c; if(!_c)break; } _nm[23]=0;
@@ -1120,7 +1109,7 @@
 +            static int _k=0;
 +            if(_low || _covers_tab || _named){ if(_k++<400) fprintf(stderr,"[ROOTSIZE] arena=0x%08X size=0x%08X end=0x%08X nome=\"%s\" lr=0x%08X%s%s\n",_ar,_sz,_end,_nm,_lr,_low?" <<LOW>>":"",_covers_tab?" <<COVERS-OBJTAB>>":""); } } }
 +
-@@ -566673,0 +567516,9 @@
+@@ -566689,0 +567521,9 @@
 +        /* R31SRC-pre-virtual */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
@@ -1130,14 +1119,14 @@
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11],
 +                (uint32_t)ctx->gpr[9], (uint32_t)ctx->gpr[10],
 +                (uint32_t)ctx->ctr, (uint32_t)ctx->gpr[2]); fflush(stderr); } }
-@@ -566674,0 +567526,6 @@
+@@ -566690,0 +567531,6 @@
 +        /* R31SRC-pos-virtual */
 +        { static int _r_on = -1; if (_r_on < 0) { extern char* getenv(const char*);
 +              const char* _e = getenv("PS3_TRACE_R31SRC");
 +              _r_on = (_e && *_e && *_e != '0') ? 1 : 0; }
 +          if (_r_on) { fprintf(stderr, "[R31SRC] pos-virtual r3=0x%08X r11=0x%08X\n",
 +                (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11]); fflush(stderr); } }
-@@ -596987,0 +597845,17 @@
+@@ -597003,0 +597850,17 @@
 +        /* E125-MATLIST */
 +        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
 +          if(_on){ static int _n=0; if(_n++<6){ uint32_t _o=(uint32_t)ctx->gpr[3];

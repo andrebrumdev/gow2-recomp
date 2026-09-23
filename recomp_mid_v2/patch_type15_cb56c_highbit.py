@@ -37,10 +37,15 @@ PRODUCT_RE = re.compile(
 
 def func_span(t: str):
     """(inicio, fim) do corpo de func_000CB56C, ou None se nao estiver aqui."""
-    i = t.find(FUNC_SIG)
+    # the current lifter emits "ppu_context* PPU_RESTRICT ctx"; older lifts do not
+    sig = FUNC_SIG
+    i = t.find(sig)
+    if i < 0:
+        sig = FUNC_SIG.replace("ppu_context* ctx", "ppu_context* PPU_RESTRICT ctx")
+        i = t.find(sig)
     if i < 0:
         return None
-    j = t.find("\nvoid func_", i + len(FUNC_SIG))
+    j = t.find("\nvoid func_", i + len(sig))
     return (i, len(t) if j < 0 else j)
 
 
