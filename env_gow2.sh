@@ -32,6 +32,11 @@ export PS3_VFS_ROOT
 # as tasks do descompactador (spu0) ocupavam os dois e o mixer SCREAM ficava sem
 # vez -- som mudo no gameplay (medido 2026-09-23 por sample).
 : "${PS3_SPU_WORKERS:=6}";      export PS3_SPU_WORKERS
+# Ritmo de flip por relogio proprio de 60 Hz DESLIGADO: a camada Metal ja'
+# espera o vsync da tela (displaySyncEnabled) e os dois relogios brigavam --
+# medido na intro (PS3_TRACE_VDEC_PICTIME/PRESENTTIME): imagens 35,7 +- 25,9 ms
+# com ele, 33,1 +- 2,2 ms sem ele. PS3_GCM_VSYNC=1 repoe.
+: "${PS3_GCM_VSYNC:=0}";        export PS3_GCM_VSYNC
 
 # PS3_NOMOVIES deixou de ser 1 por default. Era, quando o macOS nao tinha
 # caminho de dados nenhum: o movie_hle.c inteiro era #ifdef _WIN32 e os
