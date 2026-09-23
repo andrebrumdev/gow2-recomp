@@ -130,3 +130,9 @@ gcm_stream_*.bin
 /extracted
 /.kit_lift/
 /.kit_tools/
+
+# traducao PT-BR (OAleex, v4.4): patch de terceiros de 10 GB, nunca versionar
+/traducao_ptbr/
+
+# microcodigo FP/VP dumpado (PS3_RSX_DUMP_UCODE): codigo do jogo, nunca versionar
+/shader_corpus/
