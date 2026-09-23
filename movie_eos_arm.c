@@ -601,6 +601,9 @@ uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms)
     return movie_cutscene_publish_for_handle(h720, 1, elapsed_ms);
 }
 
+/* movie_hle.c owns the real one; the vdec unit test links this file alone. */
+__attribute__((weak)) int movie_hle_start_pending_ingame(void) { return 0; }
+
 long movie_done_timebased_poll(uint32_t st)
 {
     long long ivl;
@@ -763,7 +766,6 @@ static void movie_sampler_loop(void)
 #if defined(__APPLE__)
             /* The in-game picture waits for Play (movie_hle.c). */
             if (st == 11u && prev != 11u) {
-                extern int movie_hle_start_pending_ingame(void);
                 movie_hle_start_pending_ingame();
             }
 #endif
