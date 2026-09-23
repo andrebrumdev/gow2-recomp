@@ -136,3 +136,6 @@ gcm_stream_*.bin
 
 # microcodigo FP/VP dumpado (PS3_RSX_DUMP_UCODE): codigo do jogo, nunca versionar
 /shader_corpus/
+
+# capturas de quadros do RSX (PS3_RSX_CAPTURE): memoria do jogo, nunca versionar
+/rsx_captures/
