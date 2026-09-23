@@ -63,6 +63,7 @@
  * Opt-out: PS3_AUDIO_STREAM_DONE=0. Default ON quando o amostrador corre.
  */
 #include "movie_eos_arm.h"
+#include "movie_clock.h"   /* ps3recomp libs/video (-I in build_macos.sh) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,6 +130,15 @@ static int s_audio_stream_done = 1; /* HLE A3b: mark sess+0x1B8 (opt-out =0) */
 #define MOVIE_AUDIO_SESS_STRIDE   0x1E4u
 #define MOVIE_AUDIO_SESS_MAX      256u
 #define MOVIE_AUDIO_DONE_OFF      0x1B8u
+/* Sample count FUN_0045b780 already reads (48 kHz). The player replaces its
+ * timebase with this when the two disagree, so a stuck 0 holds every picture
+ * after the first. Voice +0x14 is what the stream update copies into it. */
+#define MOVIE_AUDIO_SAMPLES_OFF   0x154u
+#define MOVIE_AUDIO_VOICE_OFF     0x1C4u
+#define MOVIE_VOICE_TABLE_EA      0x008AF900u
+#define MOVIE_VOICE_STRIDE        0x300u
+#define MOVIE_VOICE_POS_OFF       0x14u
+#define MOVIE_VOICE_MAX           64u
 
 /* Quando 1, o patch em func_002C0FA0 forca o retorno de func_0045B2A8 a !=0
  * (equivalente a sessao+0x1B8 != 0). Exportado para o lift (C linkage). */
@@ -534,9 +544,60 @@ void movie_done_timebased_reset(void)
     fflush(stderr);
 }
 
+/* How many StartSeq calls this boot. cellVdec.c owns the strong symbol.
+ * The offline policy test supplies its own. */
+extern int vdec_startseq_count(void);
+
+uint32_t movie_cutscene_publish_samples(uint32_t session_ea, int active,
+                                       uint64_t elapsed_ms)
+{
+    uint32_t samples = movie_cutscene_playback_samples(active, elapsed_ms);
+    uint32_t voice = 0xFFFFFFFFu;
+    uint32_t pos;
+    /* No open sequence, or no stream object: do not report a clock the guest
+     * cannot read. FUN_00461fe8 copies voice+0x14 over stream+0x154, so a
+     * sample write without the voice write is wiped back to 0. */
+    if (!active || !session_ea || !vm_base) return 0;
+    if (!movie_eos_peek32(session_ea + MOVIE_AUDIO_VOICE_OFF, &voice)
+        || voice >= MOVIE_VOICE_MAX)
+        return 0;
+    pos = MOVIE_VOICE_TABLE_EA + voice * MOVIE_VOICE_STRIDE + MOVIE_VOICE_POS_OFF;
+    if (!movie_eos_poke32(pos, samples)) return 0;
+    if (!movie_eos_poke32(session_ea + MOVIE_AUDIO_SAMPLES_OFF, samples))
+        return 0;
+    return samples;
+}
+
+uint32_t movie_cutscene_publish_for_handle(uint32_t handle, int active,
+                                          uint64_t elapsed_ms)
+{
+    uint32_t sess;
+    if (!active || !handle || handle == 0xFFFFFFFFu) return 0;
+    sess = movie_audio_resolve_session(handle);
+    if (!sess) return 0;
+    return movie_cutscene_publish_samples(sess, active, elapsed_ms);
+}
+
+/* GetPicItem calls this with the sequence's own elapsed time. The store is
+ * movie_cutscene_publish_samples (stream+0x154 and the voice position). */
+uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms)
+{
+    uint32_t obj = 0;
+    uint32_t h720 = 0;
+    if (!elapsed_ms || !vm_base) return 0;
+    if (!movie_eos_peek32(MOVIE_OBJ_SLOT_EA, &obj) || !obj) return 0;
+    if (!movie_eos_can_sample(obj)) return 0;
+    if (!movie_eos_peek32(obj + MOVIE_OFF_SND_H, &h720)) return 0;
+    return movie_cutscene_publish_for_handle(h720, 1, elapsed_ms);
+}
+
 long movie_done_timebased_poll(uint32_t st)
 {
-    long long ivl = movie_done_interval_ms();
+    long long ivl;
+    /* In-game cutscenes end with the open sequence, not the intro timer.
+     * That timer is what drops the player back onto the in-engine scene. */
+    if (!movie_timebase_done_allowed(movie_clock_ingame_index())) return 0;
+    ivl = movie_done_interval_ms();
     if (ivl <= 0) return 0;                    /* produtor desligado (M3) */
     if (s_movie_done_fired) return 1;
 
@@ -592,6 +653,44 @@ static void movie_sampler_loop(void)
         if (st >= 1u && st != 0xFFFFFFFFu)
             movie_hle_autostart_cache_if_needed();
 #endif
+
+        /* Playback samples the guest already compares with picture PTS.
+         * Each StartSeq anchors its own t0, so the next sequence is not born
+         * already past its last picture. */
+        {
+            static unsigned long long s_clk_t0;
+            static int s_clk_seq = -1;
+            static int s_clk_logged;
+            int seq = vdec_startseq_count();
+            int idx = seq >= 3 ? seq - 2 : 0;
+            int active = (st >= 1u && st != 0xFFFFFFFFu);
+            int open = (st >= MOVIE_STATE_POST_OPEN && st != 0xFFFFFFFFu);
+            uint64_t elapsed = 0;
+            movie_clock_note(open, idx);
+            if (!active) {
+                s_clk_t0 = 0;
+            } else if (s_clk_t0 == 0 || seq != s_clk_seq) {
+                s_clk_t0 = movie_now_ms();
+                s_clk_seq = seq;
+                s_clk_logged = 0;
+            }
+            if (s_clk_t0)
+                elapsed = movie_now_ms() - s_clk_t0;
+            if (active) {
+                uint32_t h720 = 0;
+                uint32_t samples;
+                movie_eos_peek32(obj + MOVIE_OFF_SND_H, &h720);
+                samples = movie_cutscene_publish_for_handle(h720, 1, elapsed);
+                if (samples && !s_clk_logged) {
+                    s_clk_logged = 1;
+                    fprintf(stderr,
+                            "[MOVIECLK] playback samples %u handle=0x%08X "
+                            "voice-pos written st=%u\n",
+                            samples, h720, st);
+                    fflush(stderr);
+                }
+            }
+        }
 
         /* Sinal REAL de "filme acabou" (produtor). No Windows vem do overlay
          * ffmpeg; no macOS do AVAssetReader (movie_vt) quando HLE ligado, senao
@@ -749,7 +848,10 @@ void movie_eos_sampler_start(void)
         if (a && a[0] == '0' && a[1] == 0) s_audio_stream_done = 0;
         else s_audio_stream_done = 1;
     }
-    if (!s_sampler_mo && !s_sampler_eos && !s_sampler_perf) {
+    /* PS3_MOVIE_HLE also starts the thread: it is what publishes the sample
+     * clock while a cutscene is open. EOS arming stays on its own gate. */
+    if (!s_sampler_mo && !s_sampler_eos && !s_sampler_perf
+        && !movie_env_on("PS3_MOVIE_HLE")) {
         return;   /* OFF por default */
     }
 

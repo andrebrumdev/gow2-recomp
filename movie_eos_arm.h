@@ -123,6 +123,23 @@ long long movie_done_interval_ms(void);
 /* 1 when the time-based producer has fired for the current Play. */
 long movie_done_timebased_poll(uint32_t st);
 
+/* Write the 48 kHz sample count the guest picture comparison already reads
+ * (session+0x154, and the Scream voice position the stream update copies
+ * from). Returns that count. Inactive: returns 0 and does not touch memory,
+ * so a cutscene that is not playing cannot advance the clock. */
+uint32_t movie_cutscene_publish_samples(uint32_t session_ea, int active,
+                                       uint64_t elapsed_ms);
+
+/* Resolve the snd_stream handle the way the sampler does, then publish.
+ * Returns 0 and writes nothing when the handle does not resolve or the
+ * voice poke fails. */
+uint32_t movie_cutscene_publish_for_handle(uint32_t handle, int active,
+                                          uint64_t elapsed_ms);
+
+/* Picture release. Resolves the open movie's snd_stream and publishes
+ * elapsed_ms through movie_cutscene_publish_samples. 0 writes nothing. */
+uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms);
+
 #ifdef __cplusplus
 }
 #endif

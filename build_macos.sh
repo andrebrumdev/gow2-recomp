@@ -518,7 +518,7 @@ echo "=== 4. boot host -> .o ==="
 clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$LIFT/boot_macos.o"
 # Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
 # PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
-clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
+clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
 
 echo "=== 5. link ==="
 SDL_FLAGS="${SDL_FLAGS-$(pkg-config --libs sdl2)}"
