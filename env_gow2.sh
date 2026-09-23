@@ -23,6 +23,11 @@ export PS3_VFS_ROOT
 # duas vezes. Medido sem ele: intro ate' ao menu, cutscene in-game inteira com
 # fim natural. PS3_MOVIE_HLE=1 repoe o overlay.
 : "${PS3_MOVIE_HLE:=0}";        export PS3_MOVIE_HLE
+# Fila de logos do host (aviso legal / SCEA / Bluepoint) DESLIGADA junto com o
+# overlay: ela so' liberava a imagem do aviso no fim do overlay de filme, e sem
+# overlay o aviso ficava na tela para sempre com o jogo a correr por baixo. O
+# proprio jogo desenha essas telas. PS3_BOOT_LOGO_QUEUE=1 repoe.
+: "${PS3_BOOT_LOGO_QUEUE:=0}";  export PS3_BOOT_LOGO_QUEUE
 # Workers de SPU: o GoW2 pede um SPURS de 2 SPUs, mas o PS3 da' 6 ao jogo. Com 2
 # as tasks do descompactador (spu0) ocupavam os dois e o mixer SCREAM ficava sem
 # vez -- som mudo no gameplay (medido 2026-09-23 por sample).
