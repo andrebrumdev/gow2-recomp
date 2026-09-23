@@ -16,11 +16,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -parse-as-library -swift-version 5 \
     -target arm64-apple-macos14.0 \
     "$SRC"/App.swift "$SRC"/Backend.swift "$SRC"/Settings.swift "$SRC"/Views.swift \
-    "$SRC"/FileAnalysis.swift "$SRC"/PatchYAML.swift "$SRC"/PatchStore.swift \
+    "$SRC"/FileAnalysis.swift "$SRC"/PatchYAML.swift "$SRC"/PatchStore.swift "$SRC"/Theme.swift "$SRC"/Decor.swift \
     -o "$APP/Contents/MacOS/GoW2Recomp"
 
 # Banner: a screenshot of the native renderer already in docs/img.
-cp "$REPO/docs/img/colossus-window.jpg" "$APP/Contents/Resources/hero.jpg"
+cp "$REPO/docs/img/palace-lighting.jpg" "$APP/Contents/Resources/hero.jpg"
 # Icon: the local game app's icon when present (not versioned -- game artwork).
 ICON_SRC="$REPO/God of War II HD.app/Contents/Resources/AppIcon.icns"
 ICON_KEY=""

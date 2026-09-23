@@ -30,17 +30,31 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 /// Tools toolchain has no SwiftUI macro plugin, and @State is a macro in the
 /// current SDK.
 final class NavModel: ObservableObject {
-    @Published var section: SidebarItem? = .play
+    /// GOW2_SECTION=<raw value> opens on that screen (screenshots, debugging).
+    @Published var section: SidebarItem? = ProcessInfo.processInfo.environment["GOW2_SECTION"]
+        .flatMap { v in SidebarItem.allCases.first { $0.rawValue == v || "\($0)" == v } } ?? .play
 }
 
 struct ContentView: View {
     @EnvironmentObject var backend: Backend
     @StateObject private var nav = NavModel()
+    @Namespace private var selectionNS
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarItem.allCases, selection: $nav.section) { s in
-                Label(s.rawValue, systemImage: s.icon).tag(s)
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.S.xs) {
+                    ForEach(Array(SidebarItem.allCases.enumerated()), id: \.element) { index, item in
+                        SidebarRow(item: item, selected: (nav.section ?? .play) == item, ns: selectionNS) {
+                            withAnimation(reduceMotion ? nil : Theme.M.selection) { nav.section = item }
+                        }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                        .help("\(item.rawValue) (⌘\(index + 1))")
+                    }
+                }
+                .padding(.horizontal, Theme.S.sm)
+                .padding(.top, Theme.S.sm)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } detail: {
@@ -57,6 +71,11 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(ZStack { Theme.C.stone950; StoneTexture() })
+            .id(nav.section)
+            .transition(reduceMotion ? .opacity
+                        : .opacity.combined(with: .offset(y: Theme.M.sectionRise)))
+            .animation(Theme.M.section, value: nav.section)
         }
         .task { await backend.refresh() }
     }
@@ -64,99 +83,145 @@ struct ContentView: View {
 
 // MARK: - Play
 
+/// Drives the hero's Ken Burns. ObservableObject, not @State (no macros).
+final class KenBurns: ObservableObject {
+    @Published var zoomed = false
+}
+
 struct PlayView: View {
     @EnvironmentObject var backend: Backend
     @EnvironmentObject var settings: GameSettings
     @EnvironmentObject var patchStore: PatchStore
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Hero()
-                VStack(alignment: .leading, spacing: 18) {
-                    if let err = backend.error {
-                        Banner(text: err, color: .red, icon: "exclamationmark.triangle.fill")
+        ZStack(alignment: .bottomLeading) {
+            HeroBackdrop()
+            VStack(alignment: .leading, spacing: Theme.S.xl) {
+                Spacer(minLength: Theme.S.hero)
+                VStack(alignment: .leading, spacing: Theme.S.sm) {
+                    Eyebrow(text: "Port nativo · Apple Silicon")
+                    FireTitle(text: "GOD OF WAR II", font: Theme.F.display, tracking: Theme.F.displayTracking)
+                    MeanderDivider(opacity: 0.85).frame(width: 420)
+                    Text("Recompilado estaticamente do PS3 para o seu Mac. Sem emulador.")
+                        .font(Theme.F.body)
+                        .foregroundStyle(Theme.C.ash)
+                }
+                if let err = backend.error {
+                    Banner(text: err, color: Theme.C.blood, icon: "exclamationmark.triangle.fill")
+                        .frame(maxWidth: 560, alignment: .leading)
+                }
+                if let st = backend.status {
+                    HStack(spacing: Theme.S.sm) {
+                        StatusChip(ok: st.elf_ok, label: "EBOOT")
+                        StatusChip(ok: st.vfs_ok, label: "USRDIR")
+                        StatusChip(ok: !st.binary.isEmpty, label: "Executável")
+                        if !patchStore.enabled.isEmpty {
+                            StatusChip(ok: true, label: "\(patchStore.patches.filter { patchStore.enabled.contains($0.id) }.count) patch(es)", icon: "wand.and.stars")
+                        }
                     }
-                    if let st = backend.status {
-                        StatusRow(ok: st.elf_ok, title: "EBOOT.ELF", detail: st.elf)
-                        StatusRow(ok: st.vfs_ok, title: "Pasta USRDIR", detail: st.vfs_root)
-                        StatusRow(ok: !st.binary.isEmpty, title: "Executável nativo",
-                                  detail: st.binary.isEmpty ? "Compile com ./build_macos.sh recomp_macos_e435" : st.binary)
-                        HStack(spacing: 12) {
-                            if backend.running {
-                                Button(role: .destructive) { backend.stop() } label: {
-                                    Label("Parar", systemImage: "stop.fill").frame(minWidth: 140)
-                                }
-                                .controlSize(.large)
-                                ProgressView().controlSize(.small)
-                                Text("Rodando — o log fica em Log.").foregroundStyle(.secondary)
-                            } else {
-                                Button { backend.play(resume: false, settings: settings, patchFile: patchStore.writePatchFile()) } label: {
-                                    Label("Jogar", systemImage: "play.fill").frame(minWidth: 140)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.large)
-                                .disabled(!st.setup_ok || st.binary.isEmpty)
-                                Button { backend.play(resume: true, settings: settings, patchFile: patchStore.writePatchFile()) } label: {
-                                    Label("Continuar", systemImage: "clock.arrow.circlepath")
-                                }
-                                .controlSize(.large)
-                                .disabled(!st.autosave || !st.setup_ok || st.binary.isEmpty)
-                                .help(st.autosave ? "Retoma o último save automático" : "Nenhum autosave ainda")
-                            }
-                        }
-                        if !st.setup_ok {
-                            Text(st.message).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        ProgressView("Verificando arquivos…")
-                        if let hint = backend.waitingHint {
-                            Banner(text: hint, color: .orange, icon: "lock.shield")
-                        }
+                    actions(st)
+                    if !st.setup_ok || st.binary.isEmpty {
+                        Text(st.binary.isEmpty ? "Compile o executável com ./build_macos.sh recomp_macos_e435." : st.message)
+                            .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
+                    }
+                } else {
+                    HStack(spacing: Theme.S.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Verificando arquivos…").font(Theme.F.body).foregroundStyle(Theme.C.ash)
+                    }
+                    if let hint = backend.waitingHint {
+                        Banner(text: hint, color: Theme.C.amber, icon: "lock.shield")
+                            .frame(maxWidth: 560, alignment: .leading)
                     }
                 }
-                .padding(28)
             }
+            .padding(Theme.S.hero)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
-}
 
-struct Hero: View {
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let url = Bundle.main.url(forResource: "hero", withExtension: "jpg"),
-               let img = NSImage(contentsOf: url) {
-                Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
-                    .frame(height: 260).clipped()
+    @ViewBuilder private func actions(_ st: LauncherStatus) -> some View {
+        HStack(spacing: Theme.S.md) {
+            if backend.running {
+                Button { backend.stop() } label: { Label("Parar", systemImage: "stop.fill") }
+                    .buttonStyle(SecondaryButtonStyle(tint: Theme.C.blood))
+                    .accessibilityHint("Encerra o jogo")
+                ProgressView().controlSize(.small)
+                Text("Em jogo").font(Theme.F.body).foregroundStyle(Theme.C.ash)
             } else {
-                Rectangle().fill(.black).frame(height: 260)
+                Button { backend.play(resume: false, settings: settings, patchFile: patchStore.writePatchFile()) } label: {
+                    Label("Jogar", systemImage: "play.fill").frame(minWidth: 120)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(!st.setup_ok || st.binary.isEmpty)
+                .accessibilityHint("Inicia o jogo com as configurações atuais")
+                Button { backend.play(resume: true, settings: settings, patchFile: patchStore.writePatchFile()) } label: {
+                    Label("Continuar", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(!st.autosave || !st.setup_ok || st.binary.isEmpty)
+                .help(st.autosave ? "Retoma o último save automático" : "Nenhum autosave ainda")
             }
-            LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
-                .frame(height: 260)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("God of War II HD").font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
-                Text("Port nativo para Apple Silicon por recompilação estática")
-                    .font(.headline).foregroundStyle(.white.opacity(0.85))
-            }
-            .padding(24)
         }
     }
 }
 
-struct StatusRow: View {
-    let ok: Bool
-    let title: String
-    let detail: String
+/// Full-bleed hero: the screenshot with a slow Ken Burns, a bottom vignette
+/// for the text and a side fade into the stone.
+struct HeroBackdrop: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var kb = KenBurns()
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                .foregroundStyle(ok ? .green : .red)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail.isEmpty ? "—" : detail).font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+        GeometryReader { geo in
+            ZStack {
+                Theme.C.stone950
+                if let url = Bundle.main.url(forResource: "hero", withExtension: "jpg"),
+                   let img = NSImage(contentsOf: url) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .scaleEffect(kb.zoomed && !reduceMotion ? Theme.M.kenBurnsScale : 1, anchor: .trailing)
+                        // Scoped to the zoom only: a withAnimation in onAppear would also
+                        // animate the window's first layout for 24 s.
+                        .animation(reduceMotion ? nil : Theme.M.kenBurns, value: kb.zoomed)
+                        .clipped()
+                        .accessibilityHidden(true)
+                }
+                LinearGradient(colors: [Theme.C.stone950.opacity(0.15), Theme.C.stone950.opacity(0.95)],
+                               startPoint: .center, endPoint: .bottom)
+                LinearGradient(colors: [Theme.C.stone950.opacity(0.85), .clear],
+                               startPoint: .leading, endPoint: .center)
+                EmberField(count: Theme.M.embers, running: !reduceMotion)
+                    .opacity(reduceMotion ? 0 : 1)
             }
         }
+        .onAppear {
+            guard !reduceMotion else { return }
+            DispatchQueue.main.async { kb.zoomed = true }   // after the first layout pass
+        }
+    }
+}
+
+struct StatusChip: View {
+    let ok: Bool
+    let label: String
+    var icon: String? = nil
+    var body: some View {
+        HStack(spacing: Theme.S.xs) {
+            Image(systemName: icon ?? (ok ? "checkmark.circle.fill" : "xmark.circle.fill"))
+                .foregroundStyle(ok ? Theme.C.laurel : Theme.C.blood)
+            Text(label).font(Theme.F.caption).foregroundStyle(Theme.C.parchment)
+        }
+        .padding(.horizontal, Theme.S.md)
+        .padding(.vertical, Theme.S.xs + 2)
+        .background(Theme.C.stone900.opacity(0.85), in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.C.stone700, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(ok ? "ok" : "faltando")")
     }
 }
 
@@ -166,10 +231,76 @@ struct Banner: View {
     let icon: String
     var body: some View {
         Label(text, systemImage: icon)
-            .padding(12)
+            .font(Theme.F.body)
+            .padding(Theme.S.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.R.md, style: .continuous))
             .foregroundStyle(color)
+    }
+}
+
+/// Sidebar entry drawn from the tokens (the system List selection would use
+/// the system accent blue, which the visual thesis forbids).
+struct SidebarRow: View {
+    let item: SidebarItem
+    let selected: Bool
+    let ns: Namespace.ID
+    let action: () -> Void
+    @StateObject private var hover = HoverState()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.S.md) {
+                Image(systemName: item.icon)
+                    .frame(width: 18)
+                    .foregroundStyle(selected ? Theme.C.goldHi : Theme.C.gold)
+                Text(item.rawValue)
+                    .font(Theme.F.body.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Theme.C.goldHi : Theme.C.parchment)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.S.md)
+            .frame(height: 34)
+            .background {
+                if selected {
+                    // One selection, sliding between rows (matchedGeometryEffect).
+                    ZStack(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: Theme.R.sm, style: .continuous)
+                            .fill(Theme.C.blood.opacity(0.22))
+                        MeanderBand()
+                            .stroke(Theme.C.gold.opacity(0.8), lineWidth: 1)
+                            .frame(height: Theme.R.meander * 0.75)
+                            .padding(.horizontal, Theme.S.sm)
+                            .padding(.bottom, 2)
+                    }
+                    .matchedGeometryEffect(id: "selection", in: ns)
+                } else if hover.on {
+                    RoundedRectangle(cornerRadius: Theme.R.sm, style: .continuous)
+                        .fill(Theme.C.stone800)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in withAnimation(Theme.M.hover) { hover.on = h } }
+        .accessibilityLabel(item.rawValue)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+/// Serif screen title, shared by every non-Play screen.
+struct ScreenHeader: View {
+    let title: String
+    let subtitle: String
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: Theme.S.sm) {
+                FireTitle(text: title.uppercased(), font: Theme.F.title, tracking: Theme.F.titleTracking)
+                Text(subtitle).font(Theme.F.body).foregroundStyle(Theme.C.ash)
+                MeanderDivider(opacity: 0.7).padding(.top, Theme.S.xs)
+            }
+            .padding(.vertical, Theme.S.xs)
+        }
     }
 }
 
@@ -180,9 +311,10 @@ struct FilesView: View {
 
     var body: some View {
         Form {
+            ScreenHeader(title: "Arquivos do jogo", subtitle: "Aponte para a sua própria cópia do jogo.")
             Section {
                 Text("Como no Dusk, o jogo não vem junto: aponte para a sua própria cópia de God of War II HD (NPUA80491). O EBOOT precisa estar descriptografado (RPCS3 → Utilities → Decrypt PS3 Binaries).")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.F.body).foregroundStyle(Theme.C.ash)
             }
             if let st = backend.status {
                 PathPicker(title: "EBOOT.ELF", path: st.elf, ok: st.elf_ok, directory: false) { url in
@@ -197,7 +329,7 @@ struct FilesView: View {
                 }
                 Section("Saves") {
                     HStack {
-                        Text(st.savedata_root).font(.caption).foregroundStyle(.secondary)
+                        Text(st.savedata_root).font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                             .lineLimit(1).truncationMode(.middle)
                         Spacer()
                         Button("Mostrar no Finder") { backend.reveal(st.savedata_root) }
@@ -206,6 +338,8 @@ struct FilesView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.C.stone950)
     }
 }
 
@@ -220,8 +354,8 @@ struct PathPicker: View {
         Section(title) {
             HStack {
                 Image(systemName: ok ? "checkmark.circle.fill" : "questionmark.circle")
-                    .foregroundStyle(ok ? .green : .orange)
-                Text(path.isEmpty ? "Não definido" : path).font(.callout)
+                    .foregroundStyle(ok ? Theme.C.laurel : Theme.C.amber)
+                Text(path.isEmpty ? "Não definido" : path).font(Theme.F.body)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer()
                 Button("Escolher…") {
@@ -242,10 +376,11 @@ struct GraphicsView: View {
     @EnvironmentObject var settings: GameSettings
     var body: some View {
         Form {
+            ScreenHeader(title: "Gráficos", subtitle: "Tela, imagem e opções avançadas.")
             Section("Tela") {
                 Toggle("Tela cheia ao abrir", isOn: $settings.fullscreen)
                 Text("F11 ou Cmd+Enter alternam durante o jogo; Esc solta o mouse.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                 Toggle("VSync", isOn: $settings.vsync)
             }
             Section("Imagem") {
@@ -253,17 +388,19 @@ struct GraphicsView: View {
                 Toggle("HDR (EDR)", isOn: $settings.hdr)
                 Toggle("Ritmo de quadros estável (fence por quadro)", isOn: $settings.frameFence)
                 Text("O fence evita um triângulo gigante que pisca por um quadro, com um pequeno custo de fps.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
             }
             Section("Avançado") {
                 Text("Variáveis PS3_* extras, uma por linha (ex.: PS3_TRACE_FPS=1)")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                 TextEditor(text: $settings.extraEnv)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 80)
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.C.stone950)
     }
 }
 
@@ -276,6 +413,7 @@ struct AudioControlsView: View {
     ]
     var body: some View {
         Form {
+            ScreenHeader(title: "Áudio e controles", subtitle: "Som, cutscenes e mapeamento.")
             Section("Áudio") { Toggle("Som ligado", isOn: $settings.soundOn) }
             Section("Cutscenes") {
                 Toggle("Pular cutscene com Start ou ✕", isOn: $settings.movieSkip)
@@ -283,7 +421,7 @@ struct AudioControlsView: View {
             }
             Section("Controle") {
                 Text("DualShock 4, DualSense, Xbox e MFi funcionam ao conectar, com vibração.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.F.body).foregroundStyle(Theme.C.ash)
             }
             Section("Teclado e mouse") {
                 ForEach(keys, id: \.0) { k in
@@ -292,6 +430,8 @@ struct AudioControlsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.C.stone950)
     }
 }
 
@@ -303,15 +443,16 @@ struct PatchesView: View {
 
     var body: some View {
         Form {
+            ScreenHeader(title: "Patches", subtitle: "Formato do RPCS3, escolhidos pelo hash do seu EBOOT.")
             Section {
                 Text("Patches no formato do RPCS3 (patch.yml), escolhidos pelo hash do seu EBOOT como o RPCS3 faz. Patches de dados funcionam aqui; patches de código não têm efeito, porque o código já foi recompilado.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.F.body).foregroundStyle(Theme.C.ash)
                 if let p = store.progress {
                     ProgressView("Analisando o EBOOT…", value: p)
                 } else if let h = store.ppuHash {
-                    LabeledContent("Executável") { Text(h).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+                    LabeledContent("Executável") { Text(h).font(Theme.F.mono).textSelection(.enabled) }
                 }
-                if let e = store.error { Banner(text: e, color: .red, icon: "exclamationmark.triangle.fill") }
+                if let e = store.error { Banner(text: e, color: Theme.C.blood, icon: "exclamationmark.triangle.fill") }
                 HStack {
                     Button("Importar patch.yml…") {
                         let panel = NSOpenPanel()
@@ -323,20 +464,20 @@ struct PatchesView: View {
                     Button("Recarregar") { Task { await store.load(elf: backend.status?.elf ?? "") } }
                 }
                 Text("Fontes: " + (store.sources.isEmpty ? "nenhuma (instale o RPCS3 ou importe um patch.yml)" : store.sources.map(\.lastPathComponent).joined(separator: ", ")))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
             }
             if store.patches.isEmpty, store.progress == nil {
-                Section { Text("Nenhum patch para este executável.").foregroundStyle(.secondary) }
+                Section { Text("Nenhum patch para este executável.").foregroundStyle(Theme.C.ash) }
             }
             ForEach(store.patches) { patch in
                 Section {
                     Toggle(isOn: Binding(get: { store.enabled.contains(patch.id) },
                                          set: { on in if on { store.enabled.insert(patch.id) } else { store.enabled.remove(patch.id) } })) {
                         HStack {
-                            Text(patch.name).font(.headline)
+                            Text(patch.name).font(Theme.F.headline)
                             Text(store.isCode(patch) ? "código · sem efeito" : "dados")
-                                .font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                                .background((store.isCode(patch) ? Color.orange : Color.green).opacity(0.2), in: Capsule())
+                                .font(Theme.F.eyebrow).padding(.horizontal, 6).padding(.vertical, 2)
+                                .background((store.isCode(patch) ? Theme.C.amber : Theme.C.laurel).opacity(0.2), in: Capsule())
                         }
                     }
                     if !patch.author.isEmpty { LabeledContent("Autor", value: patch.author) }
@@ -353,13 +494,15 @@ struct PatchesView: View {
                         }
                     }
                     if !patch.notes.isEmpty {
-                        Text(patch.notes).font(.caption).foregroundStyle(.secondary)
+                        Text(patch.notes).font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.C.stone950)
         .task(id: backend.status?.elf) { await store.load(elf: backend.status?.elf ?? "") }
     }
 }
@@ -370,9 +513,10 @@ struct ModsView: View {
     @EnvironmentObject var backend: Backend
     var body: some View {
         Form {
+            ScreenHeader(title: "Mods", subtitle: "Arquivos que substituem os da USRDIR.")
             Section {
                 Text("Mods substituem arquivos da USRDIR. Importe um .zip; ele é copiado para a pasta de mods.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.F.body).foregroundStyle(Theme.C.ash)
                 HStack {
                     Button("Importar .zip…") {
                         let panel = NSOpenPanel()
@@ -397,10 +541,12 @@ struct ModsView: View {
                     }
                 }
             } else {
-                Section { Text("Nenhum mod instalado.").foregroundStyle(.secondary) }
+                Section { Text("Nenhum mod instalado.").foregroundStyle(Theme.C.ash) }
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.C.stone950)
     }
 }
 
@@ -411,7 +557,7 @@ struct LogView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(backend.logURL.path).font(.caption).foregroundStyle(.secondary)
+                Text(backend.logURL.path).font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer()
                 Button("Atualizar") { backend.readLogTail() }
@@ -421,7 +567,7 @@ struct LogView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(backend.logTail.enumerated()), id: \.offset) { i, line in
-                            Text(line).font(.system(size: 11, design: .monospaced))
+                            Text(line).font(Theme.F.mono)
                                 .textSelection(.enabled).id(i)
                         }
                     }
@@ -440,15 +586,23 @@ struct LogView: View {
 
 struct AboutView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("GoW2 Recomp").font(.largeTitle.bold())
-            Text("God of War II HD recompilado estaticamente para macOS/arm64: o código PowerPC e SPU do jogo vira C/C++ nativo, rodando sobre uma reimplementação do sistema do PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é distribuído.")
-                .fixedSize(horizontal: false, vertical: true)
-            Link("Projeto no GitHub", destination: URL(string: "https://github.com/andrebrumdev/gow2-recomp")!)
-            Text("God of War II © Sony Interactive Entertainment. Projeto sem afiliação com a Sony; é preciso ter o jogo. Motor ps3recomp sob licença MIT.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.S.lg) {
+                FireTitle(text: "GOW2 RECOMP", font: Theme.F.title, tracking: Theme.F.titleTracking)
+                MeanderDivider(opacity: 0.7).frame(maxWidth: 520)
+                Text("God of War II HD recompilado estaticamente para macOS/arm64: o código PowerPC e SPU do jogo vira C/C++ nativo, rodando sobre uma reimplementação do sistema do PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é distribuído.")
+                    .font(Theme.F.body).foregroundStyle(Theme.C.parchment)
+                    .frame(maxWidth: 560, alignment: .leading)
+                Button {
+                    if let url = URL(string: "https://github.com/andrebrumdev/gow2-recomp") { NSWorkspace.shared.open(url) }
+                } label: { Label("Projeto no GitHub", systemImage: "arrow.up.right.square") }
+                    .buttonStyle(SecondaryButtonStyle())
+                Text("God of War II © Sony Interactive Entertainment. Projeto sem afiliação com a Sony; é preciso ter o jogo. Motor ps3recomp sob licença MIT.")
+                    .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
+                    .frame(maxWidth: 560, alignment: .leading)
+            }
+            .padding(Theme.S.hero)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(28)
     }
 }
