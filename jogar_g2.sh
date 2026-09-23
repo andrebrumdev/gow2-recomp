@@ -8,6 +8,7 @@ cd "$HERE" || exit 1
 # capturados ANTES do env_gow2.sh, que os poe incondicionalmente
 G2_DONE_MS="${PS3_MOVIE_DONE_MS-}"
 G2_MUTE="${PS3_MUTE-}"
+G2_AUTOSTART="${PS3_PAD_AUTOSTART-}"
 # Jogar abre em TELA CHEIA (F11 / Cmd+Enter / Escape voltam para janela).
 # Em janela: PS3_FULLSCREEN=0 ./jogar_g2.sh
 export PS3_FULLSCREEN="${PS3_FULLSCREEN:-1}"
@@ -33,6 +34,13 @@ export PS3_MOVIE_DONE_MS="${G2_DONE_MS:-auto}"
 # mute de verdade desde que ps3_audio_muted() passou a respeitar o valor
 # (antes QUALQUER valor mutava, ate' PS3_MUTE=0). Mutar: PS3_MUTE=1 ./jogar_g2.sh
 export PS3_MUTE="${G2_MUTE:-0}"
+# Pad automatico DESLIGADO a jogar. O env_gow2.sh liga PS3_PAD_AUTOSTART para a
+# bancada (percorre logos/menu sozinho); a jogar ele carregava START/CROSS no
+# primeiro segundo e saltava o filme de abertura -- a musica da intro nunca
+# tocava -- e ainda navegava o menu ate' o jogador tocar numa tecla. O cellPad
+# testa so' a PRESENCA da variavel (ate' "0" liga), por isso unset. Teclado e
+# comando ja' ligam a porta 0. Bancada a partir daqui: PS3_PAD_AUTOSTART=1 ./jogar_g2.sh
+if [ -n "$G2_AUTOSTART" ]; then export PS3_PAD_AUTOSTART="$G2_AUTOSTART"; else unset PS3_PAD_AUTOSTART; fi
 mkdir -p "$HERE/claude_runs"
 LOG="${JOGAR_LOG:-$HERE/claude_runs/jogar.log}"   # testar_fix.sh usa um por teste
 echo "[jogar] log: $LOG"
