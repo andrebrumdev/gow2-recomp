@@ -331,6 +331,29 @@ def play(cfg: dict, resume_autosave: bool = False) -> int:
     return 127
 
 
+def status_dict(cfg: dict) -> dict:
+    """Machine-readable state for the native macOS launcher (--status-json)."""
+    ok, msg = setup_ok(cfg)
+    binary = find_binary()
+    mods_dir = cfg.get("mods_dir") or str(DEFAULT_MODS)
+    names = list_mod_names(mods_dir)
+    return {
+        "setup_ok": ok,
+        "message": msg,
+        "elf": cfg.get("elf", ""),
+        "elf_ok": is_elf(cfg.get("elf", "")),
+        "vfs_root": cfg.get("vfs_root", ""),
+        "vfs_ok": is_usrdir(cfg.get("vfs_root", "")),
+        "movie_cache": cfg.get("movie_cache", ""),
+        "movie_cache_ok": Path(cfg.get("movie_cache") or "").is_dir(),
+        "binary": str(binary) if binary else "",
+        "autosave": autosave_available(cfg),
+        "savedata_root": str(savedata_root_of(cfg)),
+        "mods_dir": mods_dir,
+        "mods": [{"name": n, "enabled": n in (cfg.get("mods_enabled") or [])} for n in names],
+    }
+
+
 def self_test() -> int:
     import tempfile
 
@@ -398,6 +421,10 @@ def self_test() -> int:
         check(not autosave_available(cfg), "digest ruim recusado")
 
     check(is_elf("/no/such") is False, "ELF ausente")
+    st = status_dict({"elf": "/no/such", "vfs_root": "/no/such", "mods_dir": "/no/such"})
+    check(st["setup_ok"] is False and st["elf_ok"] is False and st["mods"] == [],
+          "status-json sem arquivos")
+    check(json.loads(json.dumps(st))["message"] == st["message"], "status-json serializa")
     print("gow2_launcher self-test:", "FALHOU" if fails else "PASS")
     return 1 if fails else 0
 
@@ -696,6 +723,9 @@ def main(argv: list[str]) -> int:
         return play(cfg, resume_autosave=True)
     if "--play" in args:
         return play(cfg)
+    if "--status-json" in args:
+        print(json.dumps(status_dict(cfg)))
+        return 0
     if "--play-or-ui" in args:
         ok, _ = setup_ok(cfg)
         if ok and find_binary() is not None:
@@ -716,6 +746,17 @@ def main(argv: list[str]) -> int:
             i += 2
             save = True
             continue
+        if a == "--movie-cache" and i + 1 < len(args):
+            cfg["movie_cache"] = args[i + 1]
+            i += 2
+            save = True
+            continue
+        if a == "--mods-enabled" and i + 1 < len(args):
+            names = set(list_mod_names(cfg.get("mods_dir") or str(DEFAULT_MODS)))
+            cfg["mods_enabled"] = [n for n in args[i + 1].split(",") if n in names]
+            i += 2
+            save = True
+            continue
         if a == "--import-zip" and i + 1 < len(args):
             name = import_zip(args[i + 1], cfg.get("mods_dir") or str(DEFAULT_MODS))
             enabled = list(cfg.get("mods_enabled") or [])
@@ -730,7 +771,8 @@ def main(argv: list[str]) -> int:
             i += 1
             continue
         print("uso: gow2_launcher.py [--play | --continue | --play-or-ui | --self-test]")
-        print("     [--elf PATH --usrdir PATH --save] [--import-zip ZIP]")
+        print("     [--status-json] [--elf PATH --usrdir PATH --movie-cache PATH --save]")
+        print("     [--import-zip ZIP] [--mods-enabled a,b]")
         return 2
     if save:
         save_config(cfg)

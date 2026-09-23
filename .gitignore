@@ -121,3 +121,7 @@ claude_runs/*
 /g2play*
 /recomp_macos*/
 spu_lifted/
+spu_hit_*.bin
+spu_miss_*.bin
+gcm_stream_*.bin
+/GoW2 Recomp.app/
