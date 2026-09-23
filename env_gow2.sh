@@ -17,7 +17,16 @@ export PS3_VFS_ROOT
 
 # Filmes por HLE em vez de decode real. PS3_VDEC_ASYNC=1 e obrigatorio quando
 # se liga decode de video a serio (ver o CLAUDE.md do motor).
-: "${PS3_MOVIE_HLE:=1}";        export PS3_MOVIE_HLE
+# Overlay VT do host DESLIGADO (2026-09-23): com o cellVdec a responder BUSY
+# (ps3recomp c1c1bb7a) e a entregar RGBA (4f803bb3) o jogo recebe todas as
+# imagens e desenha o proprio video; o overlay por cima fazia a intro aparecer
+# duas vezes. Medido sem ele: intro ate' ao menu, cutscene in-game inteira com
+# fim natural. PS3_MOVIE_HLE=1 repoe o overlay.
+: "${PS3_MOVIE_HLE:=0}";        export PS3_MOVIE_HLE
+# Workers de SPU: o GoW2 pede um SPURS de 2 SPUs, mas o PS3 da' 6 ao jogo. Com 2
+# as tasks do descompactador (spu0) ocupavam os dois e o mixer SCREAM ficava sem
+# vez -- som mudo no gameplay (medido 2026-09-23 por sample).
+: "${PS3_SPU_WORKERS:=6}";      export PS3_SPU_WORKERS
 
 # PS3_NOMOVIES deixou de ser 1 por default. Era, quando o macOS nao tinha
 # caminho de dados nenhum: o movie_hle.c inteiro era #ifdef _WIN32 e os
