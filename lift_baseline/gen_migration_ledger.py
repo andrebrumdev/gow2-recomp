@@ -94,6 +94,154 @@ HUMAN_COLUMNS = ("alvo", "prioridade", "aceite", "estado")
 
 CLASSES_LEDGER = ("CORRECTNESS", "PROBE", "OPD", "BUILD", "OBSOLETE")
 
+# --------------------------------------------------------------------------
+# Baseline de RUNTIME (plano 16-03).
+#
+# Ao contrario das contagens e da classificacao, estes numeros NAO sao
+# derivaveis: saem de correr o verify_lift.sh e um boot, uma vez cada. Por
+# isso vivem aqui como constante datada -- se ficassem como linha `#` escrita
+# a mao no TSV, o primeiro `--merge` apagava-os (render_tsv reconstroi o
+# cabecalho inteiro).
+#
+# REGRA (G5 / CLAUDE.md regra 4): so' se escreve aqui o que foi OBSERVADO no
+# log da corrida. Um campo que nao foi exercitado fica a None e o cabecalho
+# di-lo com todas as letras -- nunca se preenche por inferencia. Pondo
+# BASELINE_VERIFY/BASELINE_SMOKE a None, o cabecalho volta sozinho ao estado
+# "POR MEDIR ... [nivel de evidencia: nao-exercitado]".
+# --------------------------------------------------------------------------
+BASELINE_VERIFY: dict | None = {
+    "data": "2026-08-02",
+    "lift": "../gow2-recomp/recomp_macos_v2",
+    "lift_sha256": "73c8abd21abb17e829fc4186b55a5b2395a3d0e4b4f8019bf6bd8e8cc901ae7f",
+    "cmd": "PS3_ENGINE_ROOT=$(pwd) ./games/gow2/verify_lift.sh ../gow2-recomp/recomp_macos_v2",
+    "rc": 0,
+    "passos": "lift_parity=PASS MANIFEST=PASS audit_boundaries=PASS",
+    "deltas": (
+        "lift_parity current=77 baseline=77 novos=0 resolvidos=0"
+        " | MANIFEST_DEBT current=0 baseline=36 novos=0 resolvidos=36"
+        " | audit_boundaries current=180 baseline=180 novos=0 resolvidos=0"
+    ),
+    "log": "/tmp/m0_fase16_verify_lift.log (FORA dos repos, G6 -- nao versionado)",
+    "notas": (
+        "verde a' primeira, sem re-corrida e sem VERIFY_ORACLE (isso e' Fase 20)."
+        " A divida MANIFEST congelada (36) aparece toda como resolvida neste lift:"
+        " o gate passa por delta, nao por limiar"
+    ),
+}
+
+BASELINE_SMOKE: dict | None = {
+    "data": "2026-08-02",
+    "bin": "../gow2-recomp/boot_gow2 (mtime 2026-07-29 15:07; NAO reconstruido nesta corrida)",
+    "lift": (
+        "recomp_macos_v2 (producao) -- RESSALVA MEDIDA: 5 dos 7 ppu_recomp_*.cpp"
+        " sao MAIS RECENTES que o binario (31/jul vs 29/jul), logo este smoke NAO"
+        " exercita o lift que o verify_lift acima verificou"
+    ),
+    "recipe": (
+        "env_gow2.sh + PS3_NO_RSX=1 PS3_RSX_BACKEND=trace PS3_PERF_FSM=1"
+        " PS3_MOVIE_EOS=0; PS3_TRACE_* limpos; probes OFF"
+    ),
+    "duration_s": 25,
+    "kill": "PID (TERM, depois -9) -- nunca pkill -f; orfaos pos-run = 0",
+    "st620_max": (
+        "11  (sequencia observada 0->1->3->3->11->11, overlay_done=1; o sentinela"
+        " 4294967295 = 0xFFFFFFFF fica FORA do max, por smoke_m0_baseline.sh)"
+    ),
+    "sticky_hits": (
+        "NAO-OBSERVAVEL -- ps3_fios_sticky_publish/peek/consume nao imprimem nada"
+        " (zero fprintf com 'sticky' em runtime/ e libs/), por isso um grep daria"
+        " sempre 0 e 0 NAO significa 'sticky morto'. Metrica sem emissor, nao"
+        " metrica a zero"
+    ),
+    "oob_or_ffff_hits": (
+        "0  (ausencia REAL: zero ocorrencias de 'OOB' ou '0xFFFF' em 3707 linhas;"
+        " o log termina em [CONTENT] boot logo queue DONE, sem crash)"
+    ),
+    "bytes_read": (
+        "NAO-OBSERVADO -- os 3 emissores (trace dump, close stats, GATE-FORCE"
+        " R_PermA full) nao dispararam em 25s com MOVIE_EOS=0: o unico"
+        " [movieio] open foi o gow2.psarc, o R_PermA nao chegou a ser lido."
+        " Logo o aceite smoke:bytes_read=20169344 de patch_fallthrough_2550c8.py"
+        " CONTINUA nao-exercitado"
+    ),
+    "log": "/tmp/m0_fase16_smoke.log (231805 bytes, FORA dos repos, G6 -- nao versionado)",
+    "notas": (
+        "UMA corrida, sem retry (nao houve falha de vm commit). 52068 lifted"
+        " functions. st620_max=11 esta' acima do gate >=3 do CLAUDE.md."
+        " Para a Fase 21 comparar como deve ser, o smoke tera' de ser refeito"
+        " sobre um binario reconstruido do lift corrente"
+    ),
+}
+
+# --------------------------------------------------------------------------
+# Notas sobre o dominio da coluna `alvo` (renderizadas a seguir a' linha
+# "# dominio:"). Vivem aqui, e nao como linha `#` escrita a mao no TSV, porque
+# render_tsv reconstroi o cabecalho inteiro a cada `--merge` -- uma nota escrita
+# no ficheiro desaparecia no primeiro regen.
+#
+# `lifter` foi acrescentado ao dominio na Fase 17 (plano 17-03). Antes disso o
+# unico destino disponivel para um defeito de TRADUCAO era `midasm` ou
+# `runtime`, e foi por falta de vocabulario que o patch_fallthrough_2550c8.py
+# ficou classificado como `midasm` na Fase 16.
+# --------------------------------------------------------------------------
+NOTAS_ALVO: list[str] = [
+    "# alvo=lifter (dominio alargado na Fase 17 / plano 17-03): o defeito e' de"
+    " TRADUCAO e o fix pertence ao tools/ppu_lifter.py -- nem hook host, nem"
+    " runtime, nem tabela declarada no TOML. Envolve-lo num mid-asm esconderia"
+    " um bug do lifter atras de codigo host, e o proprio plano de origem manda"
+    " o contrario: 'preferir fix no lifter se sistematico'.",
+    "#   patch_fallthrough_2550c8.py: RECLASSIFICADO de alvo=midasm para"
+    " alvo=lifter nesta fase. A causa medida e' um fallthrough cross-fragment"
+    " ERRADO -- func_002550C8 caia em func_002550E8 em vez de func_00255178.",
+    "#   Continua estado=todo e P0: a reclassificacao corrige o MECANISMO, nao"
+    " declara o trabalho feito. A auditoria sistematica do padrao (alvo com EA"
+    " guest MENOR que o site) esta' na lista P1 do CLAUDE.md e nao e' da Fase 17.",
+    "# estado=redundant (dominio alargado na Fase 18 / plano 18-03): o mecanismo"
+    " ja' produz o aceite SEM o patch e sem qualquer declaracao -- logo nao houve"
+    " migracao nenhuma, descobriu-se que o patch nao era preciso. E' distinto de"
+    " `migrated` (o patch era necessario e o mecanismo passou a fazer o trabalho)"
+    " e de `wont` (decidiu-se nao migrar). A distincao existe para a metrica: um"
+    " `redundant` NAO conta para os >=3 fixes re-lift-safe do XEN-05; contam-se em"
+    " separado e a Fase 21 mede os dois numeros.",
+]
+
+# --------------------------------------------------------------------------
+# Notas de classificacao por familia. Mesma razao de viverem aqui: o cabecalho
+# e' reconstruido a cada `--merge`.
+# --------------------------------------------------------------------------
+NOTAS_ESTADO: list[str] = [
+    "# subclasse=jumptable (CLASSIFICADA na Fase 18 / plano 18-03, por medicao"
+    " numa escada A/B/C sobre dois re-lifts completos da MESMA EBOOT):",
+    "#   (A) re-lift SEM patch e SEM --config: os dois aceites grep do ledger ja'"
+    " saem emitidos, e nao por acaso -- o `case` cai dentro do switch da funcao"
+    " certa (func_002A209C e func_002B11B8) com 54 e 22 alvos distintos, os MESMOS"
+    " numeros que os proprios patches instalariam (54/54 e 22/22, oraculo do 18-02),"
+    " e com `default: ps3_indirect_call(ctx); return;`. O discover_jump_tables"
+    " encontra as duas tabelas sozinho => estado=redundant nos dois.",
+    "#   (B) re-lift SEM patch e COM --config (as duas tabelas declaradas em"
+    " games/gow2/config/gow2_switch_tables.toml): identico ao (A), 54 e 22. A"
+    " declaracao nao e' load-bearing hoje; e' rede. Como (A) ja' passa, a regra do"
+    " 18-CONTEXT manda `redundant` e NAO `migrated` -- inflar aqui seria contar"
+    " como fix re-lift-safe um patch que nunca foi preciso.",
+    "#   (C) correr o patch por cima do lift (B): patch_jumptable_2a209c.py"
+    " verifica os 54 alvos e imprime 'nada a injectar' (rc=0, SHA256 do chunk"
+    " IGUAL byte a byte) -- e' ja' um verificador idempotente. Ha' RESSALVA no"
+    " 2b11b8: ver a nota seguinte.",
+    "#   RESSALVA MEDIDA (patch_jumptable_2b11b8.py): ao contrario do 2a209c, este"
+    " NAO e' no-op no passo (C) -- ainda substitui o calculo do CTR (a leitura de"
+    " TOC-0x151C na memoria guest) por uma tabela hardcoded. O switch fica intacto"
+    " e nao ha' dupla injeccao, mas esse residuo NAO e' a jump table e portanto NAO"
+    " esta' coberto pelo veredicto `redundant`, que se refere ao `aceite` desta"
+    " linha (alvo=switch_table). Medido estaticamente na EBOOT: [TOC-0x1694] ="
+    " 0x002A2134 e [TOC-0x151C] = 0x002B1228 -- exactamente as bases que os patches"
+    " hardcoded usam, ou seja a leitura que o lift faz esta' correcta NA IMAGEM."
+    " Isso enfraquece muito a hipotese original ('ICALL-BAD ctr=0x27182818') mas"
+    " NAO a refuta em runtime. Por isso o ficheiro NAO foi tocado nem apagado: o"
+    " lift de producao recomp_macos_v2 ainda leva este patch aplicado (marcador"
+    " 'Task4 FIX' presente) e remover o residuo exige um A/B IN-BOOT no caminho do"
+    " typemap/WAD, que o smoke de intro de 25s nao exercita.",
+]
+
 # Colunas do PATCH_CATALOG.tsv (a linha de cabecalho la' e' comentada, por
 # isso lemos os nomes do proprio ficheiro quando possivel e caimos aqui).
 CATALOG_COLUMNS_FALLBACK = (
@@ -316,6 +464,46 @@ def build_rows(
     return rows
 
 
+def linha_classificada(row: dict) -> bool:
+    """A linha ja' passou pela decisao humana da 16-02?
+
+    Regra (identica a' do `<verify>` do 16-02-PLAN.md, para que o numero do
+    cabecalho e o do gate nunca divirjam): as 4 colunas humanas preenchidas,
+    com a excepcao de `prioridade`, que e' legitimamente vazia nas linhas
+    PROBE (o dominio de LEDG-01 diz "P0|P1|P2 ou vazio (so' PROBE)").
+    """
+    if not (row.get("alvo") and row.get("aceite") and row.get("estado")):
+        return False
+    return row.get("classe") == "PROBE" or bool(row.get("prioridade"))
+
+
+def contar_classificacao(rows: list[dict]) -> dict[str, object]:
+    """Contagens DERIVADAS das colunas humanas (nunca escritas a mao).
+
+    O cabecalho tem de dizer quantas linhas ja' foram decididas e quais sao os
+    candidatos a piloto das Fases 17/18. Se esses numeros fossem comentarios
+    escritos a mao, o primeiro regen tornava-os mentira -- e' o mesmo motivo
+    pelo qual `classe` e `ea` sao derivadas.
+    """
+    classificados = [r for r in rows if linha_classificada(r)]
+    por_prio: dict[str, int] = {}
+    for r in classificados:
+        if r.get("prioridade"):
+            por_prio[r["prioridade"]] = por_prio.get(r["prioridade"], 0) + 1
+    def _p0(alvo: str) -> list[str]:
+        return sorted(
+            r["patch"]
+            for r in classificados
+            if r.get("prioridade") == "P0" and r.get("alvo") == alvo
+        )
+    return {
+        "n_classificados": len(classificados),
+        "por_prioridade": por_prio,
+        "piloto_midasm": _p0("midasm"),
+        "piloto_switch_table": _p0("switch_table"),
+    }
+
+
 def medir_contagens(
     catalog: dict[str, dict], build_dir: Path, mono_dir: Path
 ) -> dict[str, object]:
@@ -335,6 +523,58 @@ def medir_contagens(
 # ---------------------------------------------------------------------------
 # Render
 # ---------------------------------------------------------------------------
+
+
+def linhas_baseline_runtime() -> list[str]:
+    """Cabecalho do baseline medido (plano 16-03).
+
+    Funcao pura sobre BASELINE_VERIFY/BASELINE_SMOKE. Cada bloco cai para
+    "POR MEDIR ... [nivel de evidencia: nao-exercitado]" quando a constante
+    e' None -- ausencia de medicao nunca vira campo com ar de preenchido.
+    """
+    out: list[str] = []
+
+    if BASELINE_VERIFY is None:
+        out.append(
+            "# baseline verify_lift: POR MEDIR (plano 16-03) -- rc=?"
+            " [nivel de evidencia: nao-exercitado]"
+        )
+    else:
+        b = BASELINE_VERIFY
+        out += [
+            f"# baseline verify_lift ({b['data']}, UMA corrida, medido"
+            " [nivel de evidencia: offline-unit]):",
+            f"#   LIFT={b['lift']} (producao: default de build_macos.sh e"
+            " apply_all_patches.sh)",
+            f"#   LIFT_SHA256={b['lift_sha256']}  (cat ppu_recomp_*.cpp)",
+            f"#   cmd={b['cmd']}",
+            f"#   rc={b['rc']}  ({b['passos']})",
+            f"#   deltas={b['deltas']}",
+            f"#   log={b['log']}",
+            f"#   notas={b['notas']}",
+        ]
+
+    if BASELINE_SMOKE is None:
+        out.append(
+            "# baseline smoke intro: POR MEDIR (plano 16-03) -- st620_max=?"
+            " sticky=? oob_pos_tls=? [nivel de evidencia: nao-exercitado]"
+        )
+    else:
+        s = BASELINE_SMOKE
+        out += [
+            f"# baseline smoke intro ({s['data']}, UMA corrida, medido"
+            " [nivel de evidencia: in-boot]):",
+            f"#   bin={s['bin']}  LIFT={s['lift']}",
+            f"#   recipe={s['recipe']}  duration_s={s['duration_s']}  kill={s['kill']}",
+            f"#   st620_max={s['st620_max']}",
+            f"#   sticky_hits={s['sticky_hits']}",
+            f"#   oob_or_ffff_hits={s['oob_or_ffff_hits']}",
+            f"#   bytes_read={s['bytes_read']}",
+            f"#   log={s['log']}",
+            f"#   notas={s['notas']}",
+        ]
+
+    return out
 
 
 def render_tsv(rows: list[dict], contagens: dict, data: str | None = None) -> str:
@@ -372,25 +612,57 @@ def render_tsv(rows: list[dict], contagens: dict, data: str | None = None) -> st
         f" restantes, {com_pista} trazem pista nao confirmada em ea_pista_nome"
         " (sem EA verificada nao ha' midasm/weak, logo nao ha' P0)",
         f"#   divergencia build-monorepo = {n_build} - {n_mono} = {n_build - n_mono}"
-        " (declarada; reconciliar o subtree e' divida do v1.0, FORA de escopo)",
+        + (
+            " (declarada; reconciliar o subtree e' divida do v1.0, FORA de escopo)"
+            if n_build != n_mono
+            else " (espelho subtree em dia nesta corrida -- a divida do v1.0 nao"
+            " aparece nesta medicao; nao e' uma afirmacao sobre o conteudo dos"
+            " ficheiros, so' sobre a contagem)"
+        ),
     ]
     if so_no_mono:
         header.append(
             f"#   {len(so_no_mono)} patch(es) existem SO' no espelho monorepo e NAO tem"
             f" linha (o build nao os aplica): {', '.join(so_no_mono)}"
         )
+    header += linhas_baseline_runtime()
     header += [
-        "# baseline verify/smoke: POR MEDIR (plano 16-03) -- rc=? st620_max=? sticky=?"
-        " oob_pos_tls=? [nivel de evidencia: nao-exercitado]",
         "# dominio: classe in {CORRECTNESS,PROBE,OPD,BUILD,OBSOLETE} (BUILD reservado,"
-        " hoje sem ocorrencias) | alvo in {midasm,weak,switch_table,invalid_insn,runtime,"
-        "keep-probe,delete} | prioridade in {P0,P1,P2} | estado in {todo,migrated,wont}",
+        " hoje sem ocorrencias) | alvo in {midasm,weak,switch_table,invalid_insn,lifter,"
+        "runtime,keep-probe,delete} | prioridade in {P0,P1,P2} | estado in {todo,migrated,"
+        "redundant,wont}",
+    ] + NOTAS_ALVO + NOTAS_ESTADO + [
         "# mapa classe (derivado, ver 16-RESEARCH.md e o docstring de gen_migration_ledger.py):",
         "#   PROBE+orfao-sem-fonte->OBSOLETE | PROBE->PROBE | FUNCIONAL+opd->OPD |"
         " FUNCIONAL->CORRECTNESS",
         "# alvo/prioridade/aceite vazios = decisao humana pendente (plano 16-02).",
         "# aceite tem de ser executavel: grep:<padrao> | contract:<id CONTRACTS.tsv> |"
         " smoke:<metrica>. 'verificar manualmente' e' proibido.",
+    ]
+
+    cls = contar_classificacao(rows)
+    prio = cls["por_prioridade"]
+    resumo_prio = " ".join(
+        f"N_{p}={prio[p]}" for p in ("P0", "P1", "P2") if p in prio
+    ) or "N_P0=0"
+    midasm = cls["piloto_midasm"] or ["(nenhum P0 com alvo=midasm ainda)"]
+    switch = cls["piloto_switch_table"] or ["(nenhum P0 com alvo=switch_table ainda)"]
+    header += [
+        f"# classificacao humana ({data}, DERIVADA das 4 colunas humanas, recontada"
+        f" a cada regen): N_classificados={cls['n_classificados']} {resumo_prio}",
+        "# criterio das linhas classificadas (plano 16-02, decidido a mao):",
+        "#   (a) os candidatos de maior impacto nomeados pelo ROADMAP (fallthrough"
+        " 2550C8, jumptables 2A209C/2B11B8, CE03C, factory OPD / ICG ctor, host inflate);",
+        "#   (b) toda a familia classe=OPD com EA confirmada -- e' a unica com"
+        " contratos ja' escritos em CONTRACTS.tsv, logo com aceite executavel HOJE;",
+        "#   (c) linhas CORRECTNESS cujo marcador tem dono unico em CONTRACTS.tsv ou"
+        " cujo marcador exclusivo foi medido presente no lift de producao.",
+        "# criterio P0 (os TRES, 16-CONTEXT.md): classe in {CORRECTNESS,OPD} E toca o"
+        " caminho de boot medido (intro -> WAD -> typemap) E `ea` CONFIRMADA (0x...,"
+        " coluna derivada). `ea='-'` limita a P1 mesmo quando o corpo do script nomeia"
+        " a funcao -- escrever `ea` a mao quebraria o regen.",
+        f"# piloto sugerido Fase 17 (mid-asm): {', '.join(midasm)}",
+        f"# piloto sugerido Fase 18 (jtable):  {', '.join(switch)}",
     ]
 
     lines = list(header)

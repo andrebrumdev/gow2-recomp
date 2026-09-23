@@ -18,6 +18,17 @@ ver 04-CONTEXT.md e 04-01-PLAN.md para a medicao completa contra o corpus):
   2. Senao, o ficheiro contem a frase literal "Diagnostic only" -> PROBE /
      diagnostico. Medido: casa em exactamente 1 ficheiro
      (patch_cc9d0_live_yield.py).
+  2b. Senao, o ficheiro AUTO-DECLARA-SE "GATE DE DIAGNOSTICO (nao e' um fix)"
+     E injecta um gate de ambiente `getenv("PS3_...")` -> PROBE / diagnostico.
+     E' o gemeo do ramo 2 na lingua em que o corpus esta escrito, e exige a
+     CONJUNCAO: 95 dos 140 patches tem gate de ambiente sem serem
+     diagnosticos, portanto o mecanismo sozinho nao classifica; e uma
+     declaracao sem mecanismo seria uma frase a comprar saida do gate.
+     Medido (2026-08-03): casa em exactamente 4 ficheiros --
+     patch_218364_pool_null_gate.py, patch_24e3d0_null_product_gate.py,
+     patch_254610_empty_list_gate.py, patch_2547f8_empty_list_gate.py.
+     Ver RECLASSIFICACAO_2026_08_03 (rendido no cabecalho do TSV) para a
+     medicao que abriu a questao e para o custo declarado desta regra.
   3. Senao, o NOME casa `_probe.py$` ou `_trace.py$` E o CORPO do ficheiro
      SEM o docstring do modulo nao contem nenhum token de despacho
      (DISPATCH_RE) -> PROBE / diagnostico. Se o nome sugerir probe/trace MAS
@@ -65,6 +76,42 @@ DISPATCH_RE = re.compile(
 )
 
 PROBE_NAME_RE = re.compile(r"_probe\.py$|_trace\.py$")
+
+# Ramo 2b: auto-declaracao de gate de diagnostico, na lingua do corpus, MAIS o
+# mecanismo que a torna verdadeira (env var, OFF por omissao). A conjuncao e'
+# deliberada -- ver o docstring do modulo.
+DIAG_GATE_DECL_RE = re.compile(r"GATE DE DIAGNOSTICO \(nao e' um fix\)")
+ENV_GATE_RE = re.compile(r'getenv\(\\?"PS3_')
+
+# Bloco rendido no cabecalho do PATCH_CATALOG.tsv: a reclassificacao tem de ser
+# RASTREAVEL no proprio artefacto, com a medicao que a motivou, nunca so' numa
+# nota de sessao que ninguem volta a abrir.
+RECLASSIFICACAO_2026_08_03 = (
+    "# RECLASSIFICACAO 2026-08-03 (ramo 2b) -- quatro patches passam de"
+    " FUNCIONAL/misc a PROBE/diagnostico:",
+    "#   patch_218364_pool_null_gate.py (PS3_POOL_NULL_IF_BAD),"
+    " patch_24e3d0_null_product_gate.py (PS3_24E3D0_KEEP_TYPE_ON_NULL),",
+    "#   patch_254610_empty_list_gate.py (PS3_LIST254_EMPTY_IF_NULL),"
+    " patch_2547f8_empty_list_gate.py (PS3_LIST547_EMPTY_IF_BAD).",
+    "#   Os quatro abrem o docstring com \"GATE DE DIAGNOSTICO (nao e' um"
+    " fix)\" e injectam codigo atras de uma env var OFF por omissao -- sem a",
+    "#   var sao no-op comportamental, e o CLAUDE.md (regras 5 e 6) proibe"
+    " apresenta-los como correccao.",
+    "#   MEDICAO que abriu a questao (2026-08-03, por leitura pura dos tres"
+    " lifts em disco): patch_24e3d0_null_product_gate.py exige",
+    "#   count(agulha)==1 por chunk e a agulha `vm_write16(ctx->gpr[9] + 0x6,"
+    " ctx->gpr[0]);` aparece 38 vezes -- 38 em recomp_macos_v5promo,",
+    "#   38 em recomp_macos_v4ord e 38 em recomp_macos_v2 (PRODUCAO). Falha"
+    " identica nos tres, e o seu marcador 24E3D0-NULLPROD-GATE nunca",
+    "#   entrou no MANIFEST.tsv: nao e' divida de re-lift, e' um patch que"
+    " nunca aplicou a esta geracao de lift. O patch NAO foi corrigido nem",
+    "#   apagado -- so' a classificacao estava errada.",
+    "#   CUSTO DECLARADO desta regra: raio de 4 patches; os outros 3 estavam"
+    " APPLIED na etapa 4 de 2026-08-03. Saem do gate por CLASSE, nao por",
+    "#   falharem -- e' uma perda de cobertura real, assumida em nome da regra"
+    " (a classe e' propriedade do comportamento, nao do nome nem da",
+    "#   conveniencia do dia). Ver games/gow2/notes/2026-08-03-promocao-final.md.",
+)
 
 # Primeiro token do nome do ficheiro que casar decide a subclasse FUNCIONAL
 # (ramo 4). Ordem importa -- "groupend"/"opdisp" mapeiam para "opd" antes de
@@ -139,6 +186,12 @@ def classify(name: str, src: str) -> tuple[str, str, bool]:
     if "Diagnostic only" in src:
         return ("PROBE", "diagnostico", True)
 
+    # Ramo 2b: gate de diagnostico auto-declarado E mecanicamente OFF por
+    # omissao. Conjuncao: a declaracao sozinha nao compra saida do gate, e o
+    # gate de ambiente sozinho existe em 95 dos 140 patches.
+    if DIAG_GATE_DECL_RE.search(src) and ENV_GATE_RE.search(src):
+        return ("PROBE", "diagnostico", True)
+
     # Ramo 3: nome sugere probe/trace -- decide o CORPO (sem docstring), nao
     # o nome. Nome mente, comportamento manda.
     if PROBE_NAME_RE.search(name):
@@ -171,6 +224,17 @@ def razao_para(src: str, classe: str, subcls: str) -> str:
         return (
             "instrumentacao diagnostica auto-declarada (Diagnostic only), "
             "gated por env, OFF por omissao"
+        )
+
+    if DIAG_GATE_DECL_RE.search(src) and ENV_GATE_RE.search(src):
+        var = ""
+        m = re.search(r'getenv\(\\?"(PS3_[A-Z0-9_]+)', src)
+        if m:
+            var = f", gate={m.group(1)}"
+        return (
+            "GATE DE DIAGNOSTICO auto-declarado (\"nao e' um fix\") com env var "
+            f"OFF por omissao{var} -- sem a var e' no-op comportamental; "
+            "ver RECLASSIFICACAO 2026-08-03 no cabecalho"
         )
 
     return "sufixo _probe/_trace, corpo sem tokens de despacho (diagnostico puro)"
@@ -250,6 +314,9 @@ def render_tsv(rows: list[dict], patch_dir: Path) -> str:
         " 64 FUNCIONAL / 23 PROBE / 87 total -- corrigiu os 73/71 desactualizados do"
         " ROADMAP. Os numeros da linha acima sao os DESTA geracao e sobrepoem-se a"
         " estes; qualquer divergencia e' crescimento do corpus, nao erro.",
+    ]
+    header.extend(RECLASSIFICACAO_2026_08_03)
+    header += [
         "# " + "\t".join(COLUMNS),
     ]
     lines = list(header)

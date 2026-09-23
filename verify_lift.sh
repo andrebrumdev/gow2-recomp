@@ -16,11 +16,29 @@
 # so' falha por achado NOVO face a divida ja' declarada (grupo opd-dispatch,
 # Fase 3), nao pelo rc absoluto de gen_manifest.py --verify.
 #
-# O oraculo (I4/I5, item 3 do plano de adopcao) fica FORA -- corre-se
-# audit_boundaries.py SEM --oracle.
+# O oraculo (I4/I5, item 3 do plano de adopcao) e' um 4o passo OPT-IN
+# (Fase 20): so' corre com VERIFY_ORACLE=1. SEM a variavel este script corre
+# exactamente como antes -- os mesmos 3 passos, o mesmo rc, sem consultar o
+# Ghidra e sem exigir que ele esteja instalado. Isto nao e' preferencia: este
+# script esta no caminho de aceitacao (accept_relift.sh, perna 2) e mudar o
+# default alteraria o que o projecto aceita hoje.
+#
+# Com VERIFY_ORACLE=1 corre-se:
+#   4. oracle_manifest.py check   (proveniencia: sha256 do ELF no
+#                                  ghidra_out/MANIFEST.json; absent/stale
+#                                  falham ALTO, nunca passam em silencio)
+#      + audit_boundaries.py --oracle  ->  ids I4/I5
+#      + baseline_delta.py vs lift_baseline/ORACLE_BASELINE.json
+# Tambem aqui o criterio e' DELTA, nunca limiar absoluto: o corpus tem 137 I4
+# e 5154 I5 historicos (medido 2026-08-02) -- um gate por contagem nascia
+# vermelho e seria ignorado. Politica do conjunto: todos os I4 + I5
+# `extende-seguro` e `encurta`; `extende-funde` fica contado mas FORA do gate
+# (a lacuna ja' e' reclamada por outra funcao nossa e a discordancia pode ser
+# legitima). Ver tools/oracle_manifest.py.
 #
 # Uso:  ./verify_lift.sh LIFT_DIR
-# rc=0  os 3 passos passam (delta limpo nos 3 -- lift_parity, MANIFEST, audit_boundaries)
+#       VERIFY_ORACLE=1 ./verify_lift.sh LIFT_DIR
+# rc=0  os passos activos passam (delta limpo)
 # rc=1  pelo menos um passo falhou
 # rc=2  erro de uso (LIFT_DIR ausente, ELF/functions.json/baseline em falta)
 #
@@ -29,6 +47,11 @@
 #   PS3_FUNCTIONS    caminho do functions.json (default: $LIFT_DIR/../functions.json)
 #   PS3_ENGINE_ROOT  raiz do motor (default: dois niveis acima deste script)
 #   PS3_PATCH_PYTHON interpretador python (default: .venv/bin/python3 do motor)
+#   VERIFY_ORACLE    1 liga o 4o passo (default: desligado)
+#   PS3_GHIDRA_OUT       export do Ghidra (default: $LIFT_DIR/../ghidra_out)
+#   PS3_ORACLE_FUNCTIONS default: $PS3_GHIDRA_OUT/functions.json
+#   PS3_ORACLE_MANIFEST  default: $PS3_GHIDRA_OUT/MANIFEST.json
+#   PS3_ORACLE_BASELINE  default: lift_baseline/ORACLE_BASELINE.json
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -47,6 +70,13 @@ fi
 GOW2_ROOT="$(dirname "$LIFT")"
 ELF="${PS3_ELF:-$GOW2_ROOT/EBOOT.ELF}"
 FUNCTIONS="${PS3_FUNCTIONS:-$GOW2_ROOT/functions.json}"
+
+# Oraculo (so' usado com VERIFY_ORACLE=1; resolver aqui nao custa nada e
+# mantem os defaults num sitio so').
+GHIDRA_OUT="${PS3_GHIDRA_OUT:-$GOW2_ROOT/ghidra_out}"
+ORACLE_FUNCTIONS="${PS3_ORACLE_FUNCTIONS:-$GHIDRA_OUT/functions.json}"
+ORACLE_MANIFEST="${PS3_ORACLE_MANIFEST:-$GHIDRA_OUT/MANIFEST.json}"
+ORACLE_BASELINE="${PS3_ORACLE_BASELINE:-$BASE/ORACLE_BASELINE.json}"
 
 [ -f "$ELF" ] || { echo "ERRO: ELF em falta: $ELF (defina PS3_ELF)" >&2; exit 2; }
 [ -f "$FUNCTIONS" ] || { echo "ERRO: functions.json em falta: $FUNCTIONS (defina PS3_FUNCTIONS)" >&2; exit 2; }
@@ -74,6 +104,10 @@ echo "LIFT:      $LIFT"
 echo "SHA256:    ${SHA:-<sem chunks ppu_recomp_*.cpp>}"
 echo "ELF:       $ELF"
 echo "FUNCTIONS: $FUNCTIONS"
+case "${VERIFY_ORACLE:-0}" in
+    1|true|yes|on) echo "ORACULO:   LIGADO (VERIFY_ORACLE=1) -- $GHIDRA_OUT" ;;
+    *)             echo "ORACULO:   desligado (opcional: VERIFY_ORACLE=1)" ;;
+esac
 echo
 
 NAMES=()
@@ -137,9 +171,41 @@ PYEOF
         --label audit_boundaries
 }
 
+oracle_step() {
+    # 1. Proveniencia primeiro: um export sem MANIFEST (absent) ou de outro
+    #    ELF (stale) nao pode ser tratado como oraculo. Falha ALTO.
+    if [ ! -f "$ORACLE_FUNCTIONS" ]; then
+        echo "ORACLE: absent -- sem $ORACLE_FUNCTIONS"
+        echo "  produz com: ./analyze_eboot_ghidra.sh   (ou define PS3_GHIDRA_OUT)"
+        return 1
+    fi
+    "$PY" "$PS3_ROOT/tools/oracle_manifest.py" check \
+        --manifest "$ORACLE_MANIFEST" --elf "$ELF" || return 1
+    if [ ! -f "$ORACLE_BASELINE" ]; then
+        echo "ORACLE: baseline em falta: $ORACLE_BASELINE"
+        return 1
+    fi
+    # 2. I4/I5 medidos agora. SEM --gate I4,I5 (limiar absoluto e' proibido
+    #    aqui: ver cabecalho e tools/audit_boundaries.py).
+    "$PY" "$PS3_ROOT/tools/audit_boundaries.py" "$FUNCTIONS" --elf "$ELF" \
+        --oracle "$ORACLE_FUNCTIONS" --json "$TMP/oracle_current.json" \
+        --max-report 0 || return 1
+    # 3. Achados -> ids opacos -> delta contra o baseline congelado.
+    "$PY" "$PS3_ROOT/tools/oracle_manifest.py" ids \
+        --report "$TMP/oracle_current.json" --out "$TMP/oracle_current.ids.json" || return 1
+    "$PY" "$BASE/baseline_delta.py" "$TMP/oracle_current.ids.json" "$ORACLE_BASELINE" \
+        --label oracle_i4_i5
+}
+
 run_step "lift_parity" parity_step
 run_step "MANIFEST" manifest_step
 run_step "audit_boundaries" bounds_step
+
+# 4o passo OPT-IN. Sem VERIFY_ORACLE=1 nada disto corre e o rc do script e'
+# identico ao de antes da Fase 20.
+case "${VERIFY_ORACLE:-0}" in
+    1|true|yes|on) run_step "oracle_ghidra" oracle_step ;;
+esac
 
 echo "== rodape =="
 overall=0

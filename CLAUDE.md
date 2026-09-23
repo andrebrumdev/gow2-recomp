@@ -11,7 +11,7 @@ Regras que valem dobrado AQUI (é o repo mais perto dos dados do jogo):
    `movie_cache/`, `spu_images/`, `*.m2v`, `*.wav`, `*.wad_ps3`, `*_text.bin`.
    O `.gitignore` cobre, mas NUNCA use `git add -A`/`.` — sempre arquivos explícitos.
 2. Push só para `origin` = fork pessoal andrebrumdev/gow2-recomp.
-3. Commits em português, sem co-autoria.
+3. Commits em pt-BR, sem co-autoria. **Output ao usuário em pt-BR**; raciocínio/planos/código internos em **inglês** (ver `../ps3recomp/CLAUDE.md` § Idioma).
 4. `ppu_recomp_XXX.cpp/.h/.o` são gitignored (gigantes, regeneráveis) — fixes neles viram
    scripts idempotentes commitados (`patch_fallthrough_2550c8.py` é o modelo) e são
    reaplicados após cada re-lift.
@@ -31,7 +31,7 @@ Atalhos:
 ### Port Apple (obrigatório ler no motor)
 
 Qualquer feature **macOS** (janela, vídeo, áudio, RSX, perf): seguir
-`../ps3recomp/Claude.md` § **«Port Apple / macOS — optimização e baixo nível»**.
+`../ps3recomp/Claude.md` § **«Port Apple / macOS — otimização e baixo nível»**.
 
 - Default GPU: **Metal nativo** (`PS3_RSX_BACKEND=metal`), não “port preguiçoso” do Win.
 - Vídeo overlay: **VideoToolbox** (planos M0/M4), não ffmpeg CLI nem reencode Theora.

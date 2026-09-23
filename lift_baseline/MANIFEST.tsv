@@ -214,7 +214,7 @@ g_wadld_eof_ea	GLOBAL	2	ppu_recomp_001.cpp
 k_cap	GLOBAL	2	ppu_recomp_001.cpp
 k_fl_pin	GLOBAL	15	ppu_recomp_001.cpp
 k_ty15_pin	GLOBAL	26	ppu_recomp_001.cpp
-g_trampoline_fn	PREAMBLE	168753	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp
+g_trampoline_fn	PREAMBLE	56	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp	AMBITO:preambulo  REBASE 2026-08-03: 168753 era a contagem do FICHEIRO INTEIRO num lift lifter-rev 0852305 (2026-07-26). Este marcador e' PREAMBLE e o que ele diz verificar e' a SOBREVIVENCIA do preambulo puro -- medido, o preambulo tem 56 ocorrencias (8 por chunk x 7) na producao E em qualquer lift pos-fix; a diferenca toda vivia no CORPO (168697 vs 168379), que mede a FORMA do lifter e nao a sobrevivencia. O fix 0585636 (2026-07-30, registo-base da jump table) recuperou 22 dispatchers com 204 alvos sem perder um unico dos 125 ja' resolvidos: -317 daqui, -2 da Fase 17 (patch_ce03c migrado para midasm_hook) e +1 da Fase 19 (weak override de func_002C0498) somam os -318 medidos. Limiar 56 = ocorrencias no preambulo, reproduzivel com: gen_manifest.py <LIFT> --preamble-counts. Ver games/gow2/notes/2026-08-03-trampoline-fn-deficit.md e -promocao.md
 ps3_indirect_call	PREAMBLE	15759	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp,ppu_recomp_004.cpp,ppu_recomp_005.cpp,ppu_recomp_006.cpp	GRUPO:opd-dispatch
 f2b_fo_mfd_get	SYM	4	ppu_recomp_001.cpp
 f2b_fo_mfd_put	SYM	3	ppu_recomp_001.cpp
@@ -248,7 +248,7 @@ ps3_indirect_tail	SYM	478	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.c
 ps3_mp_ctor	SYM	1	ppu_recomp_000.cpp
 ps3_mp_dump_summary	SYM	5	ppu_recomp_000.cpp
 ps3_mp_gate_on	SYM	4	ppu_recomp_000.cpp
-ps3_mp_on_enter	SYM	17	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp
+ps3_mp_on_enter	SYM	16	ppu_recomp_000.cpp,ppu_recomp_001.cpp,ppu_recomp_002.cpp,ppu_recomp_003.cpp	REBASE 2026-08-03 (correccao SEPARADA da do g_trampoline_fn, com prova propria): o 17 era satisfeito na producao por um SITIO DUPLICADO, nao por um sitio a mais. Medido, linha a linha, nos tres lifts: 1 definicao + 3 declaracoes forward + N call sites; os ids unicos de call site sao 12 em recomp_macos_v2, 12 em recomp_macos_v4ord e 12 em recomp_macos_v3_e2e. A producao emite ps3_mp_on_enter(9,ctx) DUAS vezes (ppu_recomp_001.cpp:48392 e :48398, seis linhas de intervalo) -- o bloco MENUPRESENT-PROBE id=9 injectado duas vezes pela janela fixa de 200 caracteres do patch_menu_present_schedule_probe.py numa 2a passagem (defeito D4). A ordem declarativa (PATCH_DEPS.tsv, 2026-08-03) removeu o duplicado e o gate acusou a REMOCAO. 16 = 12 sitios unicos + 1 definicao + 3 declaracoes. Zero sitios reais perdidos. Reproduzivel com: grep -oh 'ps3_mp_on_enter([0-9]*,' <LIFT>/ppu_recomp_*.cpp | sort | uniq -c. Ver games/gow2/notes/2026-08-03-promocao.md
 ps3_mp_on_sigterm	SYM	3	ppu_recomp_000.cpp
 ps3_plp_ctor	SYM	1	ppu_recomp_000.cpp
 ps3_plp_dump_summary	SYM	5	ppu_recomp_000.cpp

@@ -60,7 +60,8 @@ GRUPO_RE = re.compile(
 )
 
 
-def run_gen_manifest(lift_dir: str, manifest_path: str, python: str) -> str:
+def run_gen_manifest(lift_dir: str, manifest_path: str, python: str,
+                     host_sources=None, no_host: bool = False) -> str:
     """Invoca gen_manifest.py --verify contra `lift_dir` e devolve o stdout.
 
     SEMPRE a copia de games/gow2/lift_baseline/ (HERE), nunca a orfa de
@@ -69,10 +70,14 @@ def run_gen_manifest(lift_dir: str, manifest_path: str, python: str) -> str:
     TEXTO; o rc de gen_manifest.py --verify e' sobre o limiar ABSOLUTO, nao
     sobre o que este script decide (delta contra a divida congelada).
     """
-    result = subprocess.run(
-        [python, str(HERE / "gen_manifest.py"), lift_dir, "--verify", str(manifest_path)],
-        capture_output=True, text=True,
-    )
+    cmd = [python, str(HERE / "gen_manifest.py"), lift_dir, "--verify", str(manifest_path)]
+    # D3: sem flags, gen_manifest.py ja' usa games/gow2/hooks/ por default --
+    # estas so' existem para os testes de mutacao poderem apontar noutro sitio.
+    if no_host:
+        cmd.append("--no-host-sources")
+    for src in (host_sources or []):
+        cmd += ["--host-sources", src]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     return result.stdout
 
 
@@ -117,8 +122,9 @@ def parse_findings(stdout: str) -> dict[str, list[str]]:
     return {"individual": individual_ids, "group": group_ids}
 
 
-def build_current_ids(lift_dir: str, manifest_path: str, python: str) -> set[str]:
-    stdout = run_gen_manifest(lift_dir, manifest_path, python)
+def build_current_ids(lift_dir: str, manifest_path: str, python: str,
+                      host_sources=None, no_host: bool = False) -> set[str]:
+    stdout = run_gen_manifest(lift_dir, manifest_path, python, host_sources, no_host)
     findings = parse_findings(stdout)
     return set(findings["individual"]) | set(findings["group"])
 
@@ -135,9 +141,14 @@ def main(argv: list[str] | None = None) -> int:
                      help="em vez de comparar, escreve a divida medida agora em OUT.json")
     ap.add_argument("--python", default=sys.executable,
                      help="interpretador usado para invocar gen_manifest.py/baseline_delta.py")
+    ap.add_argument("--host-sources", action="append", default=None,
+                     help="(D3) fonte host adicional a contar; default de gen_manifest.py = games/gow2/hooks/")
+    ap.add_argument("--no-host-sources", action="store_true",
+                     help="(D3) conta so' o lift -- comportamento pre-D3")
     args = ap.parse_args(argv)
 
-    current_ids = build_current_ids(args.lift_dir, args.manifest, args.python)
+    current_ids = build_current_ids(args.lift_dir, args.manifest, args.python,
+                                    args.host_sources, args.no_host_sources)
 
     if args.freeze is not None:
         payload = {

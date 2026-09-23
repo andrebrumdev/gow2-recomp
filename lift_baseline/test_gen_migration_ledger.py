@@ -283,6 +283,57 @@ def check_determinismo() -> None:
     print("[PASS] determinismo: duas geracoes seguidas produzem TSV byte-a-byte igual")
 
 
+def check_contagem_de_classificacao_e_derivada() -> None:
+    """Teste 8: N_classificados/N_P0 e pilotos saem das colunas humanas.
+
+    O cabecalho tem de recontar a cada regen. Se estes numeros fossem um
+    comentario escrito a mao, o primeiro regen tornava-os mentira -- e' o
+    mesmo motivo pelo qual `classe` e `ea` sao derivadas.
+    """
+    # Regra de "classificada": PROBE pode ter prioridade vazia; os outros nao.
+    assert not gml.linha_classificada(
+        {"classe": "CORRECTNESS", "alvo": "midasm", "aceite": "grep:x", "estado": "todo"}
+    ), "CORRECTNESS sem prioridade nao pode contar como classificada"
+    assert gml.linha_classificada(
+        {"classe": "PROBE", "alvo": "keep-probe", "aceite": "grep:x", "estado": "todo"}
+    ), "PROBE com prioridade vazia conta"
+    assert not gml.linha_classificada(
+        {"classe": "OPD", "alvo": "weak", "aceite": "", "estado": "todo",
+         "prioridade": "P0"}
+    ), "sem aceite nao ha' linha classificada"
+
+    sintetico = [
+        {"patch": "a.py", "classe": "CORRECTNESS", "alvo": "midasm",
+         "prioridade": "P0", "aceite": "grep:x", "estado": "todo"},
+        {"patch": "b.py", "classe": "CORRECTNESS", "alvo": "switch_table",
+         "prioridade": "P0", "aceite": "grep:y", "estado": "todo"},
+        {"patch": "c.py", "classe": "OPD", "alvo": "weak",
+         "prioridade": "P1", "aceite": "contract:z", "estado": "todo"},
+        {"patch": "d.py", "classe": "CORRECTNESS", "alvo": "", "prioridade": "",
+         "aceite": "", "estado": "todo"},
+    ]
+    got = gml.contar_classificacao(sintetico)
+    assert got["n_classificados"] == 3, got
+    assert got["por_prioridade"] == {"P0": 2, "P1": 1}, got
+    assert got["piloto_midasm"] == ["a.py"], got
+    assert got["piloto_switch_table"] == ["b.py"], got
+
+    # E o cabecalho renderizado mostra mesmo esses numeros.
+    catalog = gml.load_catalog(CATALOG)
+    rows = gml.build_rows(catalog, BUILD_DIR, MONO_DIR)
+    texto = gml.render_tsv(rows, gml.medir_contagens(catalog, BUILD_DIR, MONO_DIR))
+    blob = "\n".join(l for l in texto.splitlines() if l.startswith("#"))
+    assert "N_classificados=" in blob, blob
+    assert "piloto sugerido Fase 17" in blob, blob
+    assert "piloto sugerido Fase 18" in blob, blob
+    print(
+        "[PASS] contagem de classificacao derivada: linha_classificada() aceita "
+        "PROBE sem prioridade e recusa CORRECTNESS sem ela; contar_classificacao() "
+        "da 3 classificados / P0=2 P1=1 e nomeia os pilotos midasm e switch_table; "
+        "render_tsv() escreve N_classificados e os dois pilotos no cabecalho"
+    )
+
+
 def main() -> int:
     checks = (
         check_mapa_de_classes_contra_patches_reais,
@@ -292,6 +343,7 @@ def main() -> int:
         check_merge_preserva_trabalho_humano,
         check_cabecalho_e_colunas,
         check_determinismo,
+        check_contagem_de_classificacao_e_derivada,
     )
     for check in checks:
         check()

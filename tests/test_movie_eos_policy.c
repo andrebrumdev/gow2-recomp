@@ -27,6 +27,7 @@
 #include <time.h>
 
 #include "../movie_eos_arm.h"
+#include "../../../libs/video/movie_clock.h"
 
 /* --- simbolos que o movie_eos_arm.c espera do runtime/host ---------------- */
 
@@ -41,6 +42,10 @@ void           movie_vt_clear_overlay_done(void) {}
 #endif
 void           rsx_host_boot_logo_tick(void) {}
 void           ppu_blockmark_dump(void) {}
+void           movie_clock_note(int sequence_open, int ingame_index)
+{ (void)sequence_open; (void)ingame_index; }
+int            movie_clock_ingame_index(void) { return 0; }
+int            vdec_startseq_count(void) { return 0; }
 
 /* Mapa de commits falso: so a primeira pagina conta como commitada. A segunda
  * fica PROT_NONE de propósito (ver o cabecalho).
@@ -63,10 +68,22 @@ static int g_committed_consulted = 0;
  *
  * Nada nestes enderecos e' lido: o can_sample so decide, nao desreferencia.
  */
+static int g_voice_table_committed = 1;
+
 int ppu_guest_range_committed(uint32_t addr, uint32_t n)
 {
     g_committed_consulted++;
     if (addr >= 0x4E000000u) return 1;
+    /* Scream voice table (0x008AF900, stride 0x300). The stream update copies
+     * voice+0x14 over stream+0x154, so the clock test maps this range for real.
+     * g_voice_table_committed=0 is the failed-poke case: publish must write
+     * nothing, including stream+0x154. */
+    if (addr >= 0x008AF900u &&
+        (uint64_t)addr + n <= 0x008AF900u + 64u * 0x300u)
+        return g_voice_table_committed;
+    /* TOC slot movie_audio_resolve_session reads (0x541178 - 0x394). */
+    if (addr >= 0x540DE4u && (uint64_t)addr + n <= 0x540DE8u)
+        return 1;
     return ((uint64_t)addr + n) <= (uint64_t)PAGE;
 }
 
@@ -126,12 +143,17 @@ int main(void)
     PAGE = (uint32_t)sysconf(_SC_PAGESIZE);
     printf("page size = %u bytes\n", PAGE);
 
-    /* Duas paginas: [0,PAGE) legivel, [PAGE,2*PAGE) PROT_NONE. */
-    buf = (unsigned char*)mmap(NULL, PAGE * 2, PROT_READ | PROT_WRITE,
-                               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (buf == MAP_FAILED) { printf("FAIL: mmap\n"); return 1; }
-    memset(buf, 0, PAGE * 2);
-    if (mprotect(buf + PAGE, PAGE, PROT_NONE) != 0) { printf("FAIL: mprotect\n"); return 1; }
+    /* [0,PAGE) legivel, [PAGE,2*PAGE) PROT_NONE, e o resto ate' a tabela de
+     * vozes do Scream (0x008AF900) tambem legivel. O poke do relogio escreve
+     * nesse EA de verdade; um mapa curto faria o teste mentir. */
+    {
+        size_t map_n = 0x900000u;
+        buf = (unsigned char*)mmap(NULL, map_n, PROT_READ | PROT_WRITE,
+                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (buf == MAP_FAILED) { printf("FAIL: mmap\n"); return 1; }
+        memset(buf, 0, map_n);
+        if (mprotect(buf + PAGE, PAGE, PROT_NONE) != 0) { printf("FAIL: mprotect\n"); return 1; }
+    }
 
     /* Palavra big-endian conhecida em EA 0x10 e byte em EA 0x20. */
     buf[0x10] = 0x11; buf[0x11] = 0x22; buf[0x12] = 0x33; buf[0x13] = 0x44;
@@ -330,7 +352,161 @@ int main(void)
         }
     }
 
-    munmap(buf, PAGE * 2);
+    printf("== cutscene clock: samples the picture comparison already reads ==\n");
+    {
+        const uint32_t sess = 0x40;
+        const uint32_t samples_ea = sess + 0x154u;
+        const uint32_t voice_ea = sess + 0x1C4u;
+        const uint32_t voice = 3u;
+        const uint32_t voice_pos = 0x008AF900u + voice * 0x300u + 0x14u;
+        uint32_t got = 0;
+        uint32_t voice_got = 0;
+        uint32_t a, b, c;
+        buf[samples_ea + 0] = 0;
+        buf[samples_ea + 1] = 0;
+        buf[samples_ea + 2] = 0;
+        buf[samples_ea + 3] = 0x63;
+        buf[voice_pos + 3] = 0x11;
+        /* Voice not assigned yet: publishing must not touch either field.
+         * FUN_00461fe8 would copy a zero position back over +0x154. */
+        buf[voice_ea + 0] = 0xFF; buf[voice_ea + 1] = 0xFF;
+        buf[voice_ea + 2] = 0xFF; buf[voice_ea + 3] = 0xFF;
+        CHECK(movie_cutscene_publish_samples(sess, 0, 1000) == 0,
+              "inactive cutscene does not advance playback");
+        CHECK(movie_cutscene_publish_samples(0, 1, 1000) == 0,
+              "no stream object does not report a clock");
+        CHECK(movie_cutscene_publish_samples(sess, 1, 1000) == 0,
+              "unassigned voice does not publish samples that the copy would wipe");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == 0x63u,
+              "failed publish leaves stream+0x154 alone");
+        CHECK(movie_eos_peek32(voice_pos, &voice_got) == 1 && voice_got == 0x11u,
+              "failed publish leaves the voice position alone");
+        /* Voice is assigned, but the table poke fails. Nothing may change:
+         * a sample write here would be the value FUN_00461fe8 then zeros. */
+        buf[voice_ea + 0] = 0; buf[voice_ea + 1] = 0;
+        buf[voice_ea + 2] = 0; buf[voice_ea + 3] = (unsigned char)voice;
+        g_voice_table_committed = 0;
+        CHECK(movie_cutscene_publish_samples(sess, 1, 1000) == 0,
+              "failed voice poke returns 0");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == 0x63u,
+              "failed voice poke does not write stream+0x154");
+        g_voice_table_committed = 1;
+        buf[voice_ea + 0] = 0; buf[voice_ea + 1] = 0;
+        buf[voice_ea + 2] = 0; buf[voice_ea + 3] = (unsigned char)voice;
+        a = movie_cutscene_publish_samples(sess, 1, 0);
+        b = movie_cutscene_publish_samples(sess, 1, 1000);
+        c = movie_cutscene_publish_samples(sess, 1, 2000);
+        CHECK(a == 0, "open sequence at t0 has not released a later picture");
+        CHECK(b > a && c > b, "successive samples increase while the cutscene is active");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == c,
+              "published samples are stream+0x154");
+        CHECK(movie_eos_peek32(voice_pos, &voice_got) == 1 && voice_got == c,
+              "published samples are the voice position the stream update copies");
+        CHECK(movie_picture_eligible(a, 3000) == 0,
+              "picture after the first stays ineligible at t0");
+        CHECK(movie_picture_eligible(b, 3000) == 1,
+              "one second of playback releases the next picture");
+        CHECK(movie_picture_eligible(0, 0) == 1,
+              "the first picture is eligible at sample 0");
+        {
+            uint32_t idle = movie_cutscene_publish_samples(sess, 0, 3000);
+            CHECK(idle == 0, "clock stops when the video is no longer open");
+            CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == c,
+                  "inactive publish leaves the last open-sequence count");
+            printf("clock open %u -> %u -> %u; closed %u\n", a, b, c, idle);
+        }
+    }
+
+    printf("== publish goes through movie_audio_resolve_session ==\n");
+    {
+        const uint32_t toc_slot = 0x541178u - 0x394u;
+        const uint32_t table = 0x1000u;
+        const uint32_t handle = 0x00A10001u;
+        const uint32_t voice = 3u;
+        const uint32_t samples_ea = table + 0x154u;
+        const uint32_t voice_ea = table + 0x1C4u;
+        const uint32_t voice_pos = 0x008AF900u + voice * 0x300u + 0x14u;
+        uint32_t got = 0, voice_got = 0, n;
+        buf[toc_slot + 0] = 0; buf[toc_slot + 1] = 0;
+        buf[toc_slot + 2] = 0x10; buf[toc_slot + 3] = 0x00;
+        buf[table + 0] = 0; buf[table + 1] = 0xA1;
+        buf[table + 2] = 0; buf[table + 3] = 0x01;
+        buf[voice_ea + 0] = 0; buf[voice_ea + 1] = 0;
+        buf[voice_ea + 2] = 0; buf[voice_ea + 3] = (unsigned char)voice;
+        buf[samples_ea + 0] = 0; buf[samples_ea + 1] = 0;
+        buf[samples_ea + 2] = 0; buf[samples_ea + 3] = 0x63;
+        CHECK(movie_cutscene_publish_for_handle(0, 1, 1000) == 0,
+              "handle 0 does not publish");
+        CHECK(movie_cutscene_publish_for_handle(0x00B20002u, 1, 1000) == 0,
+              "unresolved handle does not publish");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == 0x63u,
+              "unresolved handle leaves stream+0x154 alone");
+        g_voice_table_committed = 0;
+        CHECK(movie_cutscene_publish_for_handle(handle, 1, 1000) == 0,
+              "resolved session with a failed voice poke returns 0");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == 0x63u,
+              "failed voice poke through resolve writes nothing");
+        g_voice_table_committed = 1;
+        n = movie_cutscene_publish_for_handle(handle, 1, 1000);
+        CHECK(n > 0, "resolved handle publishes a moving clock");
+        CHECK(movie_eos_peek32(samples_ea, &got) == 1 && got == n,
+              "resolve path wrote stream+0x154");
+        CHECK(movie_eos_peek32(voice_pos, &voice_got) == 1 && voice_got == n,
+              "resolve path wrote the voice position");
+    }
+
+    printf("== skip completes the open video; sticky end does not ==\n");
+    CHECK(movie_open_sequence_end(1, 1, 1, 0, 0) == MOVIE_SEQ_END_NATURAL,
+          "natural end of the open video");
+    CHECK(movie_open_sequence_end(1, 1, 0, 1, 0) == MOVIE_SEQ_END_SKIP,
+          "real START/CROSS skip is the same kind of end");
+    CHECK(movie_open_sequence_end(1, 1, 1, 0, 0) != MOVIE_SEQ_END_NONE
+          && movie_open_sequence_end(1, 1, 0, 1, 0) != MOVIE_SEQ_END_NONE
+          && movie_open_sequence_end(1, 1, 0, 1, 0) != MOVIE_SEQ_END_DROP_STALE,
+          "skip and natural end both finish the open sequence");
+    CHECK(movie_open_sequence_end(1, 1, 0, 1, 1) == MOVIE_SEQ_END_NONE,
+          "automatic pad during a cutscene does not skip");
+    CHECK(movie_open_sequence_end(0, 1, 1, 0, 0) == MOVIE_SEQ_END_NONE,
+          "end-of-movie does not arm before the sequence is open");
+    CHECK(movie_open_sequence_end(0, 0, 0, 1, 0) == MOVIE_SEQ_END_NONE,
+          "skip with no open video does not finish an earlier scene");
+    CHECK(movie_open_sequence_end(1, 0, 0, 1, 0) == MOVIE_SEQ_END_DROP_STALE,
+          "skip of an earlier host movie does not EOS the open sequence");
+    CHECK(movie_end_arms_boot_logos(0, 0) == 1, "intro end may arm the logo queue");
+    CHECK(movie_end_arms_boot_logos(1, 0) == 0, "a later movie end does not re-arm logos");
+    CHECK(movie_end_arms_boot_logos(0, 1) == 0, "dropping a stale picture does not re-arm logos");
+    CHECK(movie_timebase_done_allowed(0) == 1, "intro may still use its own timer");
+    CHECK(movie_timebase_done_allowed(1) == 0, "in-game cutscene is not ended by the intro timer");
+    CHECK(movie_host_picture_is_current_path("/cache/SmLogo_v2.m2v", 1, 1) == 0,
+          "logo is not the picture of an in-game sequence");
+    CHECK(movie_host_picture_is_current_path("/cache/introhud.m2v", 1, 1) == 1,
+          "introhud is the first in-game picture");
+    CHECK(movie_host_picture_is_current_path("/cache/introhud.m2v", 1, 2) == 0,
+          "a later cutscene does not keep introhud as the current picture");
+    CHECK(movie_host_picture_is_current_path("/cache/rhodes.m2v", 1, 2) == 1,
+          "the open cutscene's own file stays the current picture");
+    CHECK(movie_ingame_picture("/c/SmLogo_v2.m2v", 1, "/c/introhud.m2v", 0)
+              != NULL
+          && strstr(movie_ingame_picture("/c/SmLogo_v2.m2v", 1, "/c/introhud.m2v", 0),
+                    "introhud") != NULL,
+          "first in-game sequence can take the opener");
+    CHECK(movie_ingame_picture("/c/introhud.m2v", 1, "/c/introhud.m2v", 1) == NULL,
+          "a later end does not reselect introhud");
+    CHECK(movie_ingame_picture("/c/rhodes.m2v", 0, "/c/introhud.m2v", 1)
+              != NULL
+          && strstr(movie_ingame_picture("/c/rhodes.m2v", 0, "/c/introhud.m2v", 1),
+                    "rhodes") != NULL,
+          "a later sequence keeps its own file");
+    printf("policy end natural=%d skip=%d autopad=%d before_open=%d earlier=%d logos_later=%d eos_opening=%d\n",
+           movie_open_sequence_end(1, 1, 1, 0, 0),
+           movie_open_sequence_end(1, 1, 0, 1, 0),
+           movie_open_sequence_end(1, 1, 0, 1, 1),
+           movie_open_sequence_end(0, 1, 1, 1, 0),
+           movie_open_sequence_end(1, 0, 0, 1, 0),
+           movie_end_arms_boot_logos(1, 0),
+           movie_eos_should_arm(1, 0, 1, 4));
+
+    munmap(buf, 0x900000u);
     vm_base = NULL;
 
     if (g_fail) { printf("\nFAIL: %d assercao(oes)\n", g_fail); return 1; }

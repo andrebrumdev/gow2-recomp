@@ -13,6 +13,11 @@
 #   strings.json     strings referenciadas por funcao  <- otimo para dar nome
 #   decompiled.json  o C decompilado do jogo ORIGINAL  <- o que muda o jogo
 #   names.json       mapa {addr: nome} para o lifter (--names)
+#   MANIFEST.json    proveniencia: sha256 do ELF analisado, data do export,
+#                    versao do Ghidra e contagens  <- sem isto, "o oraculo diz
+#                    X" nao tem binario nem data, e um export obsoleto passa
+#                    por verdade. O passo opcional do verify_lift.sh
+#                    (VERIFY_ORACLE=1) recusa-se a correr sem ele.
 #
 # Uso:  ./analyze_eboot_ghidra.sh [EBOOT] [OUTDIR]
 # Custo: o EBOOT tem 5,6 MB e ~13 mil funcoes; a auto-analise com decompilacao
@@ -73,16 +78,23 @@ if [ -n "${GHIDRA_INSTALL_DIR:-}" ] && [ ! -x "$GHIDRA_INSTALL_DIR/support/analy
         "GHIDRA_INSTALL_DIR aponta para o sitio errado?"
 fi
 
-echo "== 1/3 analise Ghidra headless (isto demora; --decompile e' o que vale a pena) =="
+echo "== 1/4 analise Ghidra headless (isto demora; --decompile e' o que vale a pena) =="
 echo "   elf=$ELF  out=$OUT"
 "$PY" "$PS3/tools/ghidra_analyze.py" "$ELF" --decompile -o "$OUT"
 
 echo
-echo "== 2/3 mapa de nomes para o lifter =="
+echo "== 2/4 mapa de nomes para o lifter =="
 "$PY" "$PS3/tools/ghidra_names.py" "$OUT" -o "$OUT/names.json"
 
 echo
-echo "== 3/3 resumo =="
+# O ghidra_analyze.py ja' carimbou o MANIFEST no fim do export -- mas ANTES do
+# names.json existir, por isso a contagem de nomes ficava a null. Re-carimbar
+# aqui (idempotente) fecha o export com as 5 contagens certas.
+echo "== 3/4 proveniencia (MANIFEST.json) =="
+"$PY" "$PS3/tools/oracle_manifest.py" write --out "$OUT" --elf "$ELF"
+
+echo
+echo "== 4/4 resumo =="
 "$PY" - "$OUT" <<'PY'
 import json, os, sys
 d = sys.argv[1]
