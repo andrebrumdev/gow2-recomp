@@ -224,17 +224,23 @@ L "$T_OLD" "$B/spu1_v2" --auto-functions "$W/img1.bin" --functions "$W/f1.json" 
 # writes into the PPU code segment) and without the ten destinations outside the image code.
 H promote 1 "$B/spu1_v2" 391C 6088 64E0 56AC 3318 3410 ABA0
 
-for n in 2 3; do
-    echo "== spu$n"
-    L "$T_OLD" "$B/spu${n}_v2" --auto-functions "$W/img$n.bin" --symbol-prefix spu${n}_
-    "$PY" "$E427" "$B/spu${n}_v2/spu_recomp.c" > /dev/null
-done
+# spu2 is the SCREAM mixer job the policy module loads at LS 0x4000 and calls:
+# lifted with the current lifter (brsl/bisl as real calls, interrupt windows),
+# plus its entry and the indirect targets it takes.
+echo "== spu2"
+L "$T_HEAD" "$B/spu2_v2" --auto-functions "$W/img2.bin" --symbol-prefix spu2_ \
+    --extra-funcs 0x4080,0x92F8,0x91C0
+echo "== spu3"
+L "$T_OLD" "$B/spu3_v2" --auto-functions "$W/img3.bin" --symbol-prefix spu3_
+"$PY" "$E427" "$B/spu3_v2/spu_recomp.c" > /dev/null
 for n in 4 5; do
     echo "== spu$n"
     L "$T_45" "$B/spu${n}_v2" --auto-functions "$W/img$n.bin" --symbol-prefix spu${n}_
 done
 echo "== spu6"
-mkdir -p "$B/spu6_v2"; H spu6 "$B/spu6_v2" > "$B/spu6_v2.log"
+mkdir -p "$B/spu6_v2"; "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+# brsl/bih* halfword conditions of the lifts made by 2026-07-21..09-23 lifters.
+"$PY" "$GOW2/recomp_mid_v2/patch_spu_halfword_cond.py" "$B"/spu?_v2 > /dev/null
 
 for n in 0 1 2 3 4 5 6; do
     rm -rf "$OUT/spu${n}_v2"; mkdir -p "$OUT/spu${n}_v2"

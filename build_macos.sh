@@ -462,6 +462,9 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
     if [ "$n" = spu0_v2 ] && [ -n "${SPU0_DIR:-}" ]; then
         d="$SPU0_DIR"; o="$LIFT/spu0_ab_$(basename "$SPU0_DIR")_spu_recomp.o"
     fi
+    # brsl/bih* conditions test the preferred halfword (idempotent; only the
+    # lifts made with the 2026-07-21..09-23 lifter change).
+    "$PYBIN" "$HERE/recomp_mid_v2/patch_spu_halfword_cond.py" "$d" > /dev/null
     if [ "$n" = spu0_v2 ]; then
         # Re-lift the captured image in a temporary directory and import every
         # observed bi/bisl destination.  SPU0_OBSERVED_LOG may point at a fresh

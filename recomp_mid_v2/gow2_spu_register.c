@@ -23,7 +23,7 @@ extern void spu2_spu_func_00004080(spu_context* ctx);   /* spu2 e_entry 0x4080 *
 extern void spu3_spu_func_00004080(spu_context* ctx);   /* spu3 e_entry 0x4080 */
 extern void spu4_spu_func_00003050(spu_context* ctx);   /* spu4 e_entry 0x3050 (fp 0x9527C889B1945669) */
 extern void spu5_spu_func_00003070(spu_context* ctx);   /* spu5 e_entry 0x3070 (fp 0x3512A7E99D34E0FF) */
-extern void spu6_spu_func_00003000(spu_context* ctx);   /* spu6 e_entry 0x3000 (fp 0xCEDB9A67A0C3A305 = SCREAM mixer PM) */
+extern void spu6_spu_func_00000A00(spu_context* ctx);   /* spu6 entry 0xA00 (fp 0xCEDB9A67A0C3A305 = SCREAM mixer PM) */
 extern void spu0_spu_recomp_register(void);
 extern void spu1_spu_recomp_register(void);
 extern void spu2_spu_recomp_register(void);
@@ -47,6 +47,11 @@ void gow2_register_spu_workloads(void)
     spu_begin_image(5); spu4_spu_recomp_register();
     spu_begin_image(6); spu5_spu_recomp_register();
     spu_begin_image(7); spu6_spu_recomp_register();
+    /* The SCREAM policy module is a SPURS job manager: it DMAs the mixer job
+     * -- the code segment of SPU ELF #2 (EBOOT 0x4EF400, 0xDBC0 B), the spu2
+     * image -- to LS 0x4000 and branches into it. The job runs in the
+     * module's context, so its functions must resolve under image 7 too. */
+    spu2_spu_recomp_register();
     spu_begin_image(0);
     /* PS3_SPU0=0 (A/B, opt-in): leave spu0 unregistered (its jobs MISS). */
     if (!(getenv("PS3_SPU0") && getenv("PS3_SPU0")[0] == '0'))
@@ -93,15 +98,16 @@ void gow2_register_spu_workloads(void)
         spu_workload_register_image(0x9527C889B1945669ull, spu4_spu_func_00003050, "gow2_spu4", 5);
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
         spu_workload_register_image(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5", 6);
-    /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980, base LS 0x3000).
+    /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980). The SPURS
+     * kernel loads a policy module at LS 0xA00 and enters it there.
      * On for a normal play launch. PS3_SPU6=0 turns it off. A faulting job is
      * aborted by the setjmp landing pad; it does not have to stay opt-in. */
     {
         const char* e = getenv("PS3_SPU6");
         int on = getenv("PS3_SPU_ALL") || !e || (e[0] && e[0] != '0');
         if (on)
-            spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00003000,
-                                            "gow2_spu6", 0x3000, 7);
+            spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
+                                            "gow2_spu6", 0xA00, 7);
     }
 }
 
