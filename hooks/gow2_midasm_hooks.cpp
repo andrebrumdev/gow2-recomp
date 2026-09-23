@@ -162,6 +162,14 @@ extern "C" {
 GOW2_MIDASM_USED
 void gow2_midasm_Ce03cWaitIdle(ppu_context* ctx)
 {
+    /* OFF by default since 2026-09-23. Waiting here for the 1st movie to end
+     * made the Santa Monica logo play twice: on RPCS3 the game's 2nd Play stops
+     * the 1st before it ever opens the decoder (cellVdecClose(handle=0), one
+     * cellVdecStartSeq in the whole intro). Without the wait: one StartSeq, 325
+     * pictures, menu reached, WADs 11 s earlier. PS3_CE03C_WAIT_IDLE=1 = old. */
+    { static int on = -1;
+      if (on < 0) { const char* e = getenv("PS3_CE03C_WAIT_IDLE"); on = (e && e[0] == '1'); }
+      if (!on) return; }
     const uint64_t sv_r30 = ctx->gpr[30];
 
     const uint32_t mv = vm_read32((uint32_t)ctx->gpr[2] - 0x1124u);

@@ -565,7 +565,11 @@ uint32_t movie_cutscene_publish_samples(uint32_t session_ea, int active,
      * of ~113 s. Default stays "always" until that is fixed at the root;
      * PS3_MOVIE_CLOCK=intro = intro only, 0 = never. */
     { static int on = -1;
-      if (on < 0) { const char* e = getenv("PS3_MOVIE_CLOCK"); on = (e && e[0] == '0') ? 0 : (e && e[0] == 'i') ? 2 : 1; }
+      /* Default OFF since 2026-09-23: the intro plays once (CE03C wait-idle
+       * off) and its sound comes from the SCREAM mixer; the host clock only
+       * released the pictures in steps (flips 20-25/s instead of 30).
+       * PS3_MOVIE_CLOCK=1 = always, =intro = intro only. */
+      if (on < 0) { const char* e = getenv("PS3_MOVIE_CLOCK"); on = (e && e[0] == '1') ? 1 : (e && e[0] == 'i') ? 2 : 0; }
       if (!on) return 0;
       if (on == 2 && movie_clock_ingame_index() >= 1) return 0; }
     if (!movie_eos_peek32(session_ea + MOVIE_AUDIO_VOICE_OFF, &voice)
@@ -601,6 +605,8 @@ uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms)
     return movie_cutscene_publish_for_handle(h720, 1, elapsed_ms);
 }
 
+/* cellVdec.c owns the real one (intro = 1 StartSeq unless PS3_CE03C_WAIT_IDLE=1). */
+__attribute__((weak)) int vdec_intro_seqs(void) { return 1; }
 /* movie_hle.c owns the real one; the vdec unit test links this file alone. */
 __attribute__((weak)) int movie_hle_start_pending_ingame(void) { return 0; }
 
@@ -675,7 +681,9 @@ static void movie_sampler_loop(void)
             static int s_clk_seq = -1;
             static int s_clk_logged;
             int seq = vdec_startseq_count();
-            int idx = seq >= 3 ? seq - 2 : 0;
+            extern int vdec_intro_seqs(void);
+            const int intro_n = vdec_intro_seqs();
+            int idx = seq > intro_n ? seq - intro_n : 0;
             int active = (st >= 1u && st != 0xFFFFFFFFu);
             int open = (st >= MOVIE_STATE_POST_OPEN && st != 0xFFFFFFFFu);
             uint64_t elapsed = 0;
