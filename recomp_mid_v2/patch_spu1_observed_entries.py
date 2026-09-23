@@ -39,6 +39,40 @@ def observed_targets(paths: list[pathlib.Path]) -> list[str]:
     return [f"{target:X}" for target in targets]
 
 
+def exec_ranges(image: bytes) -> list[tuple[int, int]]:
+    """LS ranges of the image's executable PT_LOAD segments (ELF32 big-endian)."""
+    import struct
+    phoff = struct.unpack_from(">I", image, 0x1C)[0]
+    phentsize, phnum = struct.unpack_from(">HH", image, 0x2A)
+    ranges = []
+    for k in range(phnum):
+        p_type, _off, vaddr, _pa, _fsz, memsz, flags, _al = struct.unpack_from(
+            ">IIIIIIII", image, phoff + k * phentsize)
+        if p_type == 1 and flags & 1:
+            ranges.append((vaddr, vaddr + memsz))
+    return ranges
+
+
+def code_only(targets: list[str], image: bytes) -> list[str]:
+    """Keep the destinations that fall inside the image's code.
+
+    A bi/bisl into the SPURS kernel area below the image, or into the data,
+    bss and stack above its code, has no code in this image to lift: the
+    "function" the lifter would emit there is data decoded as instructions.
+    Ten such destinations were promoted on 2026-09-20 (0xB54 .. 0x3FDA8).
+    """
+    ranges = exec_ranges(image)
+    kept = []
+    for t in targets:
+        v = int(t, 16)
+        if any(lo <= v < hi for lo, hi in ranges):
+            kept.append(t)
+        else:
+            print(f"[spu1-observed] drop 0x{v:X}: outside the image code "
+                  f"{', '.join(f'0x{lo:X}..0x{hi:X}' for lo, hi in ranges)}", flush=True)
+    return kept
+
+
 def main() -> int:
     target = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT
     if not INPUT.is_file():
@@ -50,12 +84,18 @@ def main() -> int:
     except (OSError, ValueError) as error:
         print(error, file=sys.stderr)
         return 2
+    targets = code_only(targets, INPUT.read_bytes())
+    if not targets:
+        print("no observed spu1 target inside the image code", file=sys.stderr)
+        return 2
     with tempfile.TemporaryDirectory(prefix="spu1-observed-") as fresh:
         fresh_c = pathlib.Path(fresh) / "spu_recomp.c"
+        kept = pathlib.Path(fresh) / "targets.lst"
+        kept.write_text("".join(f"target 0x{t}\n" for t in targets), encoding="utf-8")
         lift = subprocess.run([
             sys.executable, str(ENGINE / "tools" / "spu_lifter.py"),
             "--auto-functions", str(INPUT),
-            *sum((["--observed-indirect-targets", str(path)] for path in paths), []),
+            "--observed-indirect-targets", str(kept),
             "--symbol-prefix", "spu1_", "-o", fresh,
         ], check=False)
         if lift.returncode:
