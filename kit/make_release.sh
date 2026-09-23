@@ -26,7 +26,12 @@ R="$T/$NAME"; mkdir -p "$R/gow2-recomp" "$R/ps3recomp"
 
 git -C "$HERE" archive HEAD | tar -x -C "$R/gow2-recomp"
 git -C "$ENGINE" archive HEAD | tar -x -C "$R/ps3recomp"
+# games/ is the monorepo copy of the ports. apply_all_patches.sh reads the
+# patch order, catalog and contracts from games/gow2/lift_baseline, so that
+# folder stays (text only); the rest goes.
+mv "$R/ps3recomp/games/gow2/lift_baseline" "$T/lift_baseline"
 rm -rf "$R/ps3recomp/games"
+mkdir -p "$R/ps3recomp/games/gow2" && mv "$T/lift_baseline" "$R/ps3recomp/games/gow2/lift_baseline"
 for rev in $PINNED; do
     mkdir -p "$R/ps3recomp/tools_pinned/$rev"
     git -C "$ENGINE" archive "$rev" tools | tar -x -C "$R/ps3recomp/tools_pinned/$rev"
