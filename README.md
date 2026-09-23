@@ -8,7 +8,7 @@ reimplementation of the PS3 OS and libraries with **Metal** for graphics,
 
 > This repository contains **no game code and no game assets**. Like
 > [Dusk](https://duskport.com/dusk/), you bring your own legally dumped copy,
-> and the setup kit (in progress) translates and builds it **on your machine**.
+> and the setup kit decrypts, translates and builds it **on your machine**.
 
 | | |
 |---|---|
@@ -90,16 +90,31 @@ launcher/macos/build_app.sh     # -> ./GoW2 Recomp.app
   the code was already recompiled and would need a re-lift.
 - Design system in [`launcher/macos/MASTER.md`](launcher/macos/MASTER.md).
 
-## Bring your own game (macOS kit) — in progress
+## Bring your own game (macOS kit)
 
-The goal is a [Dusk](https://duskport.com/dusk/)-style kit: you point it at
-your own `EBOOT.ELF` (decrypted, e.g. with RPCS3 → *Utilities → Decrypt PS3
-Binaries*) and your game's `USRDIR`, and it lifts and builds the native binary
-on your Mac. It is **not released yet**: the production lift still carries
-hand-applied fixes that the patch scripts do not fully reproduce from a fresh
-lift (measured: 100+ patch anchors no longer match the current lifter output),
-and the SPU lift parameters are being turned into a reproducible script. The
-kit ships once a clean lift from a user's own copy boots to gameplay.
+A [Dusk](https://duskport.com/dusk/)-style kit: point it at your own game
+folder (`PS3_GAME`, from RPCS3's `dev_hdd0/game/NPUA80491` or your PS3) and
+your license (`UP9000-NPUA80491_00-GODOFWARIIHDUS00.rap`), and it builds the
+native binary on your Mac:
+
+```bash
+./kit/setup.sh /path/to/PS3_GAME        # finds the .rap in RPCS3's exdata or ~/Downloads
+./jogar_g2.sh
+```
+
+`setup.sh` does the following:
+
+1. It decrypts `EBOOT.BIN` itself, the same way RPCS3 does (engine
+   `tools/unself`).
+2. It recompiles the PPU code with the pinned lifter, the patch scripts and a
+   small delta.
+3. It recompiles the seven SPU programs.
+4. It extracts the movies from your `gow2.psarc`.
+5. It links `./g2play`.
+
+Every generated file is checked against the hashes in `kit/`. The result is
+byte-identical to the build the project tests. Details are in
+[`kit/README.md`](kit/README.md).
 
 Controls: WASD move, mouse camera, Space/E/J/K = ✕/○/□/△, Enter = Start,
 F11 or Cmd+Enter = fullscreen, Esc releases the mouse.
@@ -158,4 +173,4 @@ Port nativo de **God of War II HD** (PS3) para **macOS/Apple Silicon** por
 C/C++ e compilado para arm64, rodando sobre uma reimplementação do sistema do
 PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é
 distribuído: como no Dusk, você fornece sua própria cópia e o kit de
-instalação (em desenvolvimento) traduz e compila tudo na sua máquina.
+instalação (`kit/setup.sh`) descriptografa, traduz e compila tudo na sua máquina.
