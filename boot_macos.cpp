@@ -237,9 +237,9 @@ Backend pick_backend()
 int backend_init(Backend b)
 {
     switch (b) {
-    case Backend::Sdl:    return rsx_null_backend_init(1280, 720, "God of War II HD (ps3recomp)");
-    case Backend::Metal:  return rsx_metal_backend_init(1280, 720, "God of War II HD (ps3recomp)");
-    case Backend::Vulkan: return rsx_vulkan_backend_init(1280, 720, "God of War II HD (ps3recomp)");
+    case Backend::Sdl:    return rsx_null_backend_init(1280, 720, "God of War II HD");
+    case Backend::Metal:  return rsx_metal_backend_init(1280, 720, "God of War II HD");
+    case Backend::Vulkan: return rsx_vulkan_backend_init(1280, 720, "God of War II HD");
     case Backend::None:   return 0;
     }
     return -1;
