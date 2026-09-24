@@ -319,7 +319,9 @@ int commit_guest_regions()
         fprintf(stderr, "[boot] FATAL: could not commit guest low memory\n");
         return -1;
     }
-    memset(vm_base, 0, GUEST_LOW_MB);
+    /* No prezero (spec 2026-09-24 iOS): the region is fresh MAP_ANONYMOUS
+     * memory, zero-filled by the kernel on first touch. Writing 1.26 GB of
+     * zeros only made it resident (a third of the iPhone's 4 GB jetsam limit). */
     ppu_register_committed_range(0, GUEST_LOW_MB);
 
     if (vm_commit(VM_STACK_BASE, VM_STACK_REGION) != CELL_OK) {
