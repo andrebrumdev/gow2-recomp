@@ -415,7 +415,17 @@ int main(int argc, char** argv)
             ppu_function_count());
 
     g_backend = pick_backend();
-    if (backend_init(g_backend) != 0) {
+    int brc = backend_init(g_backend);
+    if (brc != 0 && g_backend == Backend::Vulkan) {
+        /* Spec (ps3recomp docs/superpowers/specs/2026-09-23-vulkan-backend-a-design.md §5):
+         * Vulkan unavailable -> platform default with one log line, never abort. The env is
+         * updated so cellGcmSys's rsx_bridge_mode keeps the Metal backend registered here. */
+        fprintf(stderr, "[boot] vulkan init failed -> metal (platform default)\n");
+        setenv("PS3_RSX_BACKEND", "metal", 1);
+        g_backend = Backend::Metal;
+        brc = backend_init(g_backend);
+    }
+    if (brc != 0) {
         fprintf(stderr, "[boot] FATAL: RSX backend failed to initialise\n");
         vm_shutdown();
         return 1;
