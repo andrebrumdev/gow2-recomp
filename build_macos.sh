@@ -230,7 +230,7 @@ t0=$(date +%s)
             echo "$f"
         fi
     done
-} | LIFT_CFLAGS="$LIFT_CFLAGS" LIFT_OBJ_TAG="$LIFT_OBJ_TAG" xargs -P "$JOBS" -I {} sh -c \
+} | MCPU="$MCPU" LIFT_CFLAGS="$LIFT_CFLAGS" LIFT_OBJ_TAG="$LIFT_OBJ_TAG" xargs -P "$JOBS" -I {} sh -c \
     'src="$1"; ps3="$2"; opt="$3"
      if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
      if [ -n "$LIFT_OBJ_TAG" ]; then o="${o%.o}.${LIFT_OBJ_TAG}.o"; fi
