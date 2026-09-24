@@ -10,6 +10,13 @@ echo "errors=$(grep -c 'error:' d3d.cclog || true)"
 grep 'error:' d3d.cclog | head -15 || true
 ls -la lib_rsx_d3d12_backend.o
 
+# rsx_frame_notes: rsx_frame_note_draws (called by every backend's end_frame; ps3recomp 0f019d8b)
+echo "=== compile rsx_frame_notes $(date +%H:%M:%S) ==="
+gcc -std=gnu11 -O0 -c $INC $PS3/libs/video/rsx_frame_notes.c -o lib_rsx_frame_notes.o 2>frame_notes.cclog
+echo "errors=$(grep -c 'error:' frame_notes.cclog || true)"
+grep 'error:' frame_notes.cclog | head -15 || true
+ls -la lib_rsx_frame_notes.o
+
 echo "=== relink $(date +%H:%M:%S) ==="
 taskkill //F //IM boot_v2_new.exe >/dev/null 2>&1 || true
 sleep 1
