@@ -8,25 +8,36 @@
 #include <sys/qos.h>
 #endif
 
-/* The lifecycle is main-thread only (header: host contract). Debug builds on
- * Apple check it; release builds and other platforms compile it away. */
-#if defined(__APPLE__) && !defined(NDEBUG)
+/* The lifecycle is main-thread only (header: host contract). On Apple a call
+ * off the main thread warns once in every build (pthread_main_np is a cheap
+ * TSD read) and asserts in debug builds; elsewhere it compiles away. */
+#if defined(__APPLE__)
 #include <assert.h>
 #include <pthread.h>
-#define LC_ASSERT_MAIN() assert(pthread_main_np() != 0)
+#include <stdatomic.h>
+static atomic_int s_off_main_warned;
+static void lc_check_main(const char* fn)
+{
+    if (pthread_main_np() != 0) return;
+    if (!atomic_exchange(&s_off_main_warned, 1))
+        fprintf(stderr, "[gow2 lifecycle] WARNING: %s called off the main thread "
+                        "(host contract: main queue only)\n", fn);
+    assert(!"gow2 lifecycle called off the main thread");
+}
+#define LC_ASSERT_MAIN() lc_check_main(__func__)
 #else
 #define LC_ASSERT_MAIN() ((void)0)
 #endif
 
 static gow2_lifecycle_ops s_ops;
-static gow2_lifecycle_state s_st = { 1, 0, 0, 0, 1 };
+static gow2_lifecycle_state s_st = { 1, 0, 0, 0, 1, 0 };
 
 /* Order matters: render first, so the GPU gate is closed (resign) / reopened
  * (resume) before audio and input change. */
 static void apply(void)
 {
     const int render = !s_st.active;
-    const int audio = !s_st.active || s_st.interrupted;
+    const int audio = !s_st.active || s_st.interrupted || s_st.audio_held;
     if (render != s_st.render_suspended) {
         s_st.render_suspended = render;
         if (s_ops.set_render_suspended) s_ops.set_render_suspended(render);
@@ -51,14 +62,22 @@ void gow2_lifecycle_init(const gow2_lifecycle_ops* ops)
     s_st.render_suspended = 0;
     s_st.audio_suspended = 0;
     s_st.input_active = 1;
+    s_st.audio_held = 0;
 }
 
 void gow2_lifecycle_will_resign_active(void) { LC_ASSERT_MAIN(); s_st.active = 0; apply(); }
-void gow2_lifecycle_did_become_active(void) { LC_ASSERT_MAIN(); s_st.active = 1; apply(); }
-void gow2_lifecycle_audio_interruption(int began)
+/* Coming back is the explicit resume point for an interruption that ended
+ * without should_resume. */
+void gow2_lifecycle_did_become_active(void) { LC_ASSERT_MAIN(); s_st.active = 1; s_st.audio_held = 0; apply(); }
+void gow2_lifecycle_audio_interruption(int began, int should_resume)
 {
     LC_ASSERT_MAIN();
-    s_st.interrupted = began ? 1 : 0;
+    if (began) {
+        s_st.interrupted = 1;                 /* should_resume only means something on "ended" */
+    } else {
+        s_st.interrupted = 0;
+        s_st.audio_held = should_resume ? 0 : 1;
+    }
     apply();
 }
 void gow2_lifecycle_memory_warning(void) { LC_ASSERT_MAIN(); if (s_ops.trim_caches) s_ops.trim_caches(); }
@@ -93,7 +112,8 @@ int gow2_ios_game_data_present(const char* eboot, const char* usrdir)
     struct dirent* e;
     while (!ok && (e = readdir(d)) != NULL) {
         if (e->d_name[0] == '.') continue;
-        snprintf(p, sizeof p, "%s/%s", usrdir, e->d_name);
+        const int n = snprintf(p, sizeof p, "%s/%s", usrdir, e->d_name);
+        if (n < 0 || (size_t)n >= sizeof p) continue;   /* truncated path: treat as absent */
         if (stat(p, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) ok = 1;
     }
     closedir(d);

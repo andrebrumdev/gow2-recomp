@@ -3,9 +3,18 @@
  * name, and whether the game data is installed.
  *
  * Rules: render suspended <=> inactive; audio suspended <=> inactive OR
- * interrupted; input active <=> active. An op is called only when its value
+ * interrupted OR held; input active <=> active. An op is called only when its value
  * changes, in the order render, audio, input -- so on resign the GPU gate is
  * closed before audio and input are suspended, and on resume it reopens first.
+ *
+ * Audio interruptions (AVAudioSessionInterruptionNotification): began sets
+ * interrupted (should_resume is ignored). Ended WITH
+ * AVAudioSessionInterruptionOptionShouldResume clears interrupted (and any
+ * hold): audio resumes if the app is active, as the system asks. Ended
+ * WITHOUT it clears interrupted but HOLDS audio suspended until the next
+ * did_become_active -- the user coming back to the app is the explicit
+ * resume point (typical game behaviour); while the app stays active, audio
+ * stays off. A later ended-with-should_resume also releases the hold.
  *
  * Host contract (the iOS app, Task 13, must honour all of it):
  *   - Main thread only. Every gow2_lifecycle_* call comes from the main queue;
@@ -14,7 +23,10 @@
  *     on another thread: the host marshals it (dispatch_async to the main
  *     queue) before calling gow2_lifecycle_audio_interruption. This also makes
  *     ps3_audio_host_set_suspended run from one serial context, which it
- *     requires. Debug builds on Apple assert pthread_main_np().
+ *     requires. On Apple a call off the main thread logs one warning to
+ *     stderr (all builds) and asserts in debug builds (pthread_main_np()).
+ *   - The host passes AVAudioSessionInterruptionOptionShouldResume from the
+ *     notification's userInfo as should_resume on the "ended" call.
  *   - set_render_suspended(1) = rsx_gpu_gate_set_closed(1) = close(2000): it
  *     BLOCKS the main thread for up to 2 s while in-flight GPU sections drain.
  *     A present may be parked at the gate holding the giant lock, so after the
@@ -26,6 +38,9 @@
  *     not this module's.
  *   - willTerminate must not join the guest thread: it may be blocked at the
  *     closed gate forever. Exit without joining.
+ *   - Check that SDL_PollEvent is not called from the guest thread in
+ *     metal_present_impl (Task 13): SDL/UIKit event pumping belongs on the
+ *     main thread, and the guest thread may be parked at the gate.
  *
  * Ops the host wires (all exist, signatures match):
  *   set_render_suspended  rsx_gpu_gate_set_closed      (libs/video/rsx_gpu_gate.h)
@@ -49,14 +64,17 @@ typedef struct gow2_lifecycle_ops {
 
 typedef struct gow2_lifecycle_state {
     int active, interrupted, render_suspended, audio_suspended, input_active;
+    int audio_held;   /* interruption ended without should_resume: audio off until did_become_active */
 } gow2_lifecycle_state;
 
 /* Active, nothing suspended; calls nothing. NULL ops = observe only. */
 void gow2_lifecycle_init(const gow2_lifecycle_ops* ops);
 void gow2_lifecycle_will_resign_active(void);
 void gow2_lifecycle_did_become_active(void);
-/* Main thread only: marshal AVAudioSession interruptions to the main queue. */
-void gow2_lifecycle_audio_interruption(int began);
+/* Main thread only: marshal AVAudioSession interruptions to the main queue.
+ * should_resume = AVAudioSessionInterruptionOptionShouldResume on "ended";
+ * ignored when began. */
+void gow2_lifecycle_audio_interruption(int began, int should_resume);
 void gow2_lifecycle_memory_warning(void);
 gow2_lifecycle_state gow2_lifecycle_get(void);
 
