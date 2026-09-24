@@ -12,7 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/qos.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -42,6 +41,11 @@ static void* tee_thread(void* arg)
         const ssize_t n = read(rfd, buf, sizeof buf);
         if (n <= 0) {
             if (n < 0 && errno == EINTR) continue;
+            if (n < 0 && errno == EAGAIN) {   /* flush_log_for_exit made the pipe non-blocking */
+                struct pollfd pf = { .fd = rfd, .events = POLLIN, .revents = 0 };
+                (void)poll(&pf, 1, -1);
+                continue;
+            }
             break;
         }
         if (s_log_fd >= 0) (void)!write(s_log_fd, buf, (size_t)n);
@@ -50,59 +54,62 @@ static void* tee_thread(void* arg)
     return NULL;
 }
 
-/* Writes straight to the log file and the original stdout, bypassing the tee
- * (async-signal-safe: only write()). */
-static void log_direct(const char* msg, size_t n)
+/* A line straight to the log file (never the original stdout, which may
+ * block); async-signal-safe: only write(). */
+static void log_fd_write(const char* msg, size_t n)
 {
     if (s_log_fd >= 0) (void)!write(s_log_fd, msg, n);
-    if (s_orig_stdout >= 0) (void)!write(s_orig_stdout, msg, n);
 }
 
-/* Moves whatever still sits in the tee pipe into the log, without blocking
- * (poll with timeout 0 before every read). Async-signal-safe. */
-static void drain_pipe_now(void)
+static uint64_t mono_ms(void)
 {
-    if (s_pipe_r < 0) return;
-    char buf[4096];
-    for (int i = 0; i < 256; i++) {
-        struct pollfd pf = { .fd = s_pipe_r, .events = POLLIN, .revents = 0 };
-        if (poll(&pf, 1, 0) <= 0 || !(pf.revents & POLLIN)) break;
-        const ssize_t n = read(s_pipe_r, buf, sizeof buf);
-        if (n <= 0) break;
-        log_direct(buf, (size_t)n);
-    }
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000u + (uint64_t)t.tv_nsec / 1000000u;
 }
 
-/* Before _exit: flush stdio, then give the tee thread up to ~0.5 s to empty
- * the pipe (and take anything left ourselves), so the log tail is not lost. */
+/* Before _exit / on willTerminate: move what is still in the tee pipe into
+ * the log file. The read end is made non-blocking (the tee thread copes with
+ * EAGAIN), so neither side can park here; the whole drain has one ~300 ms
+ * deadline. No stdio flush: stdout/stderr lead to the pipe, which may be full. */
 static void flush_log_for_exit(void)
 {
-    fflush(stdout);
-    fflush(stderr);
-    for (int i = 0; i < 50 && s_pipe_r >= 0; i++) {
-        int avail = 0;
-        if (ioctl(s_pipe_r, FIONREAD, &avail) != 0 || avail == 0) break;
-        usleep(10000);
+    if (s_pipe_r < 0) return;
+    const int fl = fcntl(s_pipe_r, F_GETFL);
+    if (fl >= 0) (void)fcntl(s_pipe_r, F_SETFL, fl | O_NONBLOCK);
+    const uint64_t deadline = mono_ms() + 300;
+    char buf[4096];
+    while (mono_ms() < deadline) {
+        const ssize_t n = read(s_pipe_r, buf, sizeof buf);
+        if (n > 0) {
+            log_fd_write(buf, (size_t)n);
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        break;   /* EAGAIN = empty (the tee may hold the last chunk: it writes it itself), or EOF/error */
     }
-    usleep(20000);   /* the tee's last write() */
-    drain_pipe_now();
 }
 
 static const int k_fatal_sigs[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
 
 /* Installed before gow2_boot_prepare, so the runtime's own SIGSEGV/SIGBUS
  * handlers (SPU jobs, OPD) are installed on top and chain here when they do
- * not handle the fault. Saves the log tail, then dies with the default action. */
+ * not handle the fault. Only one fixed line is written straight to the log
+ * file (no pipe drain: the tee thread could race it and block the handler),
+ * then the default action is restored and the signal re-raised. */
 static void fatal_signal_handler(int sig, siginfo_t* si, void* uc)
 {
     (void)si;
     (void)uc;
-    static const char head[] = "[ios] fatal signal ";
-    char num[4] = { (char)('0' + (sig / 10) % 10), (char)('0' + sig % 10), '\n', 0 };
-    drain_pipe_now();
-    log_direct(head, sizeof head - 1);
-    log_direct(num, 3);
-    signal(sig, SIG_DFL);
+    char line[] = "[ios] fatal signal NN\n";
+    line[sizeof line - 4] = (char)('0' + (sig / 10) % 10);
+    line[sizeof line - 3] = (char)('0' + sig % 10);
+    log_fd_write(line, sizeof line - 1);
+    struct sigaction dfl;
+    memset(&dfl, 0, sizeof dfl);
+    dfl.sa_handler = SIG_DFL;
+    sigemptyset(&dfl.sa_mask);
+    sigaction(sig, &dfl, NULL);
     raise(sig);
 }
 
@@ -332,7 +339,7 @@ static void* guest_main(void* arg)
     flush_log_for_exit();
     char line[96];
     const int n = snprintf(line, sizeof line, "[ios] guest returned rc=%d -- exiting\n", rc);
-    if (n > 0) log_direct(line, (size_t)(n < (int)sizeof line ? n : (int)sizeof line - 1));
+    if (n > 0) log_fd_write(line, (size_t)(n < (int)sizeof line ? n : (int)sizeof line - 1));
     _exit(rc == 0 ? 0 : 1);
     return NULL;
 }
