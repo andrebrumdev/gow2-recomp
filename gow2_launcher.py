@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import sys
 import zipfile
@@ -28,7 +29,34 @@ def default_config() -> dict:
         "movie_cache": str(cache) if cache.is_dir() else str(cache),
         "mods_dir": str(DEFAULT_MODS),
         "mods_enabled": [],
+        # Runtime overlay settings file (F1/Start menu). Empty = the per-user
+        # default the runtime also uses when started without the launcher.
+        "overlay_settings": "",
     }
+
+
+def default_overlay_settings_path() -> str:
+    """Same location as rsx_overlay_settings_default_path() in the runtime."""
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", "")
+        return str(Path(base) / "ps3recomp" / "gow2" / "runtime-overlay.settings") if base else ""
+    home = os.environ.get("HOME", "")
+    if sys.platform == "darwin":
+        if not home:
+            return ""
+        return f"{home}/Library/Application Support/ps3recomp/gow2/runtime-overlay.settings"
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    if xdg:
+        return f"{xdg}/ps3recomp/gow2/runtime-overlay.settings"
+    return f"{home}/.config/ps3recomp/gow2/runtime-overlay.settings" if home else ""
+
+
+def overlay_settings_path(cfg: dict) -> str:
+    """Resolved runtime-overlay settings path handed to the game."""
+    raw = cfg.get("overlay_settings")
+    if isinstance(raw, str) and raw.strip():
+        return os.path.expanduser(raw.strip())
+    return default_overlay_settings_path()
 
 
 def load_config() -> dict:
@@ -268,12 +296,17 @@ def autosave_available(cfg: dict) -> bool:
     return False
 
 
-def build_launch_script(cfg: dict, resume_autosave: bool = False) -> str:
-    binary = find_binary() or (HERE / "boot_gow2")
+def build_launch_script(cfg: dict, resume_autosave: bool = False,
+                        binary: Path | None = None) -> str:
+    binary = binary or find_binary() or (HERE / "boot_gow2")
     env_sh = HERE / "env_gow2.sh"
     mods_dir = cfg.get("mods_dir") or str(DEFAULT_MODS)
     enabled = [n for n in cfg.get("mods_enabled") or [] if n in list_mod_names(mods_dir)]
     cache = cfg.get("movie_cache") or str(HERE / "movie_cache")
+    # PS3_OVERLAY_SETTINGS from the caller's environment wins, like the other
+    # overrides below; otherwise the configured (or per-user default) path.
+    overlay = os.environ.get("PS3_OVERLAY_SETTINGS") or overlay_settings_path(cfg)
+    overlay_line = f"export PS3_OVERLAY_SETTINGS={shlex.quote(overlay)}" if overlay else ""
     if resume_autosave:
         # The original menu's AutoLoad reads the mirror. Leave the pad idle so
         # autostart does not confirm New Game over that load.
@@ -292,6 +325,8 @@ set -euo pipefail
 cd {HERE.as_posix()!r}
 G2_MUTE="${{PS3_MUTE-}}"
 G2_DONE="${{PS3_MOVIE_DONE_MS-}}"
+G2_FULLSCREEN="${{PS3_FULLSCREEN-}}"
+G2_VSYNC="${{PS3_METAL_VSYNC-}}"
 set -a
 . {env_sh.as_posix()!r}
 set +a
@@ -301,12 +336,16 @@ export PS3_MODS_DIR={mods_dir!r}
 export PS3_MODS_ENABLED={','.join(enabled)!r}
 export PS3_MUTE="${{G2_MUTE:-0}}"
 export PS3_MOVIE_DONE_MS="${{G2_DONE:-auto}}"
-export PS3_FULLSCREEN="${{PS3_FULLSCREEN:-0}}"
 export PS3_METALFX="${{PS3_METALFX:-1}}"
 export PS3_METAL_PASS_MERGE="${{PS3_METAL_PASS_MERGE:-1}}"
 export PS3_METAL_GPU_DESWIZZLE="${{PS3_METAL_GPU_DESWIZZLE:-1}}"
-export PS3_METAL_VSYNC="${{PS3_METAL_VSYNC:-1}}"
 export PS3_METAL_HDR="${{PS3_METAL_HDR:-0}}"
+{overlay_line}
+# Fullscreen and VSync come from the overlay settings file (defaults: window,
+# VSync on). An explicit PS3_FULLSCREEN / PS3_METAL_VSYNC from the caller still
+# wins; env_gow2.sh's own VSync default must not mask the persisted choice.
+if [ -n "$G2_FULLSCREEN" ]; then export PS3_FULLSCREEN="$G2_FULLSCREEN"; else unset PS3_FULLSCREEN; fi
+if [ -n "$G2_VSYNC" ]; then export PS3_METAL_VSYNC="$G2_VSYNC"; else unset PS3_METAL_VSYNC; fi
 {autosave_env}unset PS3_NO_RSX
 exec {binary.as_posix()!r} {cfg.get('elf', '')!r}
 """
@@ -326,7 +365,7 @@ def play(cfg: dict, resume_autosave: bool = False) -> int:
         return 2
     mods_dir = cfg.get("mods_dir") or str(DEFAULT_MODS)
     Path(mods_dir).mkdir(parents=True, exist_ok=True)
-    script = build_launch_script(cfg, resume_autosave=resume_autosave)
+    script = build_launch_script(cfg, resume_autosave=resume_autosave, binary=binary)
     os.execvp("/bin/bash", ["/bin/bash", "-lc", script])
     return 127
 

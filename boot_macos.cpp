@@ -98,6 +98,7 @@ int  ppu_guest_range_committed(uint32_t addr, uint32_t n);
 } /* extern "C" */
 
 #include "movie_eos_arm.h"   /* amostrador [MOVIEFSM], gated, so observa */
+#include "gow2_overlay_provider.h" /* runtime overlay: WAD/movie/shader diagnostics */
 
 #include "vm.h"
 
@@ -415,14 +416,32 @@ int main(int argc, char** argv)
             ppu_function_count());
 
     g_backend = pick_backend();
+    /* Runtime overlay: settings (window size, fullscreen, VSync, pad mapping)
+     * load BEFORE the backend reads them. The launcher hands its path over in
+     * PS3_OVERLAY_SETTINGS; started without the launcher, the per-user default
+     * path is used. The GoW2 provider only copies host-side snapshots (no guest
+     * pointer, no giant lock). The overlay stays closed until F1/Start.
+     * Only the Metal backend draws it: with sdl/vulkan/none it stays
+     * uninitialized, so Start and the pad reach the game exactly as before
+     * instead of toggling a menu nobody can see. */
+    auto overlay_init_for_metal = []() {
+        if (g_backend != Backend::Metal) return;
+        if (!rsx_overlay_init(rsx_overlay_settings_path_from_env()))
+            fprintf(stderr, "[boot] runtime overlay unavailable\n");
+        rsx_overlay_set_title("God of War II HD");
+        gow2_overlay_provider_register();
+    };
+    overlay_init_for_metal();
     int brc = backend_init(g_backend);
     if (brc != 0 && g_backend == Backend::Vulkan) {
         /* Spec (ps3recomp docs/superpowers/specs/2026-09-23-vulkan-backend-a-design.md §5):
          * Vulkan unavailable -> platform default with one log line, never abort. The env is
-         * updated so cellGcmSys's rsx_bridge_mode keeps the Metal backend registered here. */
+         * updated so cellGcmSys's rsx_bridge_mode keeps the Metal backend registered here.
+         * The overlay was skipped for Vulkan; it comes up now, before the Metal backend. */
         fprintf(stderr, "[boot] vulkan init failed -> metal (platform default)\n");
         setenv("PS3_RSX_BACKEND", "metal", 1);
         g_backend = Backend::Metal;
+        overlay_init_for_metal();
         brc = backend_init(g_backend);
     }
     if (brc != 0) {
@@ -445,6 +464,12 @@ int main(int argc, char** argv)
 
     fprintf(stderr, "[boot] guest returned rc=%d\n", rc);
 
+    /* Orderly exit only: the overlay saves pending settings and frees its core
+     * before the backend (its only renderer) tears down. A no-op when it was
+     * never initialized (non-Metal backends). The window-close / Cmd+Q /
+     * shell "Sair" paths leave through metal_quit_now's _exit by design and
+     * never get here (see rsx_metal_backend.m). */
+    rsx_overlay_shutdown();
     backend_shutdown(g_backend);
     vm_shutdown();
     return rc == 0 ? 0 : 1;

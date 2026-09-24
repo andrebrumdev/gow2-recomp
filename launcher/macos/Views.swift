@@ -377,9 +377,12 @@ struct GraphicsView: View {
     var body: some View {
         Form {
             ScreenHeader(title: "Gráficos", subtitle: "Tela, imagem e opções avançadas.")
+            if let err = settings.saveError {
+                Banner(text: err, color: Theme.C.blood, icon: "exclamationmark.triangle.fill")
+            }
             Section("Tela") {
                 Toggle("Tela cheia ao abrir", isOn: $settings.fullscreen)
-                Text("F11 ou Cmd+Enter alternam durante o jogo; Esc solta o mouse.")
+                Text("Também muda no menu do jogo (botão PS, Select+Start ou F1). F11 ou Cmd+Enter alternam durante o jogo; Esc solta o mouse.")
                     .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
                 Toggle("VSync", isOn: $settings.vsync)
             }
@@ -401,6 +404,7 @@ struct GraphicsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .background(Theme.C.stone950)
+        .onAppear { settings.reloadFromFile() }
     }
 }
 

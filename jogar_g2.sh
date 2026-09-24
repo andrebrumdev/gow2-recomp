@@ -9,12 +9,41 @@ cd "$HERE" || exit 1
 G2_DONE_MS="${PS3_MOVIE_DONE_MS-}"
 G2_MUTE="${PS3_MUTE-}"
 G2_AUTOSTART="${PS3_PAD_AUTOSTART-}"
-# Jogar abre em TELA CHEIA (F11 / Cmd+Enter / Escape voltam para janela).
-# Em janela: PS3_FULLSCREEN=0 ./jogar_g2.sh
-export PS3_FULLSCREEN="${PS3_FULLSCREEN:-1}"
+# Tela cheia e VSync vem do arquivo de configuracoes do overlay (a central
+# PS/Home grava o que o jogador escolheu); so' um valor exportado por quem
+# chama ganha dele: PS3_FULLSCREEN=0 ./jogar_g2.sh abre em janela.
+G2_FULLSCREEN="${PS3_FULLSCREEN-}"
+G2_VSYNC="${PS3_METAL_VSYNC-}"
 set -a
 . "$HERE/env_gow2.sh"
 set +a
+if [ -n "$G2_FULLSCREEN" ]; then export PS3_FULLSCREEN="$G2_FULLSCREEN"; else unset PS3_FULLSCREEN; fi
+if [ -n "$G2_VSYNC" ]; then export PS3_METAL_VSYNC="$G2_VSYNC"; else unset PS3_METAL_VSYNC; fi
+# Jogar abre em TELA CHEIA por default: se o arquivo ainda nao tem a chave
+# `fullscreen`, grava fullscreen=1 (mesmo caminho que o runtime le:
+# PS3_OVERLAY_SETTINGS ou o default por usuario de rsx_overlay_settings.c).
+g2_overlay_settings_path() {
+    if [ -n "${PS3_OVERLAY_SETTINGS:-}" ]; then
+        printf '%s' "$PS3_OVERLAY_SETTINGS"
+    elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+        [ -n "${HOME:-}" ] && printf '%s' "$HOME/Library/Application Support/ps3recomp/gow2/runtime-overlay.settings"
+    elif [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s' "$XDG_CONFIG_HOME/ps3recomp/gow2/runtime-overlay.settings"
+    else
+        [ -n "${HOME:-}" ] && printf '%s' "$HOME/.config/ps3recomp/gow2/runtime-overlay.settings"
+    fi
+}
+G2_OVERLAY_FILE="$(g2_overlay_settings_path)"
+if [ -n "$G2_OVERLAY_FILE" ] && ! grep -q '^fullscreen=' "$G2_OVERLAY_FILE" 2>/dev/null; then
+    if [ -f "$G2_OVERLAY_FILE" ]; then
+        # Completa a ultima linha antes de acrescentar (o parser e' por linha).
+        [ -s "$G2_OVERLAY_FILE" ] && [ -n "$(tail -c 1 "$G2_OVERLAY_FILE")" ] && printf '\n' >> "$G2_OVERLAY_FILE"
+        printf 'fullscreen=1\n' >> "$G2_OVERLAY_FILE" 2>/dev/null
+    else
+        (umask 077 && mkdir -p "$(dirname "$G2_OVERLAY_FILE")" &&
+            printf 'version=2\nfullscreen=1\n' > "$G2_OVERLAY_FILE") 2>/dev/null
+    fi
+fi
 # PS3_TRACE_PROMPT_SHAPES: sonda de DIAGNOSTICO dos icones de botao. Estava
 # ligada por default aqui, mas ela calcula uma assinatura de forma por DRAW no
 # material 0x59864B76 -- que e' tambem o material das particulas, centenas de

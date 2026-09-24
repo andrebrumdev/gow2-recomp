@@ -519,6 +519,9 @@ clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$HERE/boot_ma
 # Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
 # PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
 clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$LIFT/movie_eos_arm.o"
+# Diagnosticos do overlay de runtime (copia snapshots do host; sem ponteiro guest).
+clang -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" \
+      "$HERE/gow2_overlay_provider.c" -o "$LIFT/gow2_overlay_provider.o"
 
 echo "=== 5. link ==="
 SDL_FLAGS="${SDL_FLAGS-$(pkg-config --libs sdl2)}"
@@ -564,10 +567,11 @@ clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     $([ -f "$LIFT/host_res_inflate.o" ] && echo "$LIFT/host_res_inflate.o") \
     $([ -f "$LIFT/host_wad_tex.o" ] && echo "$LIFT/host_wad_tex.o") \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
+    "$LIFT"/gow2_overlay_provider.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
     -framework Metal -framework MetalFX -framework MetalPerformanceShaders -framework QuartzCore -framework Foundation \
-    -framework Cocoa \
+    -framework Cocoa -framework CoreText \
     -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox \
     -framework AudioToolbox -framework CoreAudio \
     -framework GameController -framework CoreHaptics \

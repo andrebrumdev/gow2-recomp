@@ -34,6 +34,7 @@
 unsigned char* vm_base = NULL;
 uint32_t       g_movie_eos_ea = 0;
 long           movie_hle_overlay_done(void) { return 0; }
+void           rsx_overlay_log_write(int level, const char* message) { (void)level; (void)message; }
 static char    g_cache_path[1024];
 const char*    movie_hle_cache_path(void) { return g_cache_path[0] ? g_cache_path : NULL; }
 #if defined(__APPLE__)

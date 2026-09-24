@@ -30,6 +30,19 @@ extern "C" {
 void movie_eos_sampler_start(void);
 
 /*
+ * Runtime-overlay view of the movie player, as the sampler thread last saw
+ * it. Copied values only (no guest pointer), read without any guest lock.
+ * Returns 0 (out untouched) until the sampler has sampled st620 at least once
+ * -- e.g. when the sampler is not running.
+ */
+typedef struct movie_eos_overlay_view {
+    uint32_t st620;     /* intro-movie FSM state (obj+0x620) */
+    int      eos_armed; /* EOS read-hook armed on obj+0x744 */
+    int      done;      /* "movie finished" producer fired (overlay or timer) */
+} movie_eos_overlay_view;
+int movie_eos_overlay_state(movie_eos_overlay_view* out);
+
+/*
  * Seam de teste: 1 se (obj_ea .. obj_ea+MOVIE_OBJ_SPAN) e' legivel segundo o
  * mapa de commits registado (ppu_guest_range_committed). Substitui o
  * VirtualQuery do host Windows, que nao tem equivalente POSIX barato.

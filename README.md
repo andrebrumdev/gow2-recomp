@@ -174,3 +174,151 @@ C/C++ e compilado para arm64, rodando sobre uma reimplementação do sistema do
 PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é
 distribuído: como no Dusk, você fornece sua própria cópia e o kit de
 instalação (`kit/setup.sh`) descriptografa, traduz e compila tudo na sua máquina.
+
+Full technical history lives in the Claude project memory (`ps3recomp-feasibility`,
+levas 13-17) and in `ps3recomp/docs/`.
+
+## Central do jogo (PS/Home, Select+Start ou F1) e o launcher
+
+`gow2_launcher.py` (setup + mods + "Jogar" numa tela só) também repassa as
+configurações do overlay para o jogo. Esta seção documenta o overlay em si
+(controles, onde ficam as configurações, o que cada diagnóstico significa) e
+como ele se encaixa no fluxo do launcher.
+
+**Importante:** o overlay é uma UI do host. Ele abrir/renderizar na tela **não
+é prova** de que o jogo (guest) está desenhando pixels reais — essa aceitação
+é separada (ver a cadeia de paredes A-G no `CLAUDE.md` do motor). Um print com
+o menu aberto inclui a UI por cima do frame do jogo.
+
+### Controles
+
+- **Abrir/fechar a central:** botão **PS/Home** do controle (macOS, via
+  GameController), **segure Select e aperte Start**, ou **F1** no teclado
+  (`toggle_key=2` no arquivo troca para F2). A central sempre abre em
+  **"Voltar ao jogo"** e o jogo continua rodando atrás dela, sem receber
+  entrada. No Windows o botão PS/Home não é lido (XInput não o expõe):
+  use Select+Start ou F1.
+- **Navegação:** esquerda/direita troca de cartão; baixo (ou X/Enter) entra
+  no painel; cima/baixo percorre as linhas; **X/Enter** confirma; **O/Esc**
+  volta um nível e, nos cartões, fecha. PS/Home, Select+Start e F1 fecham
+  de qualquer lugar. Um botão que ainda estiver pressionado quando a central
+  fecha só chega ao jogo depois de solto (o X que confirmou "Voltar ao jogo"
+  não vira pulo; o Enter não vira pausa).
+- **Cartões:** Voltar ao jogo · Tela (tela cheia, VSync, tamanho da janela) ·
+  Controles (zona morta 0–30 %, vibração do jogo, remapear botões, restaurar
+  padrão) · Som (som do jogo, sons da interface, vibração da interface) ·
+  Desenvolvedor (FPS/tempo de quadro, draws do jogo, estado do WAD, shaders,
+  Logs) · Sair (pede confirmação; as configurações já estão salvas).
+- **Remapear:** escolha o botão do PS3 na lista e pressione o botão do
+  controle que deve acioná-lo; o antigo dono troca de lugar (o mapa nunca
+  fica com botões repetidos). Esc cancela; sem resposta em 5 s, cancela.
+- **Visual:** no macOS o jogo fica desfocado e escurecido atrás da central
+  (Metal + MetalPerformanceShaders); no Windows só escurece. Texto em SF Pro
+  e ícones SF Symbols no macOS; Inter (OFL, `third_party/inter`) e ícones
+  geométricos no resto — ou se a fonte do sistema faltar.
+- **Som do jogo** (menu) e **"Som ligado"** (launcher, `PS3_MUTE`) somam-se:
+  o jogo só toca com os dois ligados.
+- Valores não medidos aparecem como **"indisponível"** — nunca como zero.
+- **O menu sempre inicia fechado.**
+
+### Onde fica o arquivo de configurações
+
+Local padrão por usuário (mesma fórmula usada pelo launcher e pelo runtime):
+
+- **macOS:** `~/Library/Application Support/ps3recomp/gow2/runtime-overlay.settings`
+- **Windows:** `%APPDATA%\ps3recomp\gow2\runtime-overlay.settings`
+- **Linux:** `$XDG_CONFIG_HOME/ps3recomp/gow2/runtime-overlay.settings` (ou
+  `~/.config/ps3recomp/gow2/runtime-overlay.settings` sem `XDG_CONFIG_HOME`)
+
+Pode ser sobrescrito com a variável de ambiente `PS3_OVERLAY_SETTINGS`
+(caminho explícito do arquivo). O `gow2_launcher.py` também aceita uma chave
+opcional `"overlay_settings"` no `user_config.json`; vazia/ausente usa o
+caminho padrão acima (configs antigas, sem essa chave, continuam funcionando
+sem alteração). Se o arquivo estiver ausente, corrompido ou com um campo
+inválido, o runtime cai de volta nos valores padrão desse campo (nunca
+recusa iniciar por isso) — janela 1280x720, VSync ligado, mapeamento padrão.
+Isso vale também para as chaves v2 (`ui_sounds`, `ui_haptics`, `game_mute`,
+`vibration`): arquivos salvos por uma versão anterior do overlay, sem essas
+chaves, carregam com os padrões (sons e vibração da interface ligados, som
+do jogo ligado, vibração do jogo ligada).
+
+### Precedência (variáveis de ambiente vs. configurações salvas)
+
+**Tela cheia e VSync têm uma fonte só: o arquivo de configurações do
+overlay.** O menu do jogo e o launcher SwiftUI (`GoW2 Recomp.app`) editam o
+mesmo arquivo; o launcher não exporta mais `PS3_FULLSCREEN`/`PS3_METAL_VSYNC`
+e passa o caminho em `PS3_OVERLAY_SETTINGS`. Na primeira execução do launcher
+novo, um arquivo sem essas chaves recebe os valores que o launcher tinha
+(padrão: ligados).
+
+Um valor **explícito** ainda vence o arquivo: `PS3_FULLSCREEN`/
+`PS3_METAL_VSYNC` definidos no ambiente de quem chamou (ou em "Avançado" no
+launcher). O `env_gow2.sh` não força mais o VSync (só repassa o valor de quem
+chamou). O `jogar_g2.sh`, o `gow2_launcher.py` e o launcher SwiftUI guardam o
+valor do chamador antes de carregar o `env_gow2.sh` e removem a variável se
+ele não definiu nada — nenhum padrão de script mascara o arquivo. O
+`jogar_g2.sh` continua abrindo em **tela cheia** por padrão: se o arquivo
+ainda não tem a chave `fullscreen`, ele grava `fullscreen=1` antes de iniciar
+(depois vale o que a central salvar; `PS3_FULLSCREEN=0 ./jogar_g2.sh` abre em
+janela só naquela vez). Arquivos gravados antes desta mudança podem já ter
+`fullscreen=0`: basta ligar Tela cheia na central uma vez.
+
+Se o launcher SwiftUI não conseguir gravar o arquivo, ele mostra na tela
+"Não foi possível salvar as configurações: …" (com o motivo) em vez de
+fingir que o ajuste mudou.
+
+### Limitações por backend
+
+| Ajuste | Metal (macOS) | D3D12 (Windows) |
+|---|---|---|
+| Tamanho de janela | aplica ao vivo | precisa reiniciar |
+| Tela cheia | aplica ao vivo | precisa reiniciar (borderless no monitor primário, sem DPI awareness) |
+| VSync | aplica ao vivo | aplica ao vivo |
+
+A central marca cada ajuste que o backend atual não oferece como
+"indisponível", e cada um que só vale depois de reiniciar mostra
+"requer reiniciar" logo abaixo do nome — nenhum ajuste finge aplicar algo
+que só foi salvo.
+
+No Windows, hoje só o caminho de bridge D3D12 do `cellGcmSys.c` inicializa o
+overlay; **não há ainda um provedor de diagnósticos de WAD/shader do GoW2
+para Windows**, então as linhas de WAD e de shader aparecem como
+"indisponível" lá (o overlay em si funciona; só falta o adaptador de
+diagnóstico, que hoje só existe para o `boot_macos.cpp`).
+
+### O que cada diagnóstico significa
+
+- **FPS / tempo de frame:** contagem real da apresentação do backend — só os
+  flips do jogo (guest). Apresentações do filme/intro (que correm na thread
+  de decodificação) **não** entram nessa mesma contagem.
+- **Draws do guest:** número de draw calls do próprio jogo, replays contados
+  pelo backend — nunca inclui os draws do próprio menu do overlay. No Metal
+  com `PS3_METAL_PER_DRAW_RT=1` (padrão do `env_gow2.sh`) os registros de
+  clear e blit da mesma lista não entram na conta. No D3D12
+  esse número é limitado a `MAX_DRAWS=256` por frame (registros reproduzidos,
+  não o total real de draws se passar disso).
+- **Shaders (hits/misses/compiles/failures):** "compiles" tem definição
+  diferente por backend — no Metal é o número de pares VS+FS (vertex+
+  fragment) compilados; no D3D12 é o número de compilações de fragment
+  program bem-sucedidas. "Failures" conta decodificações/compilações que
+  caíram para um caminho alternativo.
+- **Estado do WAD / filme:** vem do caminho `movie_io` (o que o jogo abre via
+  `PS3_MOVIE_IO=1`, ligado por padrão em `env_gow2.sh`); WADs lidos por outro
+  caminho (psarc/FIOS direto) não aparecem aqui.
+- **"Indisponível" nunca é "zero":** qualquer campo que o backend/provedor
+  ainda não mediu aparece como "indisponível" (unavailable), nunca como `0`
+  — um `0` no painel é sempre uma medição real de zero.
+- **Log recente (aba Logs, separada da de Diagnóstico):** um anel limitado
+  em memória (64 entradas; a aba mostra o anel inteiro, a mais nova por
+  último); sob contenção alguma linha pode ser descartada (o registro nunca
+  bloqueia a thread de render/guest para garantir isso).
+- Se o backend não conseguir criar o renderer do overlay (ou a textura de
+  fonte), o overlay se desliga sozinho para a sessão: F1/Select+Start não
+  fazem nada e nenhuma entrada é retida do jogo (aviso
+  `overlay disabled: ...` no `stderr`).
+
+### Compatibilidade com launchers/scripts antigos
+
+Arquivos `user_config.json` salvos antes do overlay continuam funcionando
+sem qualquer alteração (a chave `overlay_settings` é opcional). Nenhum
+comportamento de setup/extração/mods mudou.

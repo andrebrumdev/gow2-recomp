@@ -34,6 +34,7 @@ struct LauncherConfig: Codable {
     var mods_dir: String = ""
     var mods_enabled: [String] = []
     var savedata_root: String? = nil
+    var overlay_settings: String? = nil
 }
 
 enum LauncherCore {
@@ -83,6 +84,7 @@ enum LauncherCore {
             if let v = obj["mods_dir"] as? String, !v.isEmpty { c.mods_dir = v }
             if let v = obj["mods_enabled"] as? [String] { c.mods_enabled = v }
             if let v = obj["savedata_root"] as? String, !v.isEmpty { c.savedata_root = v }
+            if let v = obj["overlay_settings"] as? String, !v.isEmpty { c.overlay_settings = v }
         }
         return c
     }
@@ -211,6 +213,24 @@ enum LauncherCore {
 
     static func shq(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
+    /// The checkout the launcher drives: GOW2_REPO, else the path stamped by build_app.sh.
+    static func repoURL() -> URL {
+        let env = ProcessInfo.processInfo.environment["GOW2_REPO"]
+        let stamped = Bundle.main.object(forInfoDictionaryKey: "GoW2RepoPath") as? String
+        return URL(fileURLWithPath: env ?? stamped ?? FileManager.default.currentDirectoryPath)
+    }
+
+    /// Same order as gow2_launcher.py: caller env, user_config.json, per-user default.
+    static func overlaySettingsURL(repo: URL) -> URL {
+        if let e = ProcessInfo.processInfo.environment["PS3_OVERLAY_SETTINGS"], !e.isEmpty {
+            return URL(fileURLWithPath: e)
+        }
+        if let c = load(repo: repo).overlay_settings {
+            return URL(fileURLWithPath: (c as NSString).expandingTildeInPath)
+        }
+        return OverlaySettingsFile.defaultURL()
+    }
+
     /// Same launch contract as gow2_launcher.py build_launch_script: the player's
     /// settings are in the environment, env_gow2.sh fills the rest, then paths/mods.
     static func launchScript(repo: URL, c: LauncherConfig, binary: String, resume: Bool) -> String {
@@ -221,6 +241,8 @@ enum LauncherCore {
         return """
         set -euo pipefail
         cd \(shq(repo.path))
+        G2_FULLSCREEN="${PS3_FULLSCREEN-}"
+        G2_VSYNC="${PS3_METAL_VSYNC-}"
         set -a
         . ./env_gow2.sh   # ${VAR:=default}: the player's settings, exported before, win
         set +a
@@ -229,9 +251,51 @@ enum LauncherCore {
         export PS3_MODS_DIR=\(shq(c.mods_dir))
         export PS3_MODS_ENABLED=\(shq(enabled.joined(separator: ",")))
         export PS3_MOVIE_DONE_MS="${GOW2_MOVIE_DONE_MS:-auto}"
+        # Fullscreen and VSync come from the overlay settings file; only an
+        # explicit caller value overrides it (env_gow2.sh's default must not).
+        if [ -n "$G2_FULLSCREEN" ]; then export PS3_FULLSCREEN="$G2_FULLSCREEN"; else unset PS3_FULLSCREEN; fi
+        if [ -n "$G2_VSYNC" ]; then export PS3_METAL_VSYNC="$G2_VSYNC"; else unset PS3_METAL_VSYNC; fi
         \(resumeEnv)unset PS3_NO_RSX
         exec \(shq(binary)) \(shq(c.elf))
         """
+    }
+}
+
+/// Hides the launcher while the game runs and brings it back when the game
+/// exits. A protocol so the handoff is testable without AppKit windows.
+@MainActor
+protocol LauncherPresenter: AnyObject {
+    func hideForGame()
+    func showAfterGame()
+}
+
+@MainActor
+final class AppKitLauncherPresenter: LauncherPresenter {
+    func hideForGame() { NSApp.hide(nil) }
+
+    func showAfterGame() {
+        NSApp.unhide(nil)
+        NSApp.activate()
+        let main = NSApp.windows.first { $0.canBecomeMain && !($0 is NSPanel) }
+        main?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Starts the game process and ties the launcher's visibility to it: hidden
+/// only after a successful run(), shown again when the process ends (exit,
+/// window closed or crash), then `onExit` runs. A failed start never hides.
+@MainActor
+enum GameSession {
+    static func start(_ p: Process, presenter: LauncherPresenter,
+                      onExit: @escaping @MainActor () -> Void) throws {
+        p.terminationHandler = { _ in
+            Task { @MainActor in
+                presenter.showAfterGame()
+                onExit()
+            }
+        }
+        try p.run()
+        presenter.hideForGame()
     }
 }
 
@@ -249,13 +313,12 @@ final class Backend: ObservableObject {
     let logURL: URL
     private var game: Process?
     private var logTimer: Timer?
+    var presenter: LauncherPresenter = AppKitLauncherPresenter()
 
     init() {
         // The build script stamps the checkout path into Info.plist; GOW2_REPO
         // overrides it (useful when the app is moved).
-        let env = ProcessInfo.processInfo.environment["GOW2_REPO"]
-        let stamped = Bundle.main.object(forInfoDictionaryKey: "GoW2RepoPath") as? String
-        repo = URL(fileURLWithPath: env ?? stamped ?? FileManager.default.currentDirectoryPath)
+        repo = LauncherCore.repoURL()
         let logs = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/GoW2Recomp", isDirectory: true)
         try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
@@ -337,16 +400,13 @@ final class Backend: ObservableObject {
         p.environment = env
         p.standardOutput = handle
         p.standardError = handle
-        p.terminationHandler = { [weak self] _ in
-            Task { @MainActor in
+        do {
+            try GameSession.start(p, presenter: presenter) { [weak self] in
                 self?.game = nil
                 self?.running = false
                 self?.logTimer?.invalidate()
                 self?.readLogTail()
             }
-        }
-        do {
-            try p.run()
             game = p
             running = true
             error = nil

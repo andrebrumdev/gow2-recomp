@@ -64,7 +64,10 @@
  */
 #include "movie_eos_arm.h"
 #include "movie_clock.h"   /* ps3recomp libs/video (-I in build_macos.sh) */
+#include "rsx_overlay_log.h"
 
+#include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,6 +109,35 @@ static int s_sampler_mo  = 0;   /* PS3_TRACE_MOVIEOBJ: dump verboso [MOVIEOBJ]  
 static int s_sampler_eos = 0;   /* PS3_MOVIE_EOS:      autoriza o arm do read-hook */
 static int s_sampler_perf = 0;  /* PS3_PERF_FSM: thin [MOVIEFSM] only (no probes) */
 static int s_audio_stream_done = 1; /* HLE A3b: mark sess+0x1B8 (opt-out =0) */
+
+/* Runtime-overlay view of the movie player, copied here by the sampler thread
+ * from values it already read (host-side, no guest pointer kept, no giant
+ * lock). st620 stays at the sentinel until the first real sample. */
+static atomic_uint s_ov_st620 = 0xFFFFFFFFu;
+static atomic_int  s_ov_eos_armed;
+static atomic_int  s_ov_done;
+
+int movie_eos_overlay_state(movie_eos_overlay_view* out)
+{
+    uint32_t st = atomic_load_explicit(&s_ov_st620, memory_order_relaxed);
+    if (!out || st == 0xFFFFFFFFu) return 0;
+    out->st620 = st;
+    out->eos_armed = atomic_load_explicit(&s_ov_eos_armed, memory_order_relaxed);
+    out->done = atomic_load_explicit(&s_ov_done, memory_order_relaxed);
+    return 1;
+}
+
+/* Movie/EOS events also go to the overlay Logs tab (bounded, non-blocking),
+ * next to the existing stderr line. */
+static void movie_overlay_log(int level, const char* fmt, ...)
+{
+    char line[192];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
+    rsx_overlay_log_write(level, line);
+}
 
 #define MOVIE_OBJ_SLOT_EA  0x540054u
 #define MOVIE_OBJ_MAX_EA   0x4F000000u   /* acima disto o slot e' lixo, nao objecto */
@@ -633,6 +665,7 @@ long movie_done_timebased_poll(uint32_t st)
             "[MOVIEDONE] done time-based (NAO e' EOF real): %llu ms desde st620 activo >= %lld ms, player parado em st620=%u -> sinal \"filme acabou\"\n",
             (unsigned long long)(now - s_movie_done_start_ms), ivl, st);
     fflush(stderr);
+    movie_overlay_log(RSX_OVERLAY_LOG_INFO, "movie done (timer %lld ms) st620=%u", ivl, st);
     return 1;
 }
 
@@ -718,6 +751,10 @@ static void movie_sampler_loop(void)
          * o produtor time-based (PS3_MOVIE_DONE_MS). */
         long done_overlay = movie_hle_overlay_done() ? 1 : 0;
         long done         = done_overlay ? 1 : movie_done_timebased_poll(st);
+        atomic_store_explicit(&s_ov_done, done ? 1 : 0, memory_order_relaxed);
+        /* The GoW2 hooks also clear the hook; re-read it every sample. */
+        atomic_store_explicit(&s_ov_eos_armed, g_movie_eos_ea != 0u, memory_order_relaxed);
+        atomic_store_explicit(&s_ov_st620, st, memory_order_relaxed);
 
         /* Mesmo formato do host Windows, para os dois logs se compararem
          * linha a linha. Emitido na transicao OU no heartbeat. */
@@ -727,6 +764,8 @@ static void movie_sampler_loop(void)
                     "[MOVIEFSM] st620 %u -> %u  f744=%u f746=%u eos_ea=0x%08X overlay_done=%ld\n",
                     prev, st, f744, f746, g_movie_eos_ea, done);
             fflush(stderr);
+            if (st != prev)   /* transitions only; the heartbeat stays on stderr */
+                movie_overlay_log(RSX_OVERLAY_LOG_INFO, "movie st620 %u -> %u", prev, st);
             /* Wall 2026-07-22: after intro, st620 returns to 0 but g_movie_eos_ea
              * stayed armed (one-shot arm never cleared). A later Play on the same
              * player object sees vm_read8(obj+0x744)=1 immediately and can skip
@@ -739,6 +778,8 @@ static void movie_sampler_loop(void)
                         g_movie_eos_ea);
                 fflush(stderr);
                 g_movie_eos_ea = 0;
+                atomic_store_explicit(&s_ov_eos_armed, 0, memory_order_relaxed);
+                movie_overlay_log(RSX_OVERLAY_LOG_INFO, "movie EOS hook cleared (st620 -> 0)");
             }
             /* New Play after idle: re-time done/EOS from this open, not SmLogo. */
             if (prev == 0u && st >= 1u && st != 0xFFFFFFFFu) {
@@ -802,6 +843,9 @@ static void movie_sampler_loop(void)
                     done_overlay ? "overlay" : "time-based", st,
                     movie_seqdone_seen(), movie_force_seqdone_ms(), g_movie_eos_ea);
             fflush(stderr);
+            atomic_store_explicit(&s_ov_eos_armed, 1, memory_order_relaxed);
+            movie_overlay_log(RSX_OVERLAY_LOG_INFO, "movie EOS armed (%s done, st620=%u)",
+                              done_overlay ? "overlay" : "time-based", st);
         }
 
         /* A3b: HLE stream-complete do audio. Com o arm EOS atrasado (st>=5), o
