@@ -18,11 +18,7 @@ int main(int argc, char** argv)
     if (gow2_ios_host_load_config() != 0)
         fprintf(stderr, "[ios] bundled gow2.env missing -- running on the launch environment only\n");
     gow2_ios_host_start_perf_log();
-    if (!gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT"))) {
-        fprintf(stderr, "[ios] game data missing or incomplete in %s (EBOOT.ELF, USRDIR) -- "
-                        "install it from the Mac: games/gow2/ios/install_ios.sh --data\n", gow2_ios_documents());
-        return 0;   /* P2: the home screen shows "Jogo não instalado" */
-    }
+    gow2_ios_host_wait_for_game_data();   /* P2: the home screen takes this over */
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_IDLE_TIMER_DISABLED, "1");
     gow2_ios_host_audio_session_begin();
@@ -31,7 +27,9 @@ int main(int argc, char** argv)
         return 1;
     }
     gow2_ios_host_install_lifecycle();
-    /* The guest's flip calls SDL_PollEvent (cellGcmSetFlipCommand ->
+    /* Why SDL_PollEvent on the guest thread is safe -- keep in sync with
+     * rsx_metal_backend_pump_messages (libs/video/rsx_metal_backend.m).
+     * The guest's flip calls SDL_PollEvent (cellGcmSetFlipCommand ->
      * rsx_metal_backend_pump_messages) from the guest thread. SDL turns its
      * UIKit run-loop pumping off once SDL_main returns; turn it off now so the
      * guest thread never runs a run loop even before that: SDL_PollEvent then

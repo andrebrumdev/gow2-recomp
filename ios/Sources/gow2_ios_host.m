@@ -6,14 +6,19 @@
 #include <fcntl.h>
 #include <mach/mach.h>
 #include <os/proc.h>
+#include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/qos.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <SDL2/SDL.h>
 
 #include "gow2_boot.h"
 #include "gow2_env_file.h"
@@ -25,7 +30,7 @@
 #include "cellpad_gamecontroller.h"
 
 static char s_docs[1024];
-static int s_log_fd = -1, s_orig_stdout = -1;
+static int s_log_fd = -1, s_orig_stdout = -1, s_pipe_r = -1;
 
 const char* gow2_ios_documents(void) { return s_docs; }
 
@@ -43,6 +48,73 @@ static void* tee_thread(void* arg)
         if (s_orig_stdout >= 0) (void)!write(s_orig_stdout, buf, (size_t)n);   /* devicectl --console */
     }
     return NULL;
+}
+
+/* Writes straight to the log file and the original stdout, bypassing the tee
+ * (async-signal-safe: only write()). */
+static void log_direct(const char* msg, size_t n)
+{
+    if (s_log_fd >= 0) (void)!write(s_log_fd, msg, n);
+    if (s_orig_stdout >= 0) (void)!write(s_orig_stdout, msg, n);
+}
+
+/* Moves whatever still sits in the tee pipe into the log, without blocking
+ * (poll with timeout 0 before every read). Async-signal-safe. */
+static void drain_pipe_now(void)
+{
+    if (s_pipe_r < 0) return;
+    char buf[4096];
+    for (int i = 0; i < 256; i++) {
+        struct pollfd pf = { .fd = s_pipe_r, .events = POLLIN, .revents = 0 };
+        if (poll(&pf, 1, 0) <= 0 || !(pf.revents & POLLIN)) break;
+        const ssize_t n = read(s_pipe_r, buf, sizeof buf);
+        if (n <= 0) break;
+        log_direct(buf, (size_t)n);
+    }
+}
+
+/* Before _exit: flush stdio, then give the tee thread up to ~0.5 s to empty
+ * the pipe (and take anything left ourselves), so the log tail is not lost. */
+static void flush_log_for_exit(void)
+{
+    fflush(stdout);
+    fflush(stderr);
+    for (int i = 0; i < 50 && s_pipe_r >= 0; i++) {
+        int avail = 0;
+        if (ioctl(s_pipe_r, FIONREAD, &avail) != 0 || avail == 0) break;
+        usleep(10000);
+    }
+    usleep(20000);   /* the tee's last write() */
+    drain_pipe_now();
+}
+
+static const int k_fatal_sigs[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
+
+/* Installed before gow2_boot_prepare, so the runtime's own SIGSEGV/SIGBUS
+ * handlers (SPU jobs, OPD) are installed on top and chain here when they do
+ * not handle the fault. Saves the log tail, then dies with the default action. */
+static void fatal_signal_handler(int sig, siginfo_t* si, void* uc)
+{
+    (void)si;
+    (void)uc;
+    static const char head[] = "[ios] fatal signal ";
+    char num[4] = { (char)('0' + (sig / 10) % 10), (char)('0' + sig % 10), '\n', 0 };
+    drain_pipe_now();
+    log_direct(head, sizeof head - 1);
+    log_direct(num, 3);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void install_fatal_signal_log(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = fatal_signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    for (size_t i = 0; i < sizeof k_fatal_sigs / sizeof k_fatal_sigs[0]; i++)
+        sigaction(k_fatal_sigs[i], &sa, NULL);
 }
 
 /* Logged once: the A15 is expected to report NO (the backend then decodes BC
@@ -70,6 +142,7 @@ void gow2_ios_host_early(void)
         dup2(p[1], 1);
         dup2(p[1], 2);
         close(p[1]);
+        s_pipe_r = p[0];
         pthread_t t;
         if (pthread_create(&t, NULL, tee_thread, (void*)(intptr_t)p[0]) == 0) pthread_detach(t);
     }
@@ -77,6 +150,7 @@ void gow2_ios_host_early(void)
     setvbuf(stderr, NULL, _IONBF, 0);
     fprintf(stderr, "[ios] documents=%s pid=%d available_mb=%zu\n", s_docs, getpid(),
             os_proc_available_memory() >> 20);
+    install_fatal_signal_log();
     log_gpu_bc_support();
 }
 
@@ -84,8 +158,13 @@ static void apply_config_file(const char* path, int required, int* rc)
 {
     int applied = 0, rejected = 0;
     if (gow2_env_apply_file(path, 0, &applied, &rejected) != 0) {
+        const int err = errno;
+        struct stat st;
+        if (stat(path, &st) == 0)   /* present but refused: unreadable, > 64 KB, NUL byte, read error */
+            fprintf(stderr, "[ios] config %s: WARNING: file present but rejected (not applied; errno=%d %s)\n",
+                    path, err, strerror(err));
         if (required) *rc = -1;
-        return;   /* the override file is optional */
+        return;   /* the override file is optional; absent = silent */
     }
     fprintf(stderr, "[ios] config %s: %d set, %d rejected%s\n", path, applied, rejected,
             rejected > 0 ? " -- WARNING: malformed lines ignored" : "");
@@ -207,7 +286,11 @@ void gow2_ios_host_install_lifecycle(void)
     [nc addObserverForName:UIApplicationWillTerminateNotification object:nil queue:mq
                 usingBlock:^(NSNotification* n) {
         (void)n;
-        fprintf(stderr, "[ios] will terminate (guest thread not joined)\n");
+        /* Stop GPU submission (gate close is bounded to 2 s) and audio; never
+         * join the guest thread -- it may be parked at the closed gate. */
+        gow2_lifecycle_will_resign_active();
+        fprintf(stderr, "[ios] will terminate -> paused (guest thread not joined)\n");
+        flush_log_for_exit();
     }];
     [nc addObserverForName:UIApplicationDidReceiveMemoryWarningNotification object:nil queue:mq
                 usingBlock:^(NSNotification* n) {
@@ -232,6 +315,13 @@ void gow2_ios_host_install_lifecycle(void)
         fprintf(stderr, "[ios] thermal state -> %d\n", (int)[NSProcessInfo processInfo].thermalState);
     }];
     [UIApplication sharedApplication].idleTimerDisabled = YES;
+    /* The observers only see transitions: if the app is already inactive
+     * (e.g. launched while the screen was locked), start paused. */
+    if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) {
+        gow2_lifecycle_will_resign_active();
+        fprintf(stderr, "[ios] launched while not active (state=%d) -> paused\n",
+                (int)[UIApplication sharedApplication].applicationState);
+    }
 }
 
 static void* guest_main(void* arg)
@@ -239,17 +329,37 @@ static void* guest_main(void* arg)
     (void)arg;
     pthread_setname_np("guest-main");
     const int rc = gow2_boot_run_guest();
-    fprintf(stderr, "[ios] guest returned rc=%d -- exiting\n", rc);
-    fflush(stderr);
+    flush_log_for_exit();
+    char line[96];
+    const int n = snprintf(line, sizeof line, "[ios] guest returned rc=%d -- exiting\n", rc);
+    if (n > 0) log_direct(line, (size_t)(n < (int)sizeof line ? n : (int)sizeof line - 1));
     _exit(rc == 0 ? 0 : 1);
     return NULL;
+}
+
+void gow2_ios_host_wait_for_game_data(void)
+{
+    while (!gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT"))) {
+        fprintf(stderr, "[ios] game data missing or incomplete in %s (EBOOT.ELF, USRDIR) -- "
+                        "install it from the Mac: games/gow2/ios/install_ios.sh --data\n", s_docs);
+        /* Main thread, blocking (UIAlertController run modally by SDL); checks
+         * again after each dismissal, so data copied meanwhile starts the game. */
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "God of War II",
+                                 "Jogo não instalado — conecte ao Mac e use Instalar no iPhone.", NULL);
+    }
 }
 
 int gow2_ios_start_game(void)
 {
     pthread_attr_t a;
     pthread_attr_init(&a);
-    pthread_attr_setstacksize(&a, (size_t)64 << 20);   /* the macOS host links a 32 MB main stack; iOS cannot */
+    /* the macOS host links a 32 MB main stack; iOS cannot */
+    const int ss = pthread_attr_setstacksize(&a, (size_t)64 << 20);
+    if (ss != 0) {
+        fprintf(stderr, "[ios] FATAL: guest stack size 64 MB refused (%s)\n", strerror(ss));
+        pthread_attr_destroy(&a);
+        return ss;
+    }
     const char* qn = getenv("PS3_IOS_GUEST_QOS");
     int q = 0;
     if (gow2_ios_qos_from_string(qn, &q)) pthread_attr_set_qos_class_np(&a, (qos_class_t)q, 0);

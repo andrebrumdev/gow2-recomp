@@ -26,18 +26,21 @@ FW="Metal MetalFX MetalPerformanceShaders QuartzCore CoreGraphics Foundation UIK
     echo "GOW2_IOS_TEAM = $TEAM"
     echo "GOW2_IOS_BUNDLE_ID = $BUNDLE"
     echo "GOW2_IOS_HERE = $IOS_HERE"
-    echo "GOW2_IOS_HEADER_PATHS = $PS3/include $PS3/libs/video $PS3/libs/audio $PS3/libs/input $PS3/runtime/spu $IOS_HERE/.. $IOS_HERE/Sources $B/sdl-root/sdl/include"
+    printf 'GOW2_IOS_HEADER_PATHS ='
+    for d in "$PS3/include" "$PS3/libs/video" "$PS3/libs/audio" "$PS3/libs/input" "$PS3/runtime/spu" \
+             "$IOS_HERE/.." "$IOS_HERE/Sources" "$B/sdl-root/sdl/include"; do printf ' "%s"' "$d"; done
+    printf '\n'
     printf 'GOW2_IOS_LDFLAGS = -force_load %s %s %s %s' "$B/libgow2_game.a" "$B/rt/libps3recomp_runtime.a" \
         "$B/sdl-root/sdl/lib/libSDL2main.a" "$B/sdl-root/sdl/lib/libSDL2.a"
     for f in $FW; do printf ' -framework %s' "$f"; done
     printf ' -lc++ -lm\n'
 } > "$IOS_HERE/Generated/Gow2.xcconfig"
 xcodegen generate --spec "$IOS_HERE/project.yml" --project "$B/xcode" --quiet
-EXTRA=()
+EXTRA=(-allowProvisioningUpdates)
 [ "$SIGN" = 0 ] && EXTRA=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)
 xcodebuild -project "$B/xcode/GoW2.xcodeproj" -scheme GoW2 -configuration Release \
-    -destination 'generic/platform=iOS' -derivedDataPath "$B/dd" -allowProvisioningUpdates \
-    ${EXTRA[@]+"${EXTRA[@]}"} build > "$B/xcodebuild.log" 2>&1 || {
+    -destination 'generic/platform=iOS' -derivedDataPath "$B/dd" \
+    "${EXTRA[@]}" build > "$B/xcodebuild.log" 2>&1 || {
     grep -E "error:|Undefined symbols|ld: " "$B/xcodebuild.log" | head -30 >&2
     exit 1
 }

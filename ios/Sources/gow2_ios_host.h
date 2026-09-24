@@ -22,6 +22,9 @@ void gow2_ios_host_start_perf_log(void);
 void gow2_ios_host_audio_session_begin(void);
 /* UIKit / AVAudioSession / thermal notifications -> gow2_lifecycle; idle timer off. */
 void gow2_ios_host_install_lifecycle(void);
+/* Main thread: while EBOOT.ELF / USRDIR are missing, logs it and shows a
+ * blocking alert ("Jogo não instalado"); returns once the data is present. */
+void gow2_ios_host_wait_for_game_data(void);
 /* Starts the guest on a 64 MB-stack thread (QoS from PS3_IOS_GUEST_QOS).
  * P2's home screen calls this from "Jogar". 0 ok. */
 int gow2_ios_start_game(void);
