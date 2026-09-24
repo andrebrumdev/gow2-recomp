@@ -7,14 +7,26 @@
 extern "C" {
 #endif
 
-/* '#' comments and blank lines are skipped, CRLF is accepted, keys must match
- * [A-Z_][A-Z0-9_]*, the value is the rest of the line (may be empty). With
- * overwrite == 0 a variable that is already set keeps its value and is not
- * counted. *applied = variables set by this call; *rejected = malformed lines.
+/* '#' comments (leading blanks before the '#' are allowed) and blank/
+ * whitespace-only lines are skipped, CRLF is accepted, keys must match
+ * [A-Z_][A-Z0-9_]* starting at column 0 (a leading space/tab before the key
+ * itself is a malformed line, not a comment), the value is the rest of the
+ * line (may be empty).
+ *
+ * Duplicate keys within the same call: with overwrite == 0 the FIRST value
+ * assigned during this call wins -- once a key is set (by an earlier line in
+ * this text, or already present in the launch environment), later lines for
+ * the same key are silently skipped (neither applied nor rejected). With
+ * overwrite == 1 every line unconditionally re-applies, so the LAST value in
+ * the text wins.
+ *
+ * *applied = variables set by this call; *rejected = malformed lines.
  * 0 = parsed; -1 = NULL text. */
 int gow2_env_apply_text(const char* text, int overwrite, int* applied, int* rejected);
 
-/* Same over a file. -1 when it cannot be read or is larger than 64 KB. */
+/* Same over a file. -1 when it cannot be read, is larger than 64 KB, hits a
+ * read error partway through (e.g. path names a directory), or contains an
+ * embedded NUL byte (rejected outright -- never silently truncated at it). */
 int gow2_env_apply_file(const char* path, int overwrite, int* applied, int* rejected);
 
 #ifdef __cplusplus

@@ -26,7 +26,14 @@ int gow2_env_apply_text(const char* text, int overwrite, int* applied, int* reje
         const size_t len = eol ? (size_t)(eol - p) : strlen(p);
         size_t n = len;
         if (n && p[n - 1] == '\r') n--;
-        if (n && p[0] != '#') {
+        /* An indented '#' is still a comment; leading blanks alone are still a
+         * blank line. Neither is counted as rejected. A key must start at
+         * column 0 -- an indented KEY=VALUE stays rejected (key_ok fails on
+         * the leading space/tab below), matching the plan's " G2T_LEAD=1". */
+        size_t skip = 0;
+        while (skip < n && (p[skip] == ' ' || p[skip] == '\t')) skip++;
+        const int is_comment_or_blank = (skip == n) || (p[skip] == '#');
+        if (n && !is_comment_or_blank) {
             const char* eq = memchr(p, '=', n);
             char key[128], val[4096];
             const size_t kn = eq ? (size_t)(eq - p) : 0;
@@ -56,8 +63,15 @@ int gow2_env_apply_file(const char* path, int overwrite, int* applied, int* reje
     if (!f) return -1;
     char* buf = (char*)malloc(GOW2_ENV_MAX_BYTES + 1);
     const size_t n = buf ? fread(buf, 1, GOW2_ENV_MAX_BYTES + 1, f) : 0;
+    const int had_error = ferror(f);   /* e.g. path names a directory (EISDIR) */
     fclose(f);
-    if (!buf || n > GOW2_ENV_MAX_BYTES) {
+    if (!buf || had_error || n > GOW2_ENV_MAX_BYTES) {
+        free(buf);
+        return -1;
+    }
+    if (memchr(buf, 0, n)) {
+        /* Embedded NUL: not text. Reject outright instead of silently
+         * applying only the prefix up to the NUL. */
         free(buf);
         return -1;
     }

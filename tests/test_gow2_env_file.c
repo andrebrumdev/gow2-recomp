@@ -36,9 +36,43 @@ static void test_env_text_odd_lines(void)
     CHECK(eq("G2T_SPACE", "a b"));
     CHECK(eq("G2T_KEEP", "launch"));        /* the launch environment wins */
     CHECK(eq("G2T_LAST", "no-newline"));
-    CHECK(getenv("G2T_LEAD") == NULL);
+    CHECK(getenv("G2T_LEAD") == NULL);      /* indented ASSIGNMENT: still rejected */
     CHECK(a == 5);
     CHECK(r == 4);
+}
+
+static void test_indented_comment(void)
+{
+    /* An indented '#' is still a comment (skipped, not counted as rejected);
+     * only an indented KEY=VALUE is rejected (test_env_text_odd_lines' " G2T_LEAD=1"). */
+    unsetenv("G2T_IC");
+    const char* text =
+        "  # indented comment\n"
+        "\t# tab-indented comment\n"
+        "   \n"                 /* whitespace-only line: also skipped, not rejected */
+        "G2T_IC=1\n";
+    int a = -1, r = -1;
+    CHECK(gow2_env_apply_text(text, 0, &a, &r) == 0);
+    CHECK(eq("G2T_IC", "1"));
+    CHECK(a == 1);
+    CHECK(r == 0);
+}
+
+static void test_duplicate_keys(void)
+{
+    /* overwrite == 0: the first value assigned during this call wins. */
+    unsetenv("G2T_DUP");
+    int a = -1, r = -1;
+    CHECK(gow2_env_apply_text("G2T_DUP=first\nG2T_DUP=second\n", 0, &a, &r) == 0);
+    CHECK(eq("G2T_DUP", "first"));
+    CHECK(a == 1 && r == 0);        /* the 2nd line is neither applied nor rejected */
+
+    /* overwrite == 1: the last value in the text wins. */
+    unsetenv("G2T_DUP");
+    a = -1; r = -1;
+    CHECK(gow2_env_apply_text("G2T_DUP=first\nG2T_DUP=second\n", 1, &a, &r) == 0);
+    CHECK(eq("G2T_DUP", "second"));
+    CHECK(a == 2 && r == 0);
 }
 
 static void test_overwrite(void)
@@ -74,11 +108,75 @@ static void test_file(void)
     unlink(big);
 }
 
+static void test_file_nul_byte(void)
+{
+    /* An embedded NUL is not text -- reject outright rather than silently
+     * truncating the config at the NUL (a hand-edited/corrupted file must
+     * fail loudly, not apply a prefix of what the user wrote). */
+    char path[] = "/tmp/g2t_nulXXXXXX";
+    int fd = mkstemp(path);
+    CHECK(fd >= 0);
+    const char body[] = "G2T_NUL_A=1\n\0G2T_NUL_B=2\n";
+    CHECK(write(fd, body, sizeof body - 1) == (ssize_t)(sizeof body - 1));
+    close(fd);
+    unsetenv("G2T_NUL_A");
+    unsetenv("G2T_NUL_B");
+    int a = -1, r = -1;
+    CHECK(gow2_env_apply_file(path, 0, &a, &r) == -1);
+    CHECK(getenv("G2T_NUL_A") == NULL);     /* nothing applied, not even the prefix */
+    unlink(path);
+}
+
+static void test_file_read_error(void)
+{
+    /* fopen() succeeds on a directory (at least on Darwin/Linux) but fread()
+     * fails with EISDIR; that must surface as -1, not as a 0-byte "empty
+     * config" success. */
+    char dir[] = "/tmp/g2t_dirXXXXXX";
+    CHECK(mkdtemp(dir) != NULL);
+    int a = -1, r = -1;
+    CHECK(gow2_env_apply_file(dir, 0, &a, &r) == -1);
+    rmdir(dir);
+}
+
+static void test_file_oversize_line(void)
+{
+    /* One line whose value is >= 4096 bytes, inside a file well under the
+     * 64 KB cap: that single line is rejected, the others still apply. */
+    char path[] = "/tmp/g2t_ovlXXXXXX";
+    int fd = mkstemp(path);
+    CHECK(fd >= 0);
+    char huge_val[5000];
+    memset(huge_val, 'x', sizeof huge_val);
+    char before[] = "G2T_OVL_BEFORE=1\n";
+    char after[] = "\nG2T_OVL_AFTER=2\n";
+    CHECK(write(fd, before, sizeof before - 1) == (ssize_t)(sizeof before - 1));
+    CHECK(write(fd, "G2T_OVL_BIG=", 12) == 12);
+    CHECK(write(fd, huge_val, sizeof huge_val) == (ssize_t)sizeof huge_val);
+    CHECK(write(fd, after, sizeof after - 1) == (ssize_t)(sizeof after - 1));
+    close(fd);
+    unsetenv("G2T_OVL_BEFORE");
+    unsetenv("G2T_OVL_BIG");
+    unsetenv("G2T_OVL_AFTER");
+    int a = -1, r = -1;
+    CHECK(gow2_env_apply_file(path, 0, &a, &r) == 0);
+    CHECK(eq("G2T_OVL_BEFORE", "1"));
+    CHECK(eq("G2T_OVL_AFTER", "2"));
+    CHECK(getenv("G2T_OVL_BIG") == NULL);
+    CHECK(a == 2 && r == 1);
+    unlink(path);
+}
+
 int main(void)
 {
     test_env_text_odd_lines();
+    test_indented_comment();
+    test_duplicate_keys();
     test_overwrite();
     test_file();
+    test_file_nul_byte();
+    test_file_read_error();
+    test_file_oversize_line();
     printf(g_fail ? "test_gow2_env_file: FAIL %d\n" : "test_gow2_env_file: PASS\n", g_fail);
     return g_fail ? 1 : 0;
 }
