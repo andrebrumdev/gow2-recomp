@@ -537,6 +537,12 @@ VK_FLAGS=""
 if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
     VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
 fi
+# The Homebrew validation layer manifest names its library by bare dylib name, so the
+# loader dlopen()s it through the binary's rpaths (CMake-built tools get this rpath
+# for free; this hand-linked binary did not, and PS3_VK_VALIDATION=1 found no layer).
+if [ -d /opt/homebrew/lib ]; then
+    VK_FLAGS="$VK_FLAGS -Wl,-rpath,/opt/homebrew/lib"
+fi
 
 # Collect lift objects matching this LIFT_OPT (and LIFT_OBJ_TAG).
 LIFT_OBJS=()
