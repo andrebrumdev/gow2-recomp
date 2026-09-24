@@ -43,7 +43,9 @@ static void* tee_thread(void* arg)
             if (n < 0 && errno == EINTR) continue;
             if (n < 0 && errno == EAGAIN) {   /* flush_log_for_exit made the pipe non-blocking */
                 struct pollfd pf = { .fd = rfd, .events = POLLIN, .revents = 0 };
-                (void)poll(&pf, 1, -1);
+                const int pr = poll(&pf, 1, -1);
+                if (pr < 0 && errno == EINTR) continue;
+                if (pr < 0 || ((pf.revents & (POLLERR | POLLNVAL)) && !(pf.revents & POLLIN))) break;
                 continue;
             }
             break;
