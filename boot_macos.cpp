@@ -23,6 +23,25 @@
 #include <cstring>
 #include <cstdint>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#include "gow2_boot.h"
+#include "recomp_mid_v2/gow2_spu_register.h"
+
+/* Weak: a build without lifted SPU images links no gow2_spu_register.o
+ * (build_macos.sh only compiles it when spu_lifted/ exists). */
+extern "C" void gow2_register_spu_workloads(const gow2_spu_config* cfg) __attribute__((weak));
+extern "C" void gow2_spu_config_from_env(gow2_spu_config* cfg) __attribute__((weak));
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+#define GOW2_HOST_NAME "iOS"
+#define GOW2_HAVE_VULKAN 0     /* no Vulkan on iOS; PS3_RSX_BACKEND=vulkan falls back to Metal */
+#else
+#define GOW2_HOST_NAME "macOS"
+#define GOW2_HAVE_VULKAN 1
+#endif
+
 #include "ppu_recomp.h"
 
 extern "C" {
@@ -81,9 +100,11 @@ int  rsx_metal_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_metal_backend_shutdown(void);
 int  rsx_metal_backend_pump_messages(void);
 
+#if GOW2_HAVE_VULKAN
 int  rsx_vulkan_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_vulkan_backend_shutdown(void);
 int  rsx_vulkan_backend_pump_messages(void);
+#endif
 
 /*
  * Mapa de commits do runtime (ppu_loader.cpp). O guard dos acessos vm_read e
@@ -221,7 +242,7 @@ Backend pick_backend()
     }
     Backend b = Backend::Sdl;
     if (strcmp(want, "metal")  == 0) b = Backend::Metal;
-    else if (strcmp(want, "vulkan") == 0) b = Backend::Vulkan;
+    else if (strcmp(want, "vulkan") == 0) b = GOW2_HAVE_VULKAN ? Backend::Vulkan : Backend::Metal;
     else if (strcmp(want, "sdl")    == 0) b = Backend::Sdl;
     else {
         fprintf(stderr, "[boot] unknown PS3_RSX_BACKEND '%s', falling back to metal\n", want);
@@ -240,7 +261,11 @@ int backend_init(Backend b)
     switch (b) {
     case Backend::Sdl:    return rsx_null_backend_init(1280, 720, "God of War II HD");
     case Backend::Metal:  return rsx_metal_backend_init(1280, 720, "God of War II HD");
+#if GOW2_HAVE_VULKAN
     case Backend::Vulkan: return rsx_vulkan_backend_init(1280, 720, "God of War II HD");
+#else
+    case Backend::Vulkan: return -1;
+#endif
     case Backend::None:   return 0;
     }
     return -1;
@@ -251,7 +276,11 @@ void backend_shutdown(Backend b)
     switch (b) {
     case Backend::Sdl:    rsx_null_backend_shutdown();   break;
     case Backend::Metal:  rsx_metal_backend_shutdown();  break;
+#if GOW2_HAVE_VULKAN
     case Backend::Vulkan: rsx_vulkan_backend_shutdown(); break;
+#else
+    case Backend::Vulkan: break;
+#endif
     case Backend::None:   break;
     }
 }
@@ -356,25 +385,21 @@ int commit_guest_regions()
 
 } /* namespace */
 
-int main(int argc, char** argv)
+static uint32_t s_boot_entry;
+
+extern "C" int gow2_boot_prepare(const char* elf_path)
 {
-    const char* elf_path = (argc > 1) ? argv[1] : "EBOOT.ELF";
+    /* SPU images register here, explicitly, after the host has its
+     * configuration (spec 2026-09-24 iOS, resolution 1): the old static
+     * constructor ran before main() and never saw what an iOS host exports
+     * with setenv(). Same point in the boot order as before (first). */
+    if (gow2_register_spu_workloads && gow2_spu_config_from_env) {
+        gow2_spu_config spu;
+        gow2_spu_config_from_env(&spu);
+        gow2_register_spu_workloads(&spu);
+    }
 
-    /*
-     * Line-buffer stdout.
-     *
-     * The runtime logs through both printf and fprintf(stderr): stderr is
-     * unbuffered, stdout is block-buffered as soon as it is redirected to a
-     * file. Every smoke and trace run here ends in kill, which discards
-     * whatever is still sitting in the stdout buffer -- so a captured log
-     * silently loses most of the boot and reads as if the guest stopped much
-     * earlier than it did. That cost real debugging time: the guest was
-     * reaching cellSpursInitializeWithAttribute while the log appeared to stop
-     * at the printf-server thread.
-     */
-    setvbuf(stdout, nullptr, _IOLBF, 0);
-
-    fprintf(stderr, "[boot] God of War II HD -- macOS/arm64 host\n");
+    fprintf(stderr, "[boot] God of War II HD -- " GOW2_HOST_NAME "/arm64 host\n");
     fprintf(stderr, "[boot] ELF: %s\n", elf_path);
 
     if (vm_init() != CELL_OK) {
@@ -396,6 +421,7 @@ int main(int argc, char** argv)
         return 1;
     }
     fprintf(stderr, "[boot] entry OPD 0x%08X\n", entry);
+    s_boot_entry = entry;
 
     derive_vfs_root(elf_path);
     fprintf(stderr, "[boot] VFS root: %s\n", ppu_vfs_root);
@@ -459,11 +485,19 @@ int main(int argc, char** argv)
 
     fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
     fflush(stderr);
+    return 0;
+}
 
+extern "C" int gow2_boot_run_guest(void)
+{
+    const uint32_t entry = s_boot_entry;
     int rc = ppu_run(entry, GUEST_STACK_TOP);
-
     fprintf(stderr, "[boot] guest returned rc=%d\n", rc);
+    return rc;
+}
 
+extern "C" void gow2_boot_shutdown(void)
+{
     /* Orderly exit only: the overlay saves pending settings and frees its core
      * before the backend (its only renderer) tears down. A no-op when it was
      * never initialized (non-Metal backends). The window-close / Cmd+Q /
@@ -472,5 +506,31 @@ int main(int argc, char** argv)
     rsx_overlay_shutdown();
     backend_shutdown(g_backend);
     vm_shutdown();
+}
+
+#ifndef GOW2_BOOT_NO_MAIN
+int main(int argc, char** argv)
+{
+    const char* elf_path = (argc > 1) ? argv[1] : "EBOOT.ELF";
+
+    /*
+     * Line-buffer stdout.
+     *
+     * The runtime logs through both printf and fprintf(stderr): stderr is
+     * unbuffered, stdout is block-buffered as soon as it is redirected to a
+     * file. Every smoke and trace run here ends in kill, which discards
+     * whatever is still sitting in the stdout buffer -- so a captured log
+     * silently loses most of the boot and reads as if the guest stopped much
+     * earlier than it did. That cost real debugging time: the guest was
+     * reaching cellSpursInitializeWithAttribute while the log appeared to stop
+     * at the printf-server thread.
+     */
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    if (gow2_boot_prepare(elf_path) != 0) {
+        return 1;
+    }
+    const int rc = gow2_boot_run_guest();
+    gow2_boot_shutdown();
     return rc == 0 ? 0 : 1;
 }
+#endif /* GOW2_BOOT_NO_MAIN */

@@ -7,6 +7,7 @@
  * logo movie); spu2/3 come up later in gameplay.
  */
 #include <stdint.h>
+#include "gow2_spu_register.h"
 
 typedef struct spu_context spu_context;
 typedef void (*spu_lifted_entry_fn)(spu_context*);
@@ -34,8 +35,23 @@ extern void spu6_spu_recomp_register(void);
 
 extern void spu_begin_image(int image_id);
 
-void gow2_register_spu_workloads(void)
+void gow2_spu_config_from_env(gow2_spu_config* c)
 {
+    const char* e0 = getenv("PS3_SPU0");
+    const char* e6 = getenv("PS3_SPU6");
+    const int all = getenv("PS3_SPU_ALL") != NULL;
+    c->spu0 = !(e0 && e0[0] == '0');
+    c->spu1 = all || getenv("PS3_SPU1") != NULL;
+    c->spu2 = all || getenv("PS3_SPU2") != NULL;
+    c->spu3 = all || getenv("PS3_SPU3") != NULL;
+    c->spu4 = all || getenv("PS3_SPU4") != NULL;
+    c->spu5 = all || getenv("PS3_SPU5") != NULL;
+    c->spu6 = all || !e6 || (e6[0] && e6[0] != '0');
+}
+
+void gow2_register_spu_workloads(const gow2_spu_config* cfg)
+{
+    if (!cfg) return;
     /* Each image in its own namespace (id = N + 1): they all share one LS
      * address space, and registered together as image 0 an indirect branch of
      * one image resolved to another image's function at the same address
@@ -54,7 +70,7 @@ void gow2_register_spu_workloads(void)
     spu2_spu_recomp_register();
     spu_begin_image(0);
     /* PS3_SPU0=0 (A/B, opt-in): leave spu0 unregistered (its jobs MISS). */
-    if (!(getenv("PS3_SPU0") && getenv("PS3_SPU0")[0] == '0'))
+    if (cfg->spu0)
         spu_workload_register_image(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0", 1);
     /* spu1 (dearch / EDGE-zlib) VERIFICADO no caminho intro->WAD (Task 4 do
      * plano 2): sob PS3_SPU1=1 o dispatch vai de MISS constante (~332/120s) a
@@ -68,7 +84,7 @@ void gow2_register_spu_workloads(void)
      * geram DMA em massa. O gargalo agora e' UPSTREAM do spu1 (loader de asset
      * nao avanca ao consumo do WAD), nao o spu1 em si. Fica opt-in (nao default)
      * ate o inflate de membro ser observavel. Toggle: PS3_SPU1 ou PS3_SPU_ALL. */
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU1"))
+    if (cfg->spu1)
         spu_workload_register_image(0x2A5C4E67A14505B8ull, spu1_spu_func_00003050, "gow2_spu1", 2);
     /* spu2/3 stay opt-in: their lifted entries may still fault mid-run. O host
      * esta' protegido nos DOIS lados agora -- VEH+ExitThread no Windows,
@@ -85,33 +101,28 @@ void gow2_register_spu_workloads(void)
      * concreto no Mac: o job corre na thread do worker SPURS, medida em 512 KB
      * de stack (o Windows da'-lhe uma thread dedicada de 256 MB), portanto um
      * call graph fundo e' isolado de forma limpa mas nao chega ao fim. */
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU2"))
+    if (cfg->spu2)
         spu_workload_register_image(0xABCD0BA4D18DED49ull, spu2_spu_func_00004080, "gow2_spu2", 3);
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU3"))
+    if (cfg->spu3)
         spu_workload_register_image(0xED6A0C318DEB46C6ull, spu3_spu_func_00004080, "gow2_spu3", 4);
     /* spu4/spu5: SPURS-scheduler workloads the frontend dispatches post-AUTO_LOAD
      * (dumped via PS3_SPU_DUMP, lifted 515/448 fns; needed spu_pref_u32 helper).
      * Without them the `schedul` cond never signals and the frontend deadlocks at
      * the Bluepoint logo before the menu. Gated PS3_SPU4/PS3_SPU5 (host is SEH/
      * setjmp-isolated if a job faults). */
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU4"))
+    if (cfg->spu4)
         spu_workload_register_image(0x9527C889B1945669ull, spu4_spu_func_00003050, "gow2_spu4", 5);
-    if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
+    if (cfg->spu5)
         spu_workload_register_image(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5", 6);
     /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980). The SPURS
      * kernel loads a policy module at LS 0xA00 and enters it there.
      * On for a normal play launch. PS3_SPU6=0 turns it off. A faulting job is
      * aborted by the setjmp landing pad; it does not have to stay opt-in. */
-    {
-        const char* e = getenv("PS3_SPU6");
-        int on = getenv("PS3_SPU_ALL") || !e || (e[0] && e[0] != '0');
-        if (on)
-            spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
-                                            "gow2_spu6", 0xA00, 7);
-    }
+    if (cfg->spu6)
+        spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
+                                        "gow2_spu6", 0xA00, 7);
 }
 
-#if defined(__GNUC__)
-__attribute__((constructor))
-static void gow2_spu_autoregister(void) { gow2_register_spu_workloads(); }
-#endif
+/* No static constructor (spec 2026-09-24 iOS, resolution 1): the boot host calls
+ * gow2_spu_config_from_env() + gow2_register_spu_workloads() once it has its
+ * configuration -- on iOS that is after the bundled recipe was exported. */

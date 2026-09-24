@@ -511,6 +511,11 @@ if [ ${#SPU_OBJS[@]} -gt 0 ]; then
     clang -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$LIFT/gow2_spu_register.o"
     SPU_OBJS+=("$LIFT/gow2_spu_register.o")
+else
+    # boot_macos.cpp calls the registration through weak references; the
+    # Darwin static linker still rejects an undefined weak symbol unless told
+    # to leave it for runtime (where it resolves to NULL: nothing registers).
+    LINK_CFLAGS="$LINK_CFLAGS -Wl,-U,_gow2_register_spu_workloads -Wl,-U,_gow2_spu_config_from_env"
 fi
 echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
