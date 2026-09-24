@@ -566,7 +566,7 @@ clang++ -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     "$LIFT"/ppu_hle_nids.o "$LIFT"/boot_macos.o "$LIFT"/movie_eos_arm.o \
     ${SPU_OBJS[@]+"${SPU_OBJS[@]}"} \
     "$RUNTIME_LIB" \
-    -framework Metal -framework MetalFX -framework QuartzCore -framework Foundation \
+    -framework Metal -framework MetalFX -framework MetalPerformanceShaders -framework QuartzCore -framework Foundation \
     -framework Cocoa \
     -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox \
     -framework AudioToolbox -framework CoreAudio \
