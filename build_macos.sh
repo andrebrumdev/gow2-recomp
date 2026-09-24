@@ -536,6 +536,8 @@ fi   # SDL_FLAGS="" para um binario sem SDL (corridas headless com TSan)
 VK_FLAGS=""
 if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
     VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
+    # The runtime archive's Vulkan backend requires shaderc (it is only compiled in when CMake found it).
+    if pkg-config --exists shaderc; then VK_FLAGS="$VK_FLAGS $(pkg-config --libs shaderc)"; fi
 fi
 # The Homebrew validation layer manifest names its library by bare dylib name, so the
 # loader dlopen()s it through the binary's rpaths (CMake-built tools get this rpath
