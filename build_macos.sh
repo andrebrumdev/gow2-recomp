@@ -50,6 +50,25 @@ case "$GOW2_TARGET" in
     *) echo "GOW2_TARGET must be macos|ios (got '$GOW2_TARGET')" >&2; exit 1 ;;
 esac
 export TGT
+# GOW2_BUILD_TRACE=1: dry-run/trace mode, OFF by default and a strict no-op on
+# behaviour when off (_cc "$@" just runs "$@", same as calling it directly).
+# When on, every compile/link/archive invocation prints its fully-expanded
+# command line instead of running it -- no compiler, no filesystem writes
+# beyond the pre-existing mkdir -p "$OBJ". Exists so a test can prove the
+# macOS (GOW2_TARGET unset) object list and flags are unchanged by the
+# GOW2_TARGET=ios refactor, without paying for a real multi-minute build.
+GOW2_BUILD_TRACE="${GOW2_BUILD_TRACE:-0}"
+export GOW2_BUILD_TRACE
+_cc() {
+    if [ "$GOW2_BUILD_TRACE" = "1" ]; then
+        printf '%s\n' "$*"
+    else
+        "$@"
+    fi
+}
+if [ "$GOW2_BUILD_TRACE" = "1" ]; then
+    echo "TRACE: GOW2_TARGET=$GOW2_TARGET TGT=[$TGT]"
+fi
 # Keep the Metal ring-fence fix reproducible across runtime rebuilds. The patch
 # is idempotent and preserves PS3_METAL_FRAME_FENCE=0 as an explicit unsafe A/B.
 "$PYBIN" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
@@ -174,9 +193,12 @@ mkdir -p "$OBJ"
 # bare relative dir name, the documented usage in this script's own header).
 OBJ="$(cd "$OBJ" && pwd)"
 export OBJ
+if [ "$GOW2_BUILD_TRACE" = "1" ]; then
+    echo "TRACE: MCPU=[$MCPU] OBJ=[$OBJ] SDKROOT=[${SDKROOT:-}]"
+fi
 
 RUNTIME_LIB="${RUNTIME_LIB:-$PS3/build-macos/libps3recomp_runtime.a}"
-if [ "$GOW2_TARGET" = macos ] && [ ! -f "$RUNTIME_LIB" ]; then
+if [ "$GOW2_TARGET" = macos ] && [ "$GOW2_BUILD_TRACE" != "1" ] && [ ! -f "$RUNTIME_LIB" ]; then
     echo "runtime library missing; build it first:" >&2
     echo "  cmake -B $PS3/build-macos -G Ninja -DCMAKE_BUILD_TYPE=Release $PS3" >&2
     echo "  cmake --build $PS3/build-macos" >&2
@@ -234,8 +256,12 @@ t0=$(date +%s)
     'src="$1"; ps3="$2"; opt="$3"
      if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
      if [ -n "$LIFT_OBJ_TAG" ]; then o="${o%.o}.${LIFT_OBJ_TAG}.o"; fi
-     clang++ $TGT -std=c++20 "$opt" $MCPU $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
-         "$src" -o "$OBJ/$o" 2> "$OBJ/$src.cclog"' \
+     if [ "$GOW2_BUILD_TRACE" = "1" ]; then
+         echo "clang++ $TGT -std=c++20 $opt $MCPU $LIFT_CFLAGS -w -c -I . -I $ps3/include -I $ps3/runtime/ppu $src -o $OBJ/$o"
+     else
+         clang++ $TGT -std=c++20 "$opt" $MCPU $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
+             "$src" -o "$OBJ/$o" 2> "$OBJ/$src.cclog"
+     fi' \
     _ {} "$PS3" "$LIFT_OPT"
 NOBJ=0
 for f in ppu_recomp_*.cpp ppu_stubs.cpp; do
@@ -248,11 +274,11 @@ echo "  dur=$(( $(date +%s) - t0 ))s objs=$NOBJ errors=$(cat "$OBJ"/*.cclog 2>/d
 echo "=== 2. runtime PPU sources -> .o (HOST_OPT=$HOST_OPT) ==="
 cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
-    clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$OBJ/$src.o"
+    _cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$OBJ/$src.o"
 done
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$OBJ/ppu_icall_ascii.o"
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$OBJ/ppu_vm_fast_policy.o"
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$OBJ/ppu_p10_ctr.o"
+_cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$OBJ/ppu_icall_ascii.o"
+_cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$OBJ/ppu_vm_fast_policy.o"
+_cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$OBJ/ppu_p10_ctr.o"
 # host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
 # versionado (games/gow2/host_gow2_factory.cpp, commit 1f651aa no irmao
 # gow2-recomp; porte para o monorepo, criterio 3 do ROADMAP da Fase 2). O
@@ -276,7 +302,7 @@ if [ -f "$HERE/host_gow2_factory.cpp" ]; then
         echo "  host_gow2_factory: definicoes ja' no lift -- nao compilar (evita duplicate symbol)"
         rm -f "$OBJ/host_gow2_factory.o"
     else
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
+        _cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
             "$HERE/host_gow2_factory.cpp" -o "$OBJ/host_gow2_factory.o"
         echo "  host_gow2_factory: compilado"
     fi
@@ -310,7 +336,7 @@ if [ -f "$HERE/host_gow2_f2b.c" ]; then
         echo "  host_gow2_f2b: definicao (static ou extern) ja' no lift -- nao compilar (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$OBJ/host_gow2_f2b.o"
     else
-        clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
+        _cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
             "$HERE/host_gow2_f2b.c" -o "$OBJ/host_gow2_f2b.o"
         echo "  host_gow2_f2b: compilado"
     fi
@@ -355,7 +381,7 @@ if [ -f "$HERE/hooks/gow2_midasm_hooks.cpp" ]; then
         echo "                     (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$OBJ/gow2_midasm_hooks.o"
     else
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
+        _cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$HERE/hooks/gow2_midasm_hooks.cpp" -o "$OBJ/gow2_midasm_hooks.o"
         echo "  gow2_midasm_hooks: compilado"
     fi
@@ -424,7 +450,7 @@ if [ -f "$HERE/hooks/gow2_func_overrides.cpp" ]; then
             echo "  gow2_func_overrides: AVISO -- o lift nao tem wrapper fraco para:$_ovr_noweak"
             echo "                       (o override compila e liga, mas ninguem o chama: NO-OP SILENCIOSO)"
         fi
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
+        _cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$_ovr_src" -o "$OBJ/gow2_func_overrides.o"
         echo "  gow2_func_overrides: compilado (overrides: $_ovr_names)"
     fi
@@ -434,12 +460,12 @@ fi
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
 # from the runtime .a — portable Mac/Win.
 if [ -f "$PS3/runtime/ppu/host_res_inflate.c" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    _cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_res_inflate.c" -o "$OBJ/host_res_inflate.o"
 fi
 # WAD ~texture packages after WADLD-T1R (patch_wad_tex_capture → force-bind).
 if [ -f "$PS3/runtime/ppu/host_wad_tex.c" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    _cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_wad_tex.c" -o "$OBJ/host_wad_tex.o"
 fi
 
@@ -457,7 +483,7 @@ LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
 # shellcheck disable=SC2086
 "$PYBIN" "$PS3/tools/gen_hle_nids.py" \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
+_cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
 
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
@@ -525,14 +551,14 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
     done
     if [ "$stale" = 1 ]; then
-        clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
+        _cc clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
               "$d/spu_recomp.c" -o "$o"
     fi
     SPU_OBJS+=("$o")
 done
 printf '%s' "$SPU_FLAGS_VALUE" > "$SPU_FLAGS_FILE"
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then
-    clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
+    _cc clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$OBJ/gow2_spu_register.o"
     SPU_OBJS+=("$OBJ/gow2_spu_register.o")
 else
@@ -544,13 +570,13 @@ fi
 echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
 echo "=== 4. boot host -> .o ==="
-BOOT_DEFS=""; [ "$GOW2_TARGET" = ios ] && BOOT_DEFS="-DGOW2_BOOT_NO_MAIN"
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $BOOT_DEFS -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$OBJ/boot_macos.o"
+BOOT_DEFS=(); [ "$GOW2_TARGET" = ios ] && BOOT_DEFS=(-DGOW2_BOOT_NO_MAIN)
+_cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS ${BOOT_DEFS[@]+"${BOOT_DEFS[@]}"} -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$OBJ/boot_macos.o"
 # Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
 # PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$OBJ/movie_eos_arm.o"
+_cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$OBJ/movie_eos_arm.o"
 # Diagnosticos do overlay de runtime (copia snapshots do host; sem ponteiro guest).
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" \
+_cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" \
       "$HERE/gow2_overlay_provider.c" -o "$OBJ/gow2_overlay_provider.o"
 
 echo "=== 5. link ==="
@@ -571,9 +597,11 @@ LINK_OBJS+=("$OBJ"/ppu_hle_nids.o "$OBJ"/boot_macos.o "$OBJ"/movie_eos_arm.o "$O
 LINK_OBJS+=(${SPU_OBJS[@]+"${SPU_OBJS[@]}"})
 
 if [ "$GOW2_TARGET" = ios ]; then
-    rm -f "$OUT"
-    libtool -static -o "$OUT" "${LINK_OBJS[@]}"
-    echo "*** $OUT archived (GOW2_TARGET=ios) ***"
+    [ "$GOW2_BUILD_TRACE" = "1" ] || rm -f "$OUT"
+    _cc libtool -static -o "$OUT" "${LINK_OBJS[@]}"
+    if [ "$GOW2_BUILD_TRACE" != "1" ]; then
+        echo "*** $OUT archived (GOW2_TARGET=ios) ***"
+    fi
     exit 0
 fi
 
@@ -581,7 +609,7 @@ SDL_FLAGS="${SDL_FLAGS-$(pkg-config --libs sdl2)}"
 # Sem SDL (corrida headless com TSan): compila os stubs no lugar da biblioteca.
 SDL_STUB_OBJ=""
 if [ -z "$SDL_FLAGS" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c \
+    _cc clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c \
         "$HERE/recomp_mid_v2/sdl_stubs_headless.c" -o "$OBJ/sdl_stubs_headless.o"
     SDL_STUB_OBJ="$OBJ/sdl_stubs_headless.o"
     echo "  SDL: stubs headless (sem libSDL2)"
@@ -608,7 +636,7 @@ fi
 # The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
 # an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
 # already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
+_cc clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     "${LINK_OBJS[@]}" \
     "$RUNTIME_LIB" \
     -framework Metal -framework MetalFX -framework MetalPerformanceShaders -framework QuartzCore -framework Foundation \
@@ -620,6 +648,9 @@ clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     -Wl,-stack_size,0x2000000 \
     -o "$OUT"
 
+if [ "$GOW2_BUILD_TRACE" = "1" ]; then
+    exit 0
+fi
 echo
 ls -lh "$OUT"
 echo "*** $OUT built (LIFT_OPT=$LIFT_OPT HOST_OPT=$HOST_OPT) ***"
