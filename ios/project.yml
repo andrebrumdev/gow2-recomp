@@ -1,0 +1,44 @@
+name: GoW2
+options:
+  deploymentTarget:
+    iOS: "16.0"
+configFiles:
+  Debug: Generated/Gow2.xcconfig
+  Release: Generated/Gow2.xcconfig
+targets:
+  GoW2:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Generated/gow2.env
+        buildPhase: resources
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: God of War II
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(GOW2_IOS_BUNDLE_ID)
+        DEVELOPMENT_TEAM: $(GOW2_IOS_TEAM)
+        CODE_SIGN_STYLE: Automatic
+        # Absolute (via the xcconfig): the project is generated into $B/xcode,
+        # and these two settings are taken literally, relative to the project.
+        CODE_SIGN_ENTITLEMENTS: $(GOW2_IOS_HERE)/GoW2.entitlements
+        INFOPLIST_FILE: $(GOW2_IOS_HERE)/Generated/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ARCHS: arm64
+        CLANG_ENABLE_OBJC_ARC: YES
+        GCC_OPTIMIZATION_LEVEL: "2"
+        DEAD_CODE_STRIPPING: NO
+        GCC_C_LANGUAGE_STANDARD: c11
+        OTHER_CFLAGS: "-mcpu=apple-a15"
+        HEADER_SEARCH_PATHS: "$(GOW2_IOS_HEADER_PATHS)"
+        OTHER_LDFLAGS: "$(GOW2_IOS_LDFLAGS)"
