@@ -10,8 +10,10 @@
 extern "C" {
 #endif
 
-/* gow2_boot_prepare_guest, gow2_boot_prepare_display, then the movie-object
- * sampler (the macOS order). 0 ok; nonzero after logging a FATAL line. Main thread. */
+/* gow2_boot_prepare_guest then gow2_boot_prepare_display (the macOS order).
+ * 0 ok; nonzero after logging a FATAL line. Main thread. The iOS app calls
+ * gow2_boot_prepare_display at launch and gow2_boot_prepare_guest on the guest
+ * thread after "Jogar", right before gow2_boot_run_guest. */
 int gow2_boot_prepare(const char* elf_path);
 
 /* RSX backend (window, Metal layer) and overlay. Main thread. Idempotent: a
@@ -22,7 +24,8 @@ int gow2_boot_prepare_display(void);
  * display. 0 ok. */
 int gow2_boot_prepare_guest(const char* elf_path);
 
-/* Runs the guest on the calling thread until it returns; its rc. */
+/* Starts the movie-object sampler (gated) and runs the guest on the calling
+ * thread until it returns; its rc. */
 int gow2_boot_run_guest(void);
 
 /* Orderly exit: overlay (saves settings), backend, guest memory. */

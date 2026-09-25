@@ -515,20 +515,22 @@ extern "C" int gow2_boot_prepare(const char* elf_path)
         }
     }
 
-    /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
-     * PS3_TRACE_MOVIEOBJ, no-op sem ela. SO OBSERVA: nao arma o read-hook de
-     * EOS -- isso e' a Task 3 e depende de um produtor real de "done", que no
-     * POSIX ainda nao existe. Arranca aqui, antes do guest, porque o objecto e'
-     * um inicializador estatico em BSS e ja esta presente desde o load. */
-    movie_eos_sampler_start();
-
-    fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
-    fflush(stderr);
     return 0;
 }
 
 extern "C" int gow2_boot_run_guest(void)
 {
+    /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
+     * PS3_TRACE_MOVIEOBJ, no-op sem ela. SO OBSERVA: nao arma o read-hook de
+     * EOS -- isso e' a Task 3 e depende de um produtor real de "done", que no
+     * POSIX ainda nao existe. Arranca aqui, antes do guest, porque o objecto e'
+     * um inicializador estatico em BSS e ja esta presente desde o load. No
+     * macOS e' o mesmo ponto de antes (depois do backend, antes do ppu_run);
+     * no iOS corre na thread do guest, depois do gow2_boot_prepare_guest. */
+    movie_eos_sampler_start();
+
+    fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
+    fflush(stderr);
     const uint32_t entry = s_boot_entry;
     int rc = ppu_run(entry, GUEST_STACK_TOP);
     fprintf(stderr, "[boot] guest returned rc=%d\n", rc);
