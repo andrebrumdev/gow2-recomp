@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""perf_report.py LOG [--seconds 900] [--draws 400] [--label NAME]
+"""perf_report.py LOG [--seconds 200] [--draws 400] [--label NAME]
 
 Milestone analysis for an iOS run (spec 2026-09-24, resolution 7). LOG is
 Documents/gow2.log of a run with PS3_TRACE_FPS=1 and PS3_IOS_PERF_LOG=1.
@@ -33,7 +33,7 @@ def nearest_rank(values, p):
     return s[max(1, math.ceil(p / 100.0 * len(s))) - 1]
 
 
-def analyze(lines, seconds=900, draws_min=400):
+def analyze(lines, seconds=200, draws_min=400):
     cur = None                    # the latest [IOSPERF] sample: (t, thermal, footprint, available)
     start = last_t = None
     gp, thermal, foot, avail = [], [], [], []
@@ -113,7 +113,7 @@ def markdown(r, label, seconds):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("log")
-    ap.add_argument("--seconds", type=int, default=900)
+    ap.add_argument("--seconds", type=int, default=200)
     ap.add_argument("--draws", type=int, default=400)
     ap.add_argument("--label", default="run")
     a = ap.parse_args()
