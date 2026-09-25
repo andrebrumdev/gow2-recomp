@@ -18,12 +18,16 @@
 #include <unistd.h>
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 
 #include "gow2_boot.h"
 #include "gow2_env_file.h"
 #include "gow2_ios_host.h"
 #include "gow2_ios_lifecycle.h"
+#include "gow2_ios_ui_policy.h"
 #include "rsx_gpu_gate.h"
+#include "rsx_overlay.h"
+#include "rsx_overlay_app.h"
 #include "rsx_metal_backend.h"
 #include "cellAudio.h"
 #include "cellpad_gamecontroller.h"
@@ -262,12 +266,22 @@ void gow2_ios_host_audio_session_begin(void)
  * -- the gate's close already guarantees no commit follows until reopen.
  * willTerminate never joins the guest thread: it may be blocked at the closed
  * gate forever, so the process just exits. */
+/* Lifecycle input op: keyboard/mouse gate (P1) and, on resign, every touch
+ * contact dropped and its buttons released (P2). Atomics only, so it is safe
+ * after the GPU gate closed (gow2_ios_lifecycle.h host contract). */
+static void host_set_input_active(int on)
+{
+    cpgc_set_app_active(on);
+    if (!on)
+        rsx_overlay_touch_cancel_all();
+}
+
 void gow2_ios_host_install_lifecycle(void)
 {
     static const gow2_lifecycle_ops ops = {
         .set_render_suspended = rsx_gpu_gate_set_closed,
         .set_audio_suspended = ps3_audio_host_set_suspended,
-        .set_input_active = cpgc_set_app_active,
+        .set_input_active = host_set_input_active,
         .trim_caches = rsx_metal_backend_trim_caches,
     };
     gow2_lifecycle_init(&ops);
@@ -339,6 +353,14 @@ static void* guest_main(void* arg)
 {
     (void)arg;
     pthread_setname_np("guest-main");
+    /* SPU registration, guest memory, ELF, HLE: here, on the guest's 64 MB
+     * stack, so the home screen keeps animating ("Carregando…") meanwhile. */
+    if (gow2_boot_prepare_guest(getenv("GOW2_EBOOT")) != 0) {
+        const char line[] = "[ios] FATAL: guest preparation failed -- exiting\n";
+        flush_log_for_exit();
+        log_fd_write(line, sizeof line - 1);
+        _exit(1);
+    }
     const int rc = gow2_boot_run_guest();
     flush_log_for_exit();
     char line[96];
@@ -346,18 +368,6 @@ static void* guest_main(void* arg)
     if (n > 0) log_fd_write(line, (size_t)(n < (int)sizeof line ? n : (int)sizeof line - 1));
     _exit(rc == 0 ? 0 : 1);
     return NULL;
-}
-
-void gow2_ios_host_wait_for_game_data(void)
-{
-    while (!gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT"))) {
-        fprintf(stderr, "[ios] game data missing or incomplete in %s (EBOOT.ELF, USRDIR) -- "
-                        "install it from the Mac: games/gow2/ios/install_ios.sh --data\n", s_docs);
-        /* Main thread, blocking (UIAlertController run modally by SDL); checks
-         * again after each dismissal, so data copied meanwhile starts the game. */
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "God of War II",
-                                 "Jogo não instalado — conecte ao Mac e use Instalar no iPhone.", NULL);
-    }
 }
 
 int gow2_ios_start_game(void)
@@ -381,4 +391,153 @@ int gow2_ios_start_game(void)
     fprintf(stderr, "[ios] guest thread %s (qos=%s)\n", rc == 0 ? "started" : "FAILED",
             (qn && *qn) ? qn : "inherit");
     return rc;
+}
+
+/* ---- P2: home screen ---- */
+
+static int s_starting, s_handed_off;
+static long long s_sign_expiry, s_last_save;
+static unsigned s_status_ticks;
+
+static SDL_Window* host_window(void) { return (SDL_Window*)rsx_metal_backend_sdl_window(); }
+
+static UIWindow* host_uiwindow(void)
+{
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version);
+    SDL_Window* w = host_window();
+    if (w == NULL || !SDL_GetWindowWMInfo(w, &info) || info.subsystem != SDL_SYSWM_UIKIT)
+        return nil;
+    return info.info.uikit.window;
+}
+
+/* Main thread: UIKit safe-area insets (points) -> drawable pixels. */
+static void publish_safe_area(void)
+{
+    UIWindow* win = host_uiwindow();
+    uint32_t w, h;
+    float scale;
+    rsx_overlay_get_display(&w, &h, &scale);
+    if (win == nil || !(scale > 0.0f))
+        return;
+    const UIEdgeInsets in = win.safeAreaInsets;
+    rsx_overlay_set_safe_area((float)in.left * scale, (float)in.top * scale,
+                              (float)in.right * scale, (float)in.bottom * scale);
+}
+
+/* Main thread: home = portrait + landscape; the game and the editor lock
+ * landscape (spec resolution 5). SDL reads the hint on every
+ * supportedInterfaceOrientations call; iOS 16 asks again after
+ * setNeedsUpdateOfSupportedInterfaceOrientations. */
+static void apply_orientation(uint32_t mask)
+{
+    static uint32_t applied;
+    if (mask == 0 || mask == applied)
+        return;
+    applied = mask;
+    const char* hint = (mask & RSX_APP_ORIENT_PORTRAIT) ? "LandscapeLeft LandscapeRight Portrait"
+                                                        : "LandscapeLeft LandscapeRight";
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, hint);
+    [host_uiwindow().rootViewController setNeedsUpdateOfSupportedInterfaceOrientations];
+    fprintf(stderr, "[ios] orientations -> %s\n", hint);
+}
+
+/* Main thread, 1 Hz: what the Desenvolvedor panel and the home show; the
+ * thermal fps cap is applied here. */
+static void publish_status(void)
+{
+    rsx_overlay_host_status st;
+    memset(&st, 0, sizeof st);
+    task_vm_info_data_t vi;
+    mach_msg_type_number_t n = TASK_VM_INFO_COUNT;
+    const unsigned long long fp =
+        task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &n) == KERN_SUCCESS ? vi.phys_footprint : 0;
+    const int thermal = (int)[NSProcessInfo processInfo].thermalState;
+    st.thermal_state = thermal;
+    st.fps_cap = gow2_ios_thermal_fps_cap(thermal, getenv("PS3_IOS_THERMAL_CAP"));
+    if (st.fps_cap != rsx_metal_backend_fps_cap()) {
+        rsx_metal_backend_set_fps_cap(st.fps_cap);
+        fprintf(stderr, "[ios] thermal state %d -> fps cap %u\n", thermal, st.fps_cap);
+    }
+    st.footprint_mb = (unsigned)(fp >> 20);
+    st.memory_ceiling_mb = gow2_ios_memory_ceiling_mb(fp, os_proc_available_memory());
+    st.game_data_present = gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT"));
+    st.sign_expiry_unix = s_sign_expiry;
+    if (s_status_ticks++ % 10 == 0)
+        s_last_save = gow2_ios_latest_save_mtime(getenv("PS3_SAVEDATA_ROOT"));
+    st.last_save_unix = s_last_save;
+    NSString* ver = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    NSString* build = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
+    snprintf(st.about, sizeof st.about, "Vers\xC3\xA3o %s (%s)", ver ? ver.UTF8String : "?", build ? build.UTF8String : "?");
+    rsx_overlay_publish_host_status(&st);
+}
+
+/* SDL's CADisplayLink callback (main thread), home screen only. */
+static void home_frame(void* arg)
+{
+    (void)arg;
+    if (s_handed_off)
+        return;
+    if (!s_starting) {
+        /* The guest is not polling the pad yet: the host feeds the home. */
+        PadHostState pads[1];
+        uint16_t guest;
+        cpgc_poll(pads, 1);
+        (void)rsx_overlay_handle_pad(pads[0].controller_buttons, &guest);
+    }
+    publish_safe_area();
+    (void)rsx_metal_backend_pump_messages();   /* SDL events -> overlay; builds this frame */
+    apply_orientation(rsx_overlay_app_orientation_mask());
+    if (!s_starting && rsx_overlay_take_start_request()) {
+        s_starting = 1;
+        fprintf(stderr, "[ios] Jogar: starting the guest\n");
+        if (gow2_ios_start_game() != 0) {
+            /* Same as a failed guest preparation (guest_main): a thread that
+             * cannot be created will not be created on a retry either, and
+             * the home would otherwise sit on "Carregando..." forever. */
+            const char line[] = "[ios] FATAL: the guest thread did not start -- exiting\n";
+            flush_log_for_exit();
+            log_fd_write(line, sizeof line - 1);
+            _exit(1);
+        }
+    }
+    if (s_starting && rsx_metal_backend_guest_frames() > 0) {
+        /* First guest frame: the game owns the screen, the events and the overlay now. */
+        rsx_overlay_app_game_started();
+        s_handed_off = 1;
+        rsx_metal_backend_set_host_ui(0);
+        apply_orientation(rsx_overlay_app_orientation_mask());
+        SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");   /* edge swipes need two tries in game */
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SDL_iPhoneSetAnimationCallback(host_window(), 1, NULL, NULL);
+        });
+        fprintf(stderr, "[ios] first guest frame: home screen handed over to the game\n");
+        return;
+    }
+    (void)rsx_metal_backend_present_ui();
+}
+
+void gow2_ios_home_begin(void)
+{
+    NSString* prov = [[NSBundle mainBundle] pathForResource:@"embedded" ofType:@"mobileprovision"];
+    NSData* blob = prov != nil ? [NSData dataWithContentsOfFile:prov] : nil;
+    s_sign_expiry = blob != nil ? gow2_ios_provision_expiry((const char*)blob.bytes, blob.length) : 0;
+    cpgc_init();
+    rsx_metal_backend_set_host_ui(1);           /* this (main) thread is the overlay's event thread until the hand-off */
+    rsx_overlay_set_ui_profile(RSX_OVERLAY_UI_PHONE);   /* no Tela / Sair in the shell, no Configurações at home */
+    rsx_overlay_touch_enable(1);
+    rsx_overlay_app_enable_home();
+    publish_status();
+    publish_safe_area();
+    [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer* t) {
+        (void)t;
+        publish_safe_area();          /* in game too: landscape left/right moves the notch */
+        static unsigned tick;
+        if (tick++ % 4 == 0)
+            publish_status();
+    }];
+    SDL_iPhoneSetAnimationCallback(host_window(), 1, home_frame, NULL);
+    fprintf(stderr, "[ios] home screen up (game data %s, re-sign expiry %lld)\n",
+            gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT")) ? "present" : "missing",
+            s_sign_expiry);
 }

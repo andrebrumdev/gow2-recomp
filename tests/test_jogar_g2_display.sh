@@ -12,7 +12,8 @@ OUT="${1:-${TMPDIR:-/tmp}/jogar_g2_display}"
 mkdir -p "$OUT"
 cc -std=c11 -I"$ROOT/libs/video" \
     "$ROOT/games/gow2/launcher/macos/tests/launch_check/overlay_env_probe.c" \
-    "$ROOT/libs/video/rsx_overlay_settings.c" -o "$OUT/overlay_env_probe"
+    "$ROOT/libs/video/rsx_overlay_settings.c" \
+    "$ROOT/libs/video/rsx_overlay_touch_layout.c" -o "$OUT/overlay_env_probe"
 
 GAME="$(mktemp -d "$OUT/game.XXXXXX")"
 trap 'rm -rf "$GAME"' EXIT

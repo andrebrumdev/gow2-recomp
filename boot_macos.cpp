@@ -388,8 +388,9 @@ int commit_guest_regions()
 } /* namespace */
 
 static uint32_t s_boot_entry;
+static int s_display_ready;
 
-extern "C" int gow2_boot_prepare(const char* elf_path)
+extern "C" int gow2_boot_prepare_guest(const char* elf_path)
 {
     /* SPU images register here, explicitly, after the host has its
      * configuration (spec 2026-09-24 iOS, resolution 1): the old static
@@ -442,7 +443,13 @@ extern "C" int gow2_boot_prepare(const char* elf_path)
     ppu_resolve_imports();   /* patch .lib.stub slots -> HLE bridge           */
     fprintf(stderr, "[boot] %u lifted functions registered, HLE wired\n",
             ppu_function_count());
+    return 0;
+}
 
+extern "C" int gow2_boot_prepare_display(void)
+{
+    if (s_display_ready)
+        return 0;
     g_backend = pick_backend();
     /* Runtime overlay: settings (window size, fullscreen, VSync, pad mapping)
      * load BEFORE the backend reads them. The launcher hands its path over in
@@ -474,24 +481,56 @@ extern "C" int gow2_boot_prepare(const char* elf_path)
     }
     if (brc != 0) {
         fprintf(stderr, "[boot] FATAL: RSX backend failed to initialise\n");
-        vm_shutdown();
         return 1;
     }
+    s_display_ready = 1;
+    return 0;
+}
 
-    /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
-     * PS3_TRACE_MOVIEOBJ, no-op sem ela. SO OBSERVA: nao arma o read-hook de
-     * EOS -- isso e' a Task 3 e depende de um produtor real de "done", que no
-     * POSIX ainda nao existe. Arranca aqui, antes do guest, porque o objecto e'
-     * um inicializador estatico em BSS e ja esta presente desde o load. */
-    movie_eos_sampler_start();
+extern "C" int gow2_boot_prepare(const char* elf_path)
+{
+    /* GOW2_BOOT_DISPLAY_FIRST=1 (diagnostic, OFF by default): the iOS order
+     * (display, then guest) on the Mac, to catch an HLE init that needs the
+     * backend first before the phone does. */
+    const char* display_first = std::getenv("GOW2_BOOT_DISPLAY_FIRST");
+    if (display_first != nullptr && display_first[0] == '1') {
+        fprintf(stderr, "[boot] GOW2_BOOT_DISPLAY_FIRST=1: display before the guest (iOS order)\n");
+        if (gow2_boot_prepare_display() != 0)
+            return 1;
+        if (gow2_boot_prepare_guest(elf_path) != 0) {
+            /* Symmetric cleanup with the default path: the guest failed after
+             * display prep succeeded, so undo any partial guest vm state
+             * (idempotent: no-op if gow2_boot_prepare_guest already shut it
+             * down on its own failure path). */
+            vm_shutdown();
+            return 1;
+        }
+    } else {
+        /* The macOS order, unchanged: guest (SPU, vm, ELF, HLE), then display. */
+        if (gow2_boot_prepare_guest(elf_path) != 0)
+            return 1;
+        if (gow2_boot_prepare_display() != 0) {
+            vm_shutdown();
+            return 1;
+        }
+    }
 
-    fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
-    fflush(stderr);
     return 0;
 }
 
 extern "C" int gow2_boot_run_guest(void)
 {
+    /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
+     * PS3_TRACE_MOVIEOBJ, no-op sem ela. SO OBSERVA: nao arma o read-hook de
+     * EOS -- isso e' a Task 3 e depende de um produtor real de "done", que no
+     * POSIX ainda nao existe. Arranca aqui, antes do guest, porque o objecto e'
+     * um inicializador estatico em BSS e ja esta presente desde o load. No
+     * macOS e' o mesmo ponto de antes (depois do backend, antes do ppu_run);
+     * no iOS corre na thread do guest, depois do gow2_boot_prepare_guest. */
+    movie_eos_sampler_start();
+
+    fprintf(stderr, "[boot] entering guest (stack top 0x%08X)\n", GUEST_STACK_TOP);
+    fflush(stderr);
     const uint32_t entry = s_boot_entry;
     int rc = ppu_run(entry, GUEST_STACK_TOP);
     fprintf(stderr, "[boot] guest returned rc=%d\n", rc);
