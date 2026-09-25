@@ -489,12 +489,30 @@ extern "C" int gow2_boot_prepare_display(void)
 
 extern "C" int gow2_boot_prepare(const char* elf_path)
 {
-    /* The macOS order, unchanged: guest (SPU, vm, ELF, HLE), then display. */
-    if (gow2_boot_prepare_guest(elf_path) != 0)
-        return 1;
-    if (gow2_boot_prepare_display() != 0) {
-        vm_shutdown();
-        return 1;
+    /* GOW2_BOOT_DISPLAY_FIRST=1 (diagnostic, OFF by default): the iOS order
+     * (display, then guest) on the Mac, to catch an HLE init that needs the
+     * backend first before the phone does. */
+    const char* display_first = std::getenv("GOW2_BOOT_DISPLAY_FIRST");
+    if (display_first != nullptr && display_first[0] == '1') {
+        fprintf(stderr, "[boot] GOW2_BOOT_DISPLAY_FIRST=1: display before the guest (iOS order)\n");
+        if (gow2_boot_prepare_display() != 0)
+            return 1;
+        if (gow2_boot_prepare_guest(elf_path) != 0) {
+            /* Symmetric cleanup with the default path: the guest failed after
+             * display prep succeeded, so undo any partial guest vm state
+             * (idempotent: no-op if gow2_boot_prepare_guest already shut it
+             * down on its own failure path). */
+            vm_shutdown();
+            return 1;
+        }
+    } else {
+        /* The macOS order, unchanged: guest (SPU, vm, ELF, HLE), then display. */
+        if (gow2_boot_prepare_guest(elf_path) != 0)
+            return 1;
+        if (gow2_boot_prepare_display() != 0) {
+            vm_shutdown();
+            return 1;
+        }
     }
 
     /* Amostrador do objecto do movie player ([MOVIEFSM]/[MOVIEOBJ]). Gated por
