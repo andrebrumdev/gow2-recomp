@@ -491,8 +491,15 @@ static void home_frame(void* arg)
     if (!s_starting && rsx_overlay_take_start_request()) {
         s_starting = 1;
         fprintf(stderr, "[ios] Jogar: starting the guest\n");
-        if (gow2_ios_start_game() != 0)
-            fprintf(stderr, "[ios] FATAL: the guest thread did not start\n");
+        if (gow2_ios_start_game() != 0) {
+            /* Same as a failed guest preparation (guest_main): a thread that
+             * cannot be created will not be created on a retry either, and
+             * the home would otherwise sit on "Carregando..." forever. */
+            const char line[] = "[ios] FATAL: the guest thread did not start -- exiting\n";
+            flush_log_for_exit();
+            log_fd_write(line, sizeof line - 1);
+            _exit(1);
+        }
     }
     if (s_starting && rsx_metal_backend_guest_frames() > 0) {
         /* First guest frame: the game owns the screen, the events and the overlay now. */

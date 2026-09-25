@@ -77,6 +77,11 @@ def main():
                     "rsx_metal_backend_present_ui()", "rsx_metal_backend_guest_frames()"):
             if tok not in hf:
                 fails.append(f"home_frame must call {tok}")
+        # Final review MINOR 2: a failed guest start exits like a failed guest
+        # preparation instead of leaving the home on "Carregando..." forever.
+        m = re.search(r"if\s*\(\s*gow2_ios_start_game\(\)\s*!=\s*0\s*\)\s*\{([^}]*)\}", hf)
+        if not m or "_exit(1)" not in m.group(1) or "flush_log_for_exit()" not in m.group(1):
+            fails.append("home_frame: a failed gow2_ios_start_game() must flush the log and _exit(1)")
         if not before(hf, "rsx_overlay_app_game_started()", "rsx_metal_backend_set_host_ui(0)"):
             fails.append("home_frame: switch the overlay to IN_GAME before handing events to the guest thread")
     hb = body(host, r"void gow2_ios_home_begin\(void\)")
