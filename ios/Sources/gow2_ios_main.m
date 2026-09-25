@@ -14,16 +14,20 @@ int main(int argc, char** argv)
     (void)argc;
     (void)argv;
     gow2_ios_host_early();
-    /* Config before gow2_boot_prepare: SPU registration and every env reader run there. */
+    /* Config first: every env reader (SPU registration included) runs after it. */
     if (gow2_ios_host_load_config() != 0)
         fprintf(stderr, "[ios] bundled gow2.env missing -- running on the launch environment only\n");
     gow2_ios_host_start_perf_log();
-    gow2_ios_host_wait_for_game_data();   /* P2: the home screen takes this over */
-    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    /* Home: portrait and landscape; the game locks landscape (gow2_ios_home_begin). */
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait");
     SDL_SetHint(SDL_HINT_IDLE_TIMER_DISABLED, "1");
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");   /* touches reach the overlay as fingers only */
     gow2_ios_host_audio_session_begin();
-    if (gow2_boot_prepare(getenv("GOW2_EBOOT")) != 0) {
-        fprintf(stderr, "[ios] boot preparation failed\n");
+    /* Display only: the home screen draws before (and without) game data. The
+     * guest (SPU registration, ELF, HLE) is prepared on its own thread after
+     * "Jogar" (gow2_ios_start_game). */
+    if (gow2_boot_prepare_display() != 0) {
+        fprintf(stderr, "[ios] display preparation failed\n");
         return 1;
     }
     gow2_ios_host_install_lifecycle();
@@ -35,6 +39,6 @@ int main(int argc, char** argv)
      * guest thread never runs a run loop even before that: SDL_PollEvent then
      * only drains SDL's locked event queue, which UIKit fills on the main thread. */
     SDL_iPhoneSetEventPump(SDL_FALSE);
-    if (gow2_ios_start_game() != 0) return 1;
+    gow2_ios_home_begin();
     return 0;
 }

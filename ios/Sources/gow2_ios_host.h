@@ -13,7 +13,7 @@ const char* gow2_ios_documents(void);
 void gow2_ios_host_early(void);
 /* Launch env > Documents/gow2.override.env > bundled gow2.env, then the
  * container paths (GOW2_EBOOT, PS3_VFS_ROOT, PS3_MOVIE_CACHE, PS3_SAVEDATA_ROOT).
- * Must run before gow2_boot_prepare (SPU registration reads the environment)
+ * Must run before gow2_boot_prepare_display (every env reader runs after it)
  * and before any guest thread. 0 ok; -1 when the bundled recipe is missing. */
 int gow2_ios_host_load_config(void);
 /* PS3_IOS_PERF_LOG=1 (OFF): one [IOSPERF] line per second. */
@@ -22,12 +22,17 @@ void gow2_ios_host_start_perf_log(void);
 void gow2_ios_host_audio_session_begin(void);
 /* UIKit / AVAudioSession / thermal notifications -> gow2_lifecycle; idle timer off. */
 void gow2_ios_host_install_lifecycle(void);
-/* Main thread: while EBOOT.ELF / USRDIR are missing, logs it and shows a
- * blocking alert ("Jogo não instalado"); returns once the data is present. */
-void gow2_ios_host_wait_for_game_data(void);
-/* Starts the guest on a 64 MB-stack thread (QoS from PS3_IOS_GUEST_QOS).
- * P2's home screen calls this from "Jogar". 0 ok. */
+/* Starts the guest on a 64 MB-stack thread (QoS from PS3_IOS_GUEST_QOS): it
+ * prepares the guest (gow2_boot_prepare_guest: SPU, memory, ELF, HLE) and runs
+ * it. The home screen calls this on "Jogar". 0 ok. */
 int gow2_ios_start_game(void);
+/* Main thread, after gow2_boot_prepare_display and the lifecycle: the home
+ * screen (P2). Enables touch and the home in the overlay, owns SDL events and
+ * the overlay (the backend's host-UI mode) and presents UI-only frames from
+ * SDL's CADisplayLink callback until the first guest frame, then hands both
+ * over to the game. Publishes safe-area insets (4 Hz) and the host status
+ * (thermal state, fps cap, memory, data, re-sign expiry, last save; 1 Hz). */
+void gow2_ios_home_begin(void);
 
 #ifdef __cplusplus
 }
