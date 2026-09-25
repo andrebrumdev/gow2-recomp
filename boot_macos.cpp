@@ -388,8 +388,9 @@ int commit_guest_regions()
 } /* namespace */
 
 static uint32_t s_boot_entry;
+static int s_display_ready;
 
-extern "C" int gow2_boot_prepare(const char* elf_path)
+extern "C" int gow2_boot_prepare_guest(const char* elf_path)
 {
     /* SPU images register here, explicitly, after the host has its
      * configuration (spec 2026-09-24 iOS, resolution 1): the old static
@@ -442,7 +443,13 @@ extern "C" int gow2_boot_prepare(const char* elf_path)
     ppu_resolve_imports();   /* patch .lib.stub slots -> HLE bridge           */
     fprintf(stderr, "[boot] %u lifted functions registered, HLE wired\n",
             ppu_function_count());
+    return 0;
+}
 
+extern "C" int gow2_boot_prepare_display(void)
+{
+    if (s_display_ready)
+        return 0;
     g_backend = pick_backend();
     /* Runtime overlay: settings (window size, fullscreen, VSync, pad mapping)
      * load BEFORE the backend reads them. The launcher hands its path over in
@@ -474,6 +481,18 @@ extern "C" int gow2_boot_prepare(const char* elf_path)
     }
     if (brc != 0) {
         fprintf(stderr, "[boot] FATAL: RSX backend failed to initialise\n");
+        return 1;
+    }
+    s_display_ready = 1;
+    return 0;
+}
+
+extern "C" int gow2_boot_prepare(const char* elf_path)
+{
+    /* The macOS order, unchanged: guest (SPU, vm, ELF, HLE), then display. */
+    if (gow2_boot_prepare_guest(elf_path) != 0)
+        return 1;
+    if (gow2_boot_prepare_display() != 0) {
         vm_shutdown();
         return 1;
     }
