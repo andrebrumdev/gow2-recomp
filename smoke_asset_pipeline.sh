@@ -86,6 +86,7 @@ export PS3_RSX_BACKEND=d3d12 PS3_RSX_FIFO=1
 export PS3_TRACE_RSX_SHADERS=1
 export PS3_PAD_AUTOSTART=1
 export PS3_TRACE_ASSET=1
+export PS3_TRACE_HOSTINFL=1   # [HOSTINFL] passou a exigir gate (OFF por default)
 unset PS3_SPU_ALL PS3_NOMOVIES
 
 timeout -k 5 "$TIMEOUT_S" ./boot_v2_new.exe ../EBOOT.ELF > "$LOG" 2>&1

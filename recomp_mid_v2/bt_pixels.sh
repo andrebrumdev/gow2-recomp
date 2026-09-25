@@ -23,6 +23,7 @@ export PS3_TRACE_SHADERSRC=1
 export PS3_TRACE_SHADERMAP=1
 export PS3_MAP_SHADER=1
 export PS3_TRACE_CRC=1
+export PS3_TRACE_HOSTINFL=1   # [HOSTINFL] passou a exigir gate (OFF por default)
 # WAD type-loader SM (R_PermA is raw — not HOSTINFL)
 export PS3_TRACE_TYMAP=1
 # GATE_FORCE synthetic ICGLdr spins CCPLdr without real EFCT — keep OFF for
