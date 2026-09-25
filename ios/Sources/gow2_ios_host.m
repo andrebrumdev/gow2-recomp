@@ -243,7 +243,9 @@ void gow2_ios_host_audio_session_begin(void)
 {
     AVAudioSession* s = [AVAudioSession sharedInstance];
     NSError* err = nil;
-    if (![s setCategory:AVAudioSessionCategorySoloAmbient error:&err])
+    /* Playback, not SoloAmbient: SoloAmbient is silenced by the ring/silent switch
+     * (measured 2026-09-25: no sound on the iPhone 14); a console game plays regardless. */
+    if (![s setCategory:AVAudioSessionCategoryPlayback error:&err])
         fprintf(stderr, "[ios] audio session category: %s\n", err.localizedDescription.UTF8String);
     audio_session_activate("launch");
 }
