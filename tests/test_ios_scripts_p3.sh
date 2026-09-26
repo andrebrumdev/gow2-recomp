@@ -2,7 +2,8 @@
 # P3 Task 6: the scripts the Mac launcher drives. print_config.sh prints what
 # ios_env.sh resolved; build_ios.sh --sign-only refuses without a full build
 # and, with one, runs only the bake + xcodegen + xcodebuild steps (never the
-# game, runtime or SDL builds); install_ios.sh --data points to the manifest.
+# game, runtime or SDL builds); install_ios.sh --data marks the phone's manifest
+# incomplete before copying the game and says what the launcher re-copies.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PORT="$(cd "$HERE/.." && pwd)"
@@ -48,6 +49,36 @@ OUT="$(PATH="$T/bin:$PATH" "$P/ios/build_ios.sh" --sign-only 2>&1)"; rc=$?
 for m in GAME_BUILT RT_BUILT SDL_BUILT; do [ -e "$T/$m" ] && F "--sign-only ran the $m step"; done
 grep -q -- "-allowProvisioningUpdates" "$T/XCODEBUILD_ARGS" 2>/dev/null || F "xcodebuild must sign with -allowProvisioningUpdates"
 grep -q "gow2-install.manifest" "$P/ios/install_ios.sh" || F "install_ios.sh --data must point to the launcher's manifest"
+
+# install_ios.sh --data against a fake xcrun (no device): the incomplete marker lands on
+# the phone's manifest BEFORE any game file, and the note tells what the launcher re-copies.
+mkdir -p "$APP"
+cat > "$T/bin/xcrun" <<EOF
+#!/bin/bash
+echo "\$*" >> "$T/XCRUN_LOG"
+src=""; dst=""
+while [ \$# -gt 0 ]; do
+    case "\$1" in --source) src="\$2"; shift ;; --destination) dst="\$2"; shift ;; esac
+    shift
+done
+[ "\$dst" = "Documents/gow2-install.manifest" ] && /bin/cat "\$src" > "$T/MANIFEST_PUSHED"
+exit 0
+EOF
+chmod +x "$T/bin/xcrun"
+OUT="$(PATH="$T/bin:$PATH" "$P/ios/install_ios.sh" --data 2>"$T/DATA_ERR")"; rc=$?
+[ "$rc" = 0 ] || F "install_ios.sh --data with a fake xcrun must exit 0 (got $rc): $(cat "$T/DATA_ERR")"
+[ "$(tail -1 <<< "$OUT")" = "GOW2_IOS_INSTALL_OK" ] || F "install_ios.sh --data must end with GOW2_IOS_INSTALL_OK: $OUT"
+DESTS="$(grep -o -- '--destination [^ ]*' "$T/XCRUN_LOG" 2>/dev/null | cut -d' ' -f2 | tr '\n' ' ')"
+[ "$DESTS" = "Documents/gow2-install.manifest Documents/EBOOT.ELF Documents/USRDIR Documents/movie_cache " ] \
+    || F "--data must overwrite the manifest first, then copy the game: $DESTS"
+head -1 "$T/XCRUN_LOG" | grep -q "device install app" || F "the app is installed before any copy: $(head -1 "$T/XCRUN_LOG")"
+[ "$(cat "$T/MANIFEST_PUSHED" 2>/dev/null)" = "$(printf 'gow2-install 1\nincomplete')" ] \
+    || F "the manifest pushed by --data must be the incomplete marker: $(cat "$T/MANIFEST_PUSHED" 2>/dev/null)"
+grep -q "64 MiB" "$T/DATA_ERR" && grep -q "copied again" "$T/DATA_ERR" \
+    || F "--data note must say the launcher re-copies files over 64 MiB without a record: $(cat "$T/DATA_ERR")"
+rm -f "$T/XCRUN_LOG"
+OUT="$(PATH="$T/bin:$PATH" "$P/ios/install_ios.sh" 2>&1)" || F "install_ios.sh without --data failed: $OUT"
+[ "$(grep -c -- '--destination' "$T/XCRUN_LOG")" = 0 ] || F "without --data nothing is copied: $(cat "$T/XCRUN_LOG")"
 
 [ "$fail" = 0 ] && echo "test_ios_scripts_p3: PASS"
 exit "$fail"
