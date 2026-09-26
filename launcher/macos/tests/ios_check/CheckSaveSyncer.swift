@@ -250,12 +250,53 @@ func runSaveSyncerChecks() {
     check(r.pulled == [G] && hash(pf.mac) == hash(pf.phoneSaves)
           && r.backups.contains { fileText($0.appendingPathComponent(G)) == "not a save" }
           && !fm.fileExists(atPath: pf.mac.appendingPathComponent(".\(G).sync-old").path), "plain file kept in backups \(r)")
+
+    // 16. Review fix round 1: a push that stops half-way must not leave a stale base behind,
+    //     or the next sync would PULL the partial phone save over the good Mac save.
+    func macFiles(_ e: Env) -> [String: String] {
+        var out: [String: String] = [:]
+        for f in try! fm.contentsOfDirectory(atPath: e.mac.appendingPathComponent(G).path) {
+            out[f] = fileText(e.mac.appendingPathComponent("\(G)/\(f)"))
+        }
+        return out
+    }
+    func partialSyncer(_ e: Env, _ t: DeviceTransport) -> SaveSyncer {
+        SaveSyncer(transport: t, device: "00008110-TEST", bundle: "com.example.gow2", macRoot: e.mac,
+                   backupRoot: e.backups, stateURL: e.state, staging: e.root.appendingPathComponent("staging"),
+                   facts: exactFacts, macGameRunning: { false }, now: { Date(timeIntervalSince1970: 1790372701) })
+    }
+    //  a) the push throws (phone had lost its save: no backup, nothing to restore).
+    let sb = env("stalebase")
+    _ = try! syncer(sb).run(.both)
+    check(SyncState.load(sb.state).base[G] == hash(sb.mac), "base recorded")
+    try! fm.removeItem(at: sb.phoneSaves.appendingPathComponent(G))
+    let sbMac = macFiles(sb)
+    do { _ = try partialSyncer(sb, PartialCopyTransport(sb.phone)).run(.both); check(false, "partial push must throw") }
+    catch {}
+    check(fileText(sb.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN")) == "d1"
+          && !fm.fileExists(atPath: sb.phoneSaves.appendingPathComponent("\(G)/MASTER.BIN").path), "phone holds a partial save")
+    r = try! syncer(sb).run(.both)
+    check(r.conflicts.map(\.name) == [G] && r.pulled.isEmpty && macFiles(sb) == sbMac, "partial phone save is a conflict \(r)")
+    //  b) the launcher dies mid-copy: only what was on disk at that moment counts.
+    let sc = env("stalecrash")
+    _ = try! syncer(sc).run(.both)
+    try! fm.removeItem(at: sc.phoneSaves.appendingPathComponent(G))
+    let scMac = macFiles(sc)
+    let crash = PartialCopyTransport(sc.phone)
+    var atCrash: Data?
+    crash.onPartial = { atCrash = try? Data(contentsOf: sc.state) }
+    do { _ = try partialSyncer(sc, crash).run(.both); check(false, "crash push must throw") } catch {}
+    if let d = atCrash { try! d.write(to: sc.state) } else { try? fm.removeItem(at: sc.state) }
+    r = try! syncer(sc).run(.both)
+    check(r.conflicts.map(\.name) == [G] && r.pulled.isEmpty && macFiles(sc) == scMac, "crash mid-push is a conflict \(r)")
 }
 
 /// Writes the first file of a directory copy, then fails once (a cable pulled mid-copy).
 final class PartialCopyTransport: DeviceTransport {
     let inner: FakeTransport
     var failed = false
+    /// Runs right after the partial write, before the error: the moment a crash would hit.
+    var onPartial: (() -> Void)?
     init(_ inner: FakeTransport) { self.inner = inner }
     func devices() throws -> [IOSDevice] { try inner.devices() }
     func lockState(_ device: String) throws -> IOSLockState { try inner.lockState(device) }
@@ -276,6 +317,7 @@ final class PartialCopyTransport: DeviceTransport {
         try FileManager.default.createDirectory(at: one, withIntermediateDirectories: true)
         try FakeTransport.place(local.appendingPathComponent(first), at: one.appendingPathComponent(first))
         try inner.copyDirectoryTo(device, bundle: bundle, local: one, remote: remote, removeExisting: removeExisting)
+        onPartial?()
         throw DeviceError(code: DeviceError.noDevice, domain: "fake", message: "device went away")
     }
     func copyFileFrom(_ device: String, bundle: String, remote: String, local: URL) throws {

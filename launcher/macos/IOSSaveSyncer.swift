@@ -60,7 +60,7 @@ final class SaveSyncer {
                 state.base[n] = mac[n]!.hash
                 report.same.append(n)
             case .push(let n):
-                try push(n, mac: mac[n]!, phone: phone[n], phoneDir: phoneDir, stamp: stamp, report: &report)
+                try push(n, mac: mac[n]!, phone: phone[n], phoneDir: phoneDir, stamp: stamp, state: &state, report: &report)
                 state.base[n] = mac[n]!.hash
                 report.pushed.append(n)
             case .pull(let n):
@@ -90,7 +90,7 @@ final class SaveSyncer {
         switch keep {
         case .mac:
             guard let m = mac[name] else { throw SaveSyncError.unknownSave(name) }
-            try push(name, mac: m, phone: phone[name], phoneDir: phoneDir, stamp: stamp, report: &report)
+            try push(name, mac: m, phone: phone[name], phoneDir: phoneDir, stamp: stamp, state: &state, report: &report)
             state.base[name] = m.hash
             report.pushed.append(name)
         case .iphone:
@@ -173,7 +173,7 @@ final class SaveSyncer {
     }
 
     private func push(_ n: String, mac: SaveDirSnapshot, phone: SaveDirSnapshot?, phoneDir: URL, stamp: Date,
-                      report: inout SaveSyncReport) throws {
+                      state: inout SyncState, report: inout SaveSyncReport) throws {
         let exact = facts.removeExistingContentDeletesExtras == true          // F6
         var backup: URL?
         if phone != nil {
@@ -191,14 +191,29 @@ final class SaveSyncer {
         }
         try guardNotRunning()                                                  // right before the destructive step
         let remote = SaveSyncer.remoteRoot + "/" + n
+        // Forget the last-synced hash on disk BEFORE the phone is touched: a copy that stops
+        // half-way (or a launcher that dies) must not leave base == Mac behind, or the next
+        // bidirectional sync would pull the partial phone save over the Mac's. Without a base
+        // a differing phone save is a conflict. The base comes back only when the phone
+        // holds (or got back) its old save; the caller records the new one on success.
+        let prior = state.base[n]
+        state.base[n] = nil
+        try state.save(stateURL)
+        func phoneBackToOld(_ s: inout SyncState) {
+            s.base[n] = prior
+            try? s.save(stateURL)
+        }
         do {
             try transport.copyDirectoryTo(device, bundle: bundle, local: macRoot.appendingPathComponent(n), remote: remote,
                                           removeExisting: exact)
         } catch {
             // The copy may have stopped half-way (cable, lock): if the phone no longer holds
             // its old save, put the verified backup back; then report the transport's error.
-            if let b = backup, let old = phone, (try? phoneHash(remote)) != old.hash {
-                try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
+            if let b = backup, let old = phone {
+                if (try? phoneHash(remote)) != old.hash {
+                    try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
+                }
+                phoneBackToOld(&state)
             }
             throw error
         }
@@ -206,6 +221,7 @@ final class SaveSyncer {
         // The phone copy is wrong: put the backed-up save back and say whether that conferred.
         guard let b = backup, let old = phone else { throw SaveSyncError.verifyFailed(n) }
         try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
+        phoneBackToOld(&state)
         throw SaveSyncError.verifyFailed(n)
     }
 
