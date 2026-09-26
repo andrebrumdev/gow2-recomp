@@ -13,6 +13,9 @@ targets:
       - path: Sources
       - path: Generated/gow2.env
         buildPhase: resources
+      - path: Generated/licenses
+        type: folder
+        buildPhase: resources
     info:
       path: Generated/Info.plist
       properties:

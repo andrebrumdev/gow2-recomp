@@ -73,4 +73,7 @@ arm64 code.
 ## Legal
 
 The kit contains no part of the game. You need a legally obtained copy of
-God of War II HD. The engine (`ps3recomp`) is MIT-licensed.
+God of War II HD. The engine (`ps3recomp`) is MIT-licensed. The iPhone build
+links FFmpeg's MPEG-2 decoder (libavcodec, LGPL-2.1-or-later), built from the
+unmodified FFmpeg 8.1.3 release on your Mac; its license is inside the app
+(`licenses/`) and the details are in the engine's `third_party/ffmpeg/README.md`.
