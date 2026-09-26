@@ -62,7 +62,7 @@ final class DevicectlTransport: DeviceTransport {
     func cancel() {
         lock.lock()
         cancelRequested = true
-        current?.terminate()
+        if let p = current, p.isRunning { p.terminate() }
         lock.unlock()
     }
 
@@ -81,9 +81,16 @@ final class DevicectlTransport: DeviceTransport {
         p.standardOutput = FileHandle.nullDevice
         lock.lock()
         cancelRequested = false            // a cancel only stops the command in flight
-        current = p
         lock.unlock()
         try p.run()
+        // `current` is published only once the process runs: terminate() on a Process
+        // that never launched raises NSInvalidArgumentException. A cancel that arrived
+        // between the reset above and here is honoured at once. (If run() throws,
+        // `current` was never set.)
+        lock.lock()
+        current = p
+        if cancelRequested { p.terminate() }
+        lock.unlock()
         let stderrText = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         p.waitUntilExit()
         lock.lock()

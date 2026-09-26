@@ -78,7 +78,9 @@ final class DataPusher {
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         var record = PushedRecord.load(recordURL)
         let text = m.serialized()
-        let plan = InstallPlan.split(m, remote: try remoteFiles("Documents"), pushed: record.files, verifyLimit: verifyLimit)
+        let listing = try remoteFiles("Documents")
+        let plan = InstallPlan.split(m, remote: listing, pushed: record.files, verifyLimit: verifyLimit)
+        let onPhone = Set(listing.filter { !$0.isDirectory }.map(\.path))
         if plan.copy.isEmpty, plan.verify.isEmpty, (try? remoteManifestText()) == text { return .alreadyInstalled }
         try upload(InstallManifest.incompleteMarker)            // the app reads "not installed" from here on
         var toCopy = plan.copy
@@ -101,6 +103,7 @@ final class DataPusher {
             p.file = e.path
             p.index = i + 1
             progress(p)
+            if onPhone.contains(e.path) { try invalidate(e) }
             try transport.copyFileTo(device, bundle: bundle, local: e.source, remote: "Documents/" + e.path)
             try verifyCopied(e)
             record.files[e.path] = PushedFile(size: e.size, mtime: e.mtime, sha256: e.sha256)
@@ -124,14 +127,36 @@ final class DataPusher {
     /// Right after one copy: size + mtime on the phone, the Mac source unchanged,
     /// and for small files the downloaded bytes' hash.
     private func verifyCopied(_ e: ManifestEntry) throws {
-        let parts = e.path.split(separator: "/")
-        let dir = (["Documents"] + parts.dropLast().map(String.init)).joined(separator: "/")
-        let name = String(parts.last!)
-        guard let r = try remoteFiles(dir).first(where: { $0.path == name }), !r.isDirectory,
+        guard let r = try remoteEntry(e.path), !r.isDirectory,
               r.size == e.size, r.mtime == e.mtime else { throw PushError.verifyFailed(e.path) }
         let now = try HashCache.fileInfo(e.source)
         guard now.size == e.size, now.mtime == e.mtime, now.ctimeNs == e.ctimeNs else { throw PushError.sourceChanged(e.path) }
         if e.size <= verifyLimit, try downloadHash(e) != e.sha256 { throw PushError.verifyFailed(e.path) }
+    }
+
+    /// The phone's listing entry for `path` (relative to Documents), nil when absent.
+    private func remoteEntry(_ path: String) throws -> RemoteFile? {
+        let parts = path.split(separator: "/")
+        let dir = (["Documents"] + parts.dropLast().map(String.init)).joined(separator: "/")
+        let name = String(parts.last!)
+        return try remoteFiles(dir).first(where: { $0.path == name })
+    }
+
+    /// Fact F4: devicectl's `copy to` skips a destination file that has the source's
+    /// size and mtime, whatever its bytes. A file already on the phone is therefore
+    /// first replaced by a placeholder of another size (confirmed by a re-list), so
+    /// the real copy that follows always transfers. Done for EVERY file already on
+    /// the phone (not only size+mtime matches) so the result does not depend on
+    /// exactly which attributes devicectl compares; the cost is one small upload and
+    /// one listing per re-copied file, and re-copies of present files are rare.
+    private func invalidate(_ e: ManifestEntry) throws {
+        let size = e.size == 0 ? 1 : 0
+        let local = staging.appendingPathComponent("placeholder-\(size)")
+        try Data(repeating: 0, count: size).write(to: local)
+        try transport.copyFileTo(device, bundle: bundle, local: local, remote: "Documents/" + e.path)
+        guard let r = try remoteEntry(e.path), !r.isDirectory, r.size == Int64(size) else {
+            throw PushError.verifyFailed(e.path)
+        }
     }
 
     private func downloadHash(_ e: ManifestEntry) throws -> String {

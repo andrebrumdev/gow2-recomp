@@ -3,7 +3,8 @@ import Foundation
 /// devicectl stand-in: `root` is the app's data container (root/Documents/…).
 /// Copies keep mtimes and a directory copy lands as the destination's contents
 /// (facts F2/F3/F5); stricter than devicectl where that helps: a single-file
-/// copy needs its parent directory to exist.
+/// copy needs its parent directory to exist. A single-file copy onto a file with
+/// the same size and mtime is a no-op, as on the phone (fact F4).
 final class FakeTransport: DeviceTransport {
     let root: URL
     var deviceList: [IOSDevice] = []
@@ -14,7 +15,7 @@ final class FakeTransport: DeviceTransport {
     var failWhen: ((String) -> DeviceError?)?
     /// Copies to a remote path with this prefix "succeed" without writing anything.
     var dropWritesUnder: String?
-    /// The next N files written under `corruptPrefix` get their first byte flipped
+    /// The next N non-empty files written under `corruptPrefix` get their first byte flipped
     /// (same size, same mtime): a transfer that "succeeds" with wrong bytes.
     var corruptNext = 0
     var corruptPrefix = ""
@@ -56,6 +57,10 @@ final class FakeTransport: DeviceTransport {
         if dropped(remote) { return }
         let dst = url(remote)
         guard LauncherCore.isDir(dst.deletingLastPathComponent().path) else { throw notFound(remote) }
+        // Fact F4: devicectl skips a file the destination already holds with the
+        // same size and mtime ("unchanged"), whatever the bytes are.
+        if LauncherCore.isFile(dst.path), let d = try? HashCache.fileInfo(dst), let l = try? HashCache.fileInfo(local),
+           d.size == l.size, d.mtime == l.mtime { return }
         try FakeTransport.place(local, at: dst)
         try corrupt(dst, remote: remote)
     }
@@ -68,10 +73,11 @@ final class FakeTransport: DeviceTransport {
             }
             return
         }
+        var d = try Data(contentsOf: dst)
+        guard !d.isEmpty else { return }          // no byte to flip: an empty file is not counted
         corruptNext -= 1
         let m = try FileManager.default.attributesOfItem(atPath: dst.path)[.modificationDate] as! Date
-        var d = try Data(contentsOf: dst)
-        if !d.isEmpty { d[0] ^= 0xFF }
+        d[0] ^= 0xFF
         try d.write(to: dst)
         try FileManager.default.setAttributes([.modificationDate: m], ofItemAtPath: dst.path)
     }

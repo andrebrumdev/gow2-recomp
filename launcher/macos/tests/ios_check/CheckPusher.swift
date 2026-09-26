@@ -64,6 +64,17 @@ func runPusherChecks() {
     check(!phone.ops.dropFirst(opsBig).contains("from Documents/USRDIR/gow2.psarc"), "a large file is not downloaded back")
     check(probeState(docs) == 1, "installed after the same-size replacements")
 
+    // 5b. Fact F4 (a copy onto a same-size, same-mtime file is skipped by devicectl): a LARGE
+    //     file replaced on the Mac with the same size and mtime must still reach the phone before
+    //     the complete manifest names it — never a complete manifest over the old bytes.
+    try! (Data([0x7F, 0x45, 0x4C, 0x46]) + Data("REST".utf8)).write(to: g.elf)
+    try! FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1784521789)], ofItemAtPath: g.elf.path)
+    let m4b = try! InstallManifestBuilder.build(src, cache: cache)
+    check((try? bigPusher.push(m4b)) == .installed(copied: 1, skipped: 3), "same size+mtime EBOOT (large) re-copied")
+    check((try? Data(contentsOf: docs.appendingPathComponent("EBOOT.ELF"))) == (try? Data(contentsOf: g.elf))
+          && fileText(docs.appendingPathComponent(InstallManifest.fileName)) == m4b.serialized()
+          && probeState(docs) == 1, "complete manifest only over the new bytes of the large file")
+
     // 6. Same-length corruption on the way (a small file, the level we can check): caught by the
     //    download hash before the manifest; the record forgets the file; a retry fixes it.
     writeFile(g.movies.appendingPathComponent("intro.m2v"), "MOVIE3", mtime: Date(timeIntervalSince1970: 1784600001))
