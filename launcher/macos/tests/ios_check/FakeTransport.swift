@@ -10,7 +10,8 @@ import Foundation
 /// the phone (fact F4). A listing or `copy from` of a directory with no file node
 /// at all (fact: incident 2026-09-26, Documents/USRDIR after the F10 wipe) throws
 /// the same CoreDeviceError 7000 "Failed to retrieve the file node" shape as the
-/// real device, not an empty result.
+/// real device, not an empty result -- and, like DevicectlTransport since incident
+/// fix 2, never maps it to "not present": callers decide.
 final class FakeTransport: DeviceTransport {
     let root: URL
     var deviceList: [IOSDevice] = []
@@ -19,6 +20,12 @@ final class FakeTransport: DeviceTransport {
     var running: [String] = []
     /// Called with each op string before it runs; a non-nil error is thrown instead.
     var failWhen: ((String) -> DeviceError?)?
+    /// Called with the directory of each listing; a non-nil error is thrown instead (a
+    /// listing is not an op: it is not recorded in `ops`).
+    var failListWhen: ((String) -> DeviceError?)?
+    /// A directory `copy from` "succeeds" and leaves the destination empty (the shape the
+    /// production transport used to return for a 7000 it swallowed).
+    var copyFromYieldsNothing = false
     /// Copies to a remote path with this prefix "succeed" without writing anything.
     var dropWritesUnder: String?
     /// The next N non-empty files written under `corruptPrefix` get their first byte flipped
@@ -46,6 +53,7 @@ final class FakeTransport: DeviceTransport {
     private func dropped(_ remote: String) -> Bool { dropWritesUnder.map { remote.hasPrefix($0) } ?? false }
 
     func files(_ device: String, bundle: String, under dir: String) throws -> [RemoteFile] {
+        if let e = failListWhen?(dir) { throw e }
         let base = url(dir)
         guard LauncherCore.isDir(base.path) else { throw notFound(dir) }
         var out: [RemoteFile] = []
@@ -107,6 +115,10 @@ final class FakeTransport: DeviceTransport {
 
     func copyDirectoryFrom(_ device: String, bundle: String, remote: String, local: URL) throws {
         try op("dir from \(remote)")
+        if copyFromYieldsNothing {
+            try FileManager.default.createDirectory(at: local, withIntermediateDirectories: true)
+            return
+        }
         let src = url(remote)
         guard LauncherCore.isDir(src.path) else { throw notFound(remote) }
         try FakeTransport.mirror(src, into: local)

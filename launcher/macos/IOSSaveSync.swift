@@ -34,8 +34,17 @@ enum SaveSyncError: Error, Equatable {
     /// A phone copy that did not verify, rolled back: the phone holds its old save again
     /// (re-downloaded and hash-checked). verifyFailed = nothing existing was replaced.
     case phoneRestored(String)
+    /// The phone listed a savedata that did not come back complete on the copy: never read
+    /// as "the phone has no save" (CoreDeviceError 7000 is ambiguous, incident fix 2).
+    case phoneUnreadable
+    /// A push with no phone save (hence no backup) found one there right before the copy.
+    case phoneSaveAppeared(String)
     var userMessage: String {
         switch self {
+        case .phoneUnreadable:
+            return "Não deu para ler os saves do iPhone (o devicectl listou a pasta, mas a cópia veio incompleta). Nada foi copiado. Conecte o iPhone pelo cabo USB, desbloqueie-o e tente de novo."
+        case .phoneSaveAppeared(let n):
+            return "Apareceu um save \(n) no iPhone durante a sincronia. Nada foi copiado por cima dele; sincronize de novo."
         case .unreadableSave(let n):
             return "Não deu para ler todo o save \(n) (pasta vazia, sem permissão ou com algo que não é arquivo). Nada foi copiado; confira a pasta e tente de novo."
         case .symlinkInSave(let n):

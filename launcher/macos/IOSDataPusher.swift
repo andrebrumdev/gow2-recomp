@@ -122,9 +122,16 @@ final class DataPusher {
         return .installed(copied: toCopy.count, skipped: m.entries.count - toCopy.count)
     }
 
+    /// The root `Documents` listing never swallows an error: CoreDeviceError 7000 is also
+    /// (suspected, F11) what an existing path answers when the device's file service cannot
+    /// read, and an empty root would skip invalidate() (F4) and could publish a complete
+    /// manifest over old bytes. (An emptied Documents lists empty, not 7000.) Below the root,
+    /// only the exact "no file node" 7000 means absent -- and absent there fails closed anyway
+    /// (verifyCopied/invalidate throw on a missing entry).
     private func remoteFiles(_ dir: String) throws -> [RemoteFile] {
+        if dir == "Documents" { return try transport.files(device, bundle: bundle, under: dir) }
         do { return try transport.files(device, bundle: bundle, under: dir) }
-        catch let e as DeviceError where e.isNotFound { return [] }
+        catch let e as DeviceError where e.isMissingFileNode { return [] }
     }
 
     /// Right after one copy: size + mtime on the phone, the Mac source unchanged,
@@ -182,8 +189,10 @@ final class DataPusher {
         try transport.copyFileTo(device, bundle: bundle, local: local, remote: InstallManifest.remotePath)
     }
 
-    /// An empty skeleton of every parent directory, copied without removing
-    /// anything, so a single-file copy never depends on devicectl creating parents.
+    /// Best-effort pre-creation of every parent directory: an empty skeleton, copied
+    /// without removing anything. Not needed for correctness -- the per-file `copy to`
+    /// creates any missing parent on its own (fact F1) -- so a "no file node" failure
+    /// here is skipped (see the catch below).
     private func ensureDirectories(for entries: [ManifestEntry]) throws {
         let fm = FileManager.default
         let skel = staging.appendingPathComponent("skeleton")

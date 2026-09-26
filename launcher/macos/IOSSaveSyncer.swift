@@ -154,20 +154,58 @@ final class SaveSyncer {
         return d
     }
 
-    /// A local copy of the phone's savedata (empty when the phone never saved).
+    static let remoteParent = "Documents"
+    static let remoteLeaf = "savedata"
+
+    /// Whether a SUCCESSFUL listing of Documents (never swallowed) shows savedata.
+    private func phoneListsSavedata() throws -> [RemoteFile] {
+        let docs = try transport.files(device, bundle: bundle, under: SaveSyncer.remoteParent)
+        let leaf = SaveSyncer.remoteLeaf
+        return docs.filter { $0.path == leaf || $0.path.hasPrefix(leaf + "/") }
+    }
+
+    /// A local copy of the phone's savedata; empty only when a successful listing of
+    /// Documents shows no savedata. CoreDeviceError 7000 "Failed to retrieve the file node"
+    /// is ambiguous (a missing path, or -- suspected, F11 -- a device whose file service cannot
+    /// read), so no error is ever read as "the phone has no save": that reading made a
+    /// bidirectional sync push the Mac's save over the phone's with no backup.
     private func fetchPhone() throws -> URL {
         let dir = try freshStaging("phone")
-        do { _ = try transport.files(device, bundle: bundle, under: SaveSyncer.remoteRoot) }
-        catch let e as DeviceError where e.isNotFound { return dir }
+        var ok = false
+        defer { if !ok { try? FileManager.default.removeItem(at: dir) } }
+        let listed = try phoneListsSavedata()
+        if listed.isEmpty { ok = true; return dir }
         try transport.copyDirectoryFrom(device, bundle: bundle, remote: SaveSyncer.remoteRoot, local: dir)
+        // Every file the listing named must have come back, same size: a partial or empty
+        // copy is not a smaller save.
+        let prefix = SaveSyncer.remoteLeaf + "/"
+        for f in listed where !f.isDirectory && f.path.hasPrefix(prefix) {
+            let local = dir.appendingPathComponent(String(f.path.dropFirst(prefix.count)))
+            guard LauncherCore.isFile(local.path), let i = try? HashCache.fileInfo(local), i.size == f.size else {
+                throw SaveSyncError.phoneUnreadable
+            }
+        }
+        ok = true
         return dir
+    }
+
+    /// Right before a push that has no phone backup: is `n` on the phone now? Only a
+    /// successful listing says "no"; a 7000 on savedata is confirmed against Documents.
+    private func phoneHasSave(_ n: String) throws -> Bool {
+        do {
+            return try transport.files(device, bundle: bundle, under: SaveSyncer.remoteRoot)
+                .contains { $0.path == n || $0.path.hasPrefix(n + "/") }
+        } catch let e as DeviceError where e.isMissingFileNode {
+            if try phoneListsSavedata().isEmpty { return false }       // savedata really absent
+            throw SaveSyncError.phoneUnreadable                        // listed, yet unreadable
+        }
     }
 
     private func phoneHash(_ remote: String) throws -> String? {
         let check = try freshStaging("verify")
         defer { try? FileManager.default.removeItem(at: check) }
         do { try transport.copyDirectoryFrom(device, bundle: bundle, remote: remote, local: check) }
-        catch let e as DeviceError where e.isNotFound { return nil }
+        catch let e as DeviceError where e.isMissingFileNode { return nil }   // treated as "not the expected save"
         do { return try SaveSnapshot.digest(check).hash }
         catch is SaveSyncError { return nil }             // empty/unreadable copy: not the expected save
     }
@@ -190,6 +228,8 @@ final class SaveSyncer {
             backup = folder.appendingPathComponent(n)
         }
         try guardNotRunning()                                                  // right before the destructive step
+        // No phone save means no backup: re-check right now and never overwrite one unbacked.
+        if phone == nil, try phoneHasSave(n) { throw SaveSyncError.phoneSaveAppeared(n) }
         let remote = SaveSyncer.remoteRoot + "/" + n
         // Forget the last-synced hash on disk BEFORE the phone is touched: a copy that stops
         // half-way (or a launcher that dies) must not leave base == Mac behind, or the next

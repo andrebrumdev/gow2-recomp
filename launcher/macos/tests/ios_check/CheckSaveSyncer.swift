@@ -289,6 +289,61 @@ func runSaveSyncerChecks() {
     if let d = atCrash { try! d.write(to: sc.state) } else { try? fm.removeItem(at: sc.state) }
     r = try! syncer(sc).run(.both)
     check(r.conflicts.map(\.name) == [G] && r.pulled.isEmpty && macFiles(sc) == scMac, "crash mid-push is a conflict \(r)")
+
+    // 17. Incident fix 2: CoreDeviceError 7000 "Failed to retrieve the file node" is ambiguous
+    //     (a missing path, or -- suspected -- a device whose file service cannot read). The
+    //     phone's save must never be read as "absent" from it: the phone holds newer progress,
+    //     the Mac's is the last-synced one, and every listing under Documents fails with 7000.
+    //     Swallowed (before the fix), the phone looked empty and .both PUSHED the Mac's older
+    //     save over it with no backup. Now: the sync throws, no phone write, base unchanged.
+    let fileNode7000 = { (p: String) in DeviceError(code: DeviceError.notFound, domain: "com.apple.dt.CoreDeviceError",
+                                                    message: "Failed to retrieve the file node for \(p)") }
+    let n7 = env("list7000")
+    _ = try! syncer(n7).run(.both)
+    let n7Base = SyncState.load(n7.state).base[G]
+    writeFile(n7.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN"), "phone-progress")
+    n7.phone.failListWhen = { $0.hasPrefix("Documents") ? fileNode7000($0) : nil }
+    do { _ = try syncer(n7).run(.both); check(false, "an unreadable phone listing must fail the sync") }
+    catch let x as DeviceError { check(x.isMissingFileNode, "the listing's error comes back \(x)") }
+    catch { check(false, "expected the listing's DeviceError, got \(error)") }
+    check(!n7.phone.ops.contains { $0.hasPrefix("dir to") }
+          && fileText(n7.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN")) == "phone-progress"
+          && SyncState.load(n7.state).base[G] == n7Base, "no phone write, base unchanged \(n7.phone.ops)")
+    n7.phone.failListWhen = nil
+    //  b) savedata IS listed but the copy from comes back empty (the old production swallow):
+    //     not "no save" -> throws, nothing written.
+    n7.phone.copyFromYieldsNothing = true
+    do { _ = try syncer(n7).run(.both); check(false, "a listed save that copies back empty must fail the sync") }
+    catch let x as SaveSyncError { check(x == .phoneUnreadable, "\(x)") }
+    catch { check(false, "expected phoneUnreadable, got \(error)") }
+    n7.phone.copyFromYieldsNothing = false
+    //  c) ... or with the 7000 itself.
+    n7.phone.failWhen = { $0 == "dir from Documents/savedata" ? fileNode7000("Documents/savedata") : nil }
+    do { _ = try syncer(n7).run(.both); check(false, "a 7000 on the copy of a listed save must fail the sync") }
+    catch let x as DeviceError { check(x.isMissingFileNode, "\(x)") }
+    catch { check(false, "expected the copy's DeviceError, got \(error)") }
+    n7.phone.failWhen = nil
+    check(!n7.phone.ops.contains { $0.hasPrefix("dir to") }
+          && fileText(n7.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN")) == "phone-progress"
+          && SyncState.load(n7.state).base[G] == n7Base && !fm.fileExists(atPath: n7.backups.path),
+          "b/c: no phone write, no backup, base unchanged \(n7.phone.ops)")
+
+    // 18. A push with no phone save (hence no backup) re-checks the phone right before the
+    //     copy: a save that is there now (the phone saved meanwhile, or the first read was
+    //     wrong) is refused, never overwritten without a backup.
+    let ap = env("appeared")
+    try! fm.removeItem(at: ap.phoneSaves.appendingPathComponent(G))
+    var apCalls = 0
+    let apSyncer = syncer(ap, running: {
+        apCalls += 1
+        if apCalls == 2 { writeFile(ap.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN"), "late-phone") }
+        return false
+    })
+    do { _ = try apSyncer.run(.both); check(false, "a phone save that appeared must be refused") }
+    catch let x as SaveSyncError { check(x == .phoneSaveAppeared(G), "\(x)") }
+    catch { check(false, "expected phoneSaveAppeared, got \(error)") }
+    check(!ap.phone.ops.contains { $0.hasPrefix("dir to") }
+          && fileText(ap.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN")) == "late-phone", "late phone save untouched \(ap.phone.ops)")
 }
 
 /// Writes the first file of a directory copy, then fails once (a cable pulled mid-copy).

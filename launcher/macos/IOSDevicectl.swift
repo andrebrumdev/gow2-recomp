@@ -53,6 +53,9 @@ final class DevicectlTransport: DeviceTransport {
     private let lock = NSLock()
     private var current: Process?
     private var cancelRequested = false
+    /// Test seam: when set, stands in for the `xcrun devicectl` process (returns the JSON
+    /// file's bytes or throws the command's error). Production leaves it nil.
+    var runner: ((Devicectl.Op) throws -> Data)?
 
     init(facts: DeviceFacts, developerDir: String = "/Applications/Xcode.app/Contents/Developer") {
         self.facts = facts
@@ -68,6 +71,11 @@ final class DevicectlTransport: DeviceTransport {
 
     @discardableResult
     private func run(_ op: Devicectl.Op) throws -> Data {
+        if let r = runner {
+            let data = try r(op)
+            _ = try DevicectlJSON.result(data)
+            return data
+        }
         let json = FileManager.default.temporaryDirectory.appendingPathComponent("devicectl-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: json) }
         let p = Process()
@@ -112,13 +120,13 @@ final class DevicectlTransport: DeviceTransport {
     func apps(_ device: String) throws -> [IOSApp] { try DevicectlJSON.apps(run(.apps(device))) }
     func processes(_ device: String) throws -> [String] { try DevicectlJSON.processes(run(.processes(device))) }
 
-    /// A directory devicectl has no file node for at all (never existed, or existed and was
-    /// removed) answers `info files` with CoreDeviceError 7000, not an empty result — mapped
-    /// here to "not present" so every caller sees the same shape regardless of which of those
-    /// two it is (incident 2026-09-26: `Documents/USRDIR` after the F10 wipe).
+    /// Errors come back as they are, including CoreDeviceError 7000 "Failed to retrieve the
+    /// file node": it answers a path that does not exist (incident 2026-09-26: `Documents/USRDIR`
+    /// after the F10 wipe) but, suspected (F11, not measured), also a path that exists on a
+    /// device whose file service cannot read. Only the caller knows whether "absent" is a safe
+    /// reading for its path, so the transport never maps it to an empty listing.
     func files(_ device: String, bundle: String, under dir: String) throws -> [RemoteFile] {
-        do { return try DevicectlJSON.files(run(.files(device, bundle: bundle, dir: dir))) }
-        catch let e as DeviceError where e.isMissingFileNode { return [] }
+        try DevicectlJSON.files(run(.files(device, bundle: bundle, dir: dir)))
     }
 
     func copyFileTo(_ device: String, bundle: String, local: URL, remote: String) throws {
@@ -126,6 +134,11 @@ final class DevicectlTransport: DeviceTransport {
     }
 
     func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String, removeExisting: Bool) throws {
+        // `--remove-existing-content` once wiped the app's whole Documents (INCIDENT, F6
+        // anulled): never passed unless F6 is measured true, whatever the caller asked.
+        if removeExisting, facts.removeExistingContentDeletesExtras != true {
+            throw DeviceError(code: DeviceError.factMissing, domain: "facts", message: "F6: --remove-existing-content")
+        }
         try run(.copyTo(device, bundle: bundle, local: local.path, remote: remote, removeExisting: removeExisting))
     }
 
@@ -135,19 +148,14 @@ final class DevicectlTransport: DeviceTransport {
 
     /// Always into a fresh temp dir, then the contents are moved into `local`,
     /// so the result does not depend on whether `local` existed (facts F5).
-    /// A `remote` with no file node at all (never existed, or existed and was removed —
-    /// incident 2026-09-26) is "nothing to copy": `local` still ends up created, empty.
+    /// Every error comes back, a 7000 "no file node" included (see files()): an empty
+    /// `local` must never stand for a remote directory that could not be read.
     func copyDirectoryFrom(_ device: String, bundle: String, remote: String, local: URL) throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("devicectl-from-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: tmp) }
         _ = try Devicectl.contentsRoot(tmp: tmp, remote: remote, facts: facts)   // refuse before touching the phone
-        do {
-            try run(.copyFrom(device, bundle: bundle, remote: remote, local: tmp.path))
-        } catch let e as DeviceError where e.isMissingFileNode {
-            try fm.createDirectory(at: local, withIntermediateDirectories: true)
-            return
-        }
+        try run(.copyFrom(device, bundle: bundle, remote: remote, local: tmp.path))
         let src = try Devicectl.contentsRoot(tmp: tmp, remote: remote, facts: facts)
         try fm.createDirectory(at: local, withIntermediateDirectories: true)
         for item in try fm.contentsOfDirectory(atPath: src.path) {

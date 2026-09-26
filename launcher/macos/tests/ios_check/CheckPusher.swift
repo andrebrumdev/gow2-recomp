@@ -196,6 +196,31 @@ func runPusherChecks() {
           && fileText(wiped.root.appendingPathComponent("Documents/USRDIR/sub/a.bin")) != nil,
           "the files themselves still landed under USRDIR despite the failed pre-creation")
 
+    // 14. Incident fix 2: CoreDeviceError 7000 "Failed to retrieve the file node" also comes
+    //     back for a path that EXISTS when the device's file service cannot read (Wi-Fi without
+    //     DDI services, suspected). The initial `Documents` listing must fail closed: swallowed,
+    //     the pusher would think the phone empty, skip invalidate() (fact F4) and could publish
+    //     a complete manifest over old bytes. Transient failure of that one listing -> push
+    //     throws before writing anything, no manifest (not even the marker) goes out.
+    //     (Before the fix: remoteFiles swallowed the 7000 and the push went ahead.)
+    let fileNode7000 = { (p: String) in DeviceError(code: DeviceError.notFound, domain: "com.apple.dt.CoreDeviceError",
+                                                    message: "Failed to retrieve the file node for \(p)") }
+    let flaky = FakeTransport(root: root.appendingPathComponent("container-list7000"))
+    try! FileManager.default.createDirectory(at: flaky.root.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+    var rootListFails = 1
+    flaky.failListWhen = { d in
+        guard d == "Documents", rootListFails > 0 else { return nil }
+        rootListFails -= 1
+        return fileNode7000(d)
+    }
+    let flakyPusher = DataPusher(transport: flaky, device: "d", bundle: "b", staging: root.appendingPathComponent("staging-7000"),
+                                 recordURL: root.appendingPathComponent("pushed-7000.json"))
+    do { _ = try flakyPusher.push(m7); check(false, "a 7000 on the initial Documents listing must fail the push") }
+    catch let e as DeviceError { check(e.isMissingFileNode, "the listing's own error comes back \(e)") }
+    catch { check(false, "\(error)") }
+    check(flaky.ops.isEmpty && !FileManager.default.fileExists(atPath: flaky.root.appendingPathComponent(InstallManifest.remotePath).path),
+          "nothing written, no manifest published \(flaky.ops)")
+
     // Production argv and the F5 gate (the thin layer).
     check(Devicectl.args(.copyTo("D", bundle: "B", local: "/l", remote: "Documents/x", removeExisting: true), json: "/j")
           == ["devicectl", "device", "copy", "to", "--device", "D", "--domain-type", "appDataContainer",
@@ -219,5 +244,26 @@ func runPusherChecks() {
          check(false, "the production transport must refuse without F5") }
     catch let e as DeviceError { check(e.code == DeviceError.factMissing, "production F5 gate \(e)") }
     catch { check(false, "\(error)") }
+    // Incident fix 2, production transport (simulated runner): a 7000 "no file node" is no
+    // longer turned into "not present" by the transport; every caller decides.
+    let sim = DevicectlTransport(facts: f5)            // F5 measured (true here: any value works)
+    var simOps: [Devicectl.Op] = []
+    sim.runner = { op in simOps.append(op); throw fileNode7000("Documents/savedata") }
+    do { _ = try sim.files("D", bundle: "B", under: "Documents/savedata"); check(false, "production listing must not swallow 7000") }
+    catch let e as DeviceError { check(e.isMissingFileNode, "production listing 7000 comes back \(e)") }
+    catch { check(false, "\(error)") }
+    let simLocal = root.appendingPathComponent("sim-from")
+    do { try sim.copyDirectoryFrom("D", bundle: "B", remote: "Documents/savedata", local: simLocal)
+         check(false, "production copy from must not swallow 7000") }
+    catch let e as DeviceError { check(e.isMissingFileNode, "production copy-from 7000 comes back \(e)") }
+    catch { check(false, "\(error)") }
+    check(!FileManager.default.fileExists(atPath: simLocal.path), "a failed copy from leaves no empty 'save' behind")
+    //  MINOR: --remove-existing-content only with F6 measured true (it wiped Documents once).
+    simOps = []
+    do { try sim.copyDirectoryTo("D", bundle: "B", local: root, remote: "Documents/savedata/X", removeExisting: true)
+         check(false, "removeExisting without F6 must refuse") }
+    catch let e as DeviceError { check(e.code == DeviceError.factMissing, "F6 gate \(e)") }
+    catch { check(false, "\(error)") }
+    check(simOps.isEmpty, "the refused copy never reached devicectl \(simOps)")
     try? FileManager.default.removeItem(at: root)
 }
