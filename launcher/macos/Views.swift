@@ -9,6 +9,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case audioControls = "Áudio e controles"
     case patches = "Patches"
     case mods = "Mods"
+    case iphone = "iPhone"
     case log = "Log"
     case about = "Sobre"
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .audioControls: return "gamecontroller.fill"
         case .patches: return "wand.and.stars"
         case .mods: return "puzzlepiece.extension.fill"
+        case .iphone: return "iphone"
         case .log: return "doc.text.magnifyingglass"
         case .about: return "info.circle"
         }
@@ -66,6 +68,7 @@ struct ContentView: View {
                 case .audioControls: AudioControlsView()
                 case .patches: PatchesView()
                 case .mods: ModsView()
+                case .iphone: IPhoneView()
                 case .log: LogView()
                 case .about: AboutView()
                 }
