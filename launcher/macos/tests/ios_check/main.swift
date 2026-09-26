@@ -4,5 +4,6 @@ import Foundation
 runModelChecks()
 runManifestChecks()
 runPusherChecks()
+runScriptChecks()
 print(checkFails == 0 ? "ios_check: PASS" : "ios_check: FAIL \(checkFails)")
 exit(checkFails == 0 ? 0 : 1)

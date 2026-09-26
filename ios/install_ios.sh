@@ -15,5 +15,7 @@ if [ "${1:-}" = "--data" ]; then
     cp "$G/EBOOT.ELF" Documents/EBOOT.ELF
     cp "$G/extracted/USRDIR" Documents/USRDIR
     cp "$G/movie_cache" Documents/movie_cache
+    echo "note: the app plays only with Documents/gow2-install.manifest, which the Mac launcher writes" \
+         "(Instalar no iPhone copies nothing already here and then writes it)" >&2
 fi
 echo "GOW2_IOS_INSTALL_OK"
