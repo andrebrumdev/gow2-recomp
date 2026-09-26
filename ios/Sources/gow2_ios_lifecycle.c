@@ -1,9 +1,7 @@
 /* GoW2 iOS host policies; see gow2_ios_lifecycle.h. */
 #include "gow2_ios_lifecycle.h"
-#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #if defined(__APPLE__)
 #include <sys/qos.h>
 #endif
@@ -99,23 +97,4 @@ int gow2_ios_qos_from_string(const char* s, int* qos_out)
     (void)s; (void)qos_out;
 #endif
     return 0;
-}
-
-int gow2_ios_game_data_present(const char* eboot, const char* usrdir)
-{
-    struct stat st;
-    if (!eboot || !usrdir || stat(eboot, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size == 0) return 0;
-    DIR* d = opendir(usrdir);
-    if (!d) return 0;
-    int ok = 0;
-    char p[2048];
-    struct dirent* e;
-    while (!ok && (e = readdir(d)) != NULL) {
-        if (e->d_name[0] == '.') continue;
-        const int n = snprintf(p, sizeof p, "%s/%s", usrdir, e->d_name);
-        if (n < 0 || (size_t)n >= sizeof p) continue;   /* truncated path: treat as absent */
-        if (stat(p, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) ok = 1;
-    }
-    closedir(d);
-    return ok;
 }

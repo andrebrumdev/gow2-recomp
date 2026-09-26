@@ -82,11 +82,6 @@ gow2_lifecycle_state gow2_lifecycle_get(void);
  * qos_class_t); NULL, "", "inherit" or an unknown name -> 0 (inherit). */
 int gow2_ios_qos_from_string(const char* s, int* qos_out);
 
-/* 1 when eboot is a non-empty regular file and usrdir holds at least one
- * non-empty regular file. A torn copy of one big file is not detected here
- * (P3's install manifest covers that). */
-int gow2_ios_game_data_present(const char* eboot, const char* usrdir);
-
 #ifdef __cplusplus
 }
 #endif

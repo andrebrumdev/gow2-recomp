@@ -143,6 +143,28 @@ MainActor.assumeIsolated {
     check(threw && bad.hides == 0 && bad.shows == 0 && bad.exits == 0, "start failure never hides (\(bad.hides)/\(bad.shows))")
 }
 
+// 9. P3: while an iPhone save sync holds the launcher, Jogar refuses without
+//    starting anything; the lock has one holder and is released by the sync.
+// The Backend drives GOW2_REPO: point it at an empty temp checkout so a regressed
+// guard can never start the real game (no g2play/boot_gow2 there).
+let p3repo = tmp.appendingPathComponent("p3repo")
+try! FileManager.default.createDirectory(at: p3repo, withIntermediateDirectories: true)
+setenv("GOW2_REPO", p3repo.path, 1)
+MainActor.assumeIsolated {
+    let bk = Backend()
+    check(bk.repo.path == p3repo.path, "Backend uses the temp GOW2_REPO: \(bk.repo.path)")
+    check(bk.tryBeginExclusive("Sincronizando os saves"), "exclusive lock taken")
+    check(!bk.tryBeginExclusive("outro"), "one holder at a time")
+    let lockDefaults = UserDefaults(suiteName: "launch_check-p3-\(getpid())")!
+    let gs = GameSettings(overlayFile: OverlaySettingsFile(url: tmp.appendingPathComponent("p3.settings")), legacy: lockDefaults)
+    bk.play(resume: false, settings: gs)
+    check(bk.error == "Sincronizando os saves" && !bk.running, "Jogar blocked during a sync: \(bk.error ?? "nil")")
+    bk.endExclusive()
+    check(bk.playBlockedReason == nil && bk.tryBeginExclusive("x"), "released")
+    bk.endExclusive()
+    lockDefaults.removePersistentDomain(forName: "launch_check-p3-\(getpid())")
+}
+
 try? FileManager.default.removeItem(at: tmp)
 print(fails == 0 ? "PASS" : "FAIL \(fails)")
 exit(fails == 0 ? 0 : 1)

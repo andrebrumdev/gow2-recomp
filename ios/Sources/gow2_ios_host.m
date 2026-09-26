@@ -23,6 +23,7 @@
 #include "gow2_boot.h"
 #include "gow2_env_file.h"
 #include "gow2_ios_host.h"
+#include "gow2_ios_install_manifest.h"
 #include "gow2_ios_lifecycle.h"
 #include "gow2_ios_ui_policy.h"
 #include "rsx_gpu_gate.h"
@@ -461,7 +462,16 @@ static void publish_status(void)
     }
     st.footprint_mb = (unsigned)(fp >> 20);
     st.memory_ceiling_mb = gow2_ios_memory_ceiling_mb(fp, os_proc_available_memory());
-    st.game_data_present = gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT"));
+    char why[256];
+    const gow2_install_state data = gow2_ios_install_state(gow2_ios_documents(), why, sizeof why);
+    st.game_data_present = data == GOW2_INSTALL_OK;
+    static int s_logged_data = -1;
+    if ((int)data != s_logged_data) {   /* 1 Hz tick: log only the transitions */
+        s_logged_data = (int)data;
+        fprintf(stderr, "[ios] game data: %s%s%s\n",
+                data == GOW2_INSTALL_OK ? "installed" : data == GOW2_INSTALL_MISSING ? "missing" : "incomplete",
+                why[0] ? " -- " : "", why);
+    }
     st.sign_expiry_unix = s_sign_expiry;
     if (s_status_ticks++ % 10 == 0)
         s_last_save = gow2_ios_latest_save_mtime(getenv("PS3_SAVEDATA_ROOT"));
@@ -538,6 +548,6 @@ void gow2_ios_home_begin(void)
     }];
     SDL_iPhoneSetAnimationCallback(host_window(), 1, home_frame, NULL);
     fprintf(stderr, "[ios] home screen up (game data %s, re-sign expiry %lld)\n",
-            gow2_ios_game_data_present(getenv("GOW2_EBOOT"), getenv("PS3_VFS_ROOT")) ? "present" : "missing",
+            gow2_ios_game_data_present(gow2_ios_documents()) ? "present" : "missing",
             s_sign_expiry);
 }

@@ -17,7 +17,11 @@ swiftc -O -parse-as-library -swift-version 5 \
     -target arm64-apple-macos14.0 \
     "$SRC"/App.swift "$SRC"/Backend.swift "$SRC"/Settings.swift "$SRC"/OverlaySettingsFile.swift "$SRC"/Views.swift \
     "$SRC"/FileAnalysis.swift "$SRC"/PatchYAML.swift "$SRC"/PatchStore.swift "$SRC"/Theme.swift "$SRC"/Decor.swift \
+    "$SRC"/IOS*.swift "$SRC"/IPhoneView.swift \
     -o "$APP/Contents/MacOS/GoW2Recomp"
+
+# Device facts measured in P3 Task 1 (IOSModels.swift DeviceFacts).
+[ -f "$SRC/ios_device_facts.json" ] && cp "$SRC/ios_device_facts.json" "$APP/Contents/Resources/"
 
 # Banner: a screenshot of the native renderer already in docs/img.
 cp "$REPO/docs/img/palace-lighting.jpg" "$APP/Contents/Resources/hero.jpg"

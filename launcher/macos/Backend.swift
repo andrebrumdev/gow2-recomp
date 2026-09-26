@@ -35,6 +35,8 @@ struct LauncherConfig: Codable {
     var mods_enabled: [String] = []
     var savedata_root: String? = nil
     var overlay_settings: String? = nil
+    /// Where the iPhone save sync puts the side it replaces (default: SaveBackup.defaultRoot).
+    var save_backup_dir: String? = nil
 }
 
 enum LauncherCore {
@@ -85,6 +87,7 @@ enum LauncherCore {
             if let v = obj["mods_enabled"] as? [String] { c.mods_enabled = v }
             if let v = obj["savedata_root"] as? String, !v.isEmpty { c.savedata_root = v }
             if let v = obj["overlay_settings"] as? String, !v.isEmpty { c.overlay_settings = v }
+            if let v = obj["save_backup_dir"] as? String, !v.isEmpty { c.save_backup_dir = v }
         }
         return c
     }
@@ -309,6 +312,19 @@ final class Backend: ObservableObject {
     /// user to allow access to the folder that holds the game.
     @Published var waitingHint: String?
 
+    /// Non-nil while an iPhone save sync holds the launcher (P3): Jogar refuses.
+    /// With the game running (game != nil) nobody else can take it either.
+    @Published private(set) var playBlockedReason: String?
+
+    /// MainActor check-and-set in one turn: no game running, no other holder.
+    func tryBeginExclusive(_ reason: String) -> Bool {
+        guard game == nil, playBlockedReason == nil else { return false }
+        playBlockedReason = reason
+        return true
+    }
+
+    func endExclusive() { playBlockedReason = nil }
+
     let repo: URL
     let logURL: URL
     private var game: Process?
@@ -374,6 +390,10 @@ final class Backend: ObservableObject {
 
     func play(resume: Bool, settings: GameSettings, patchFile: String? = nil) {
         guard game == nil else { return }
+        if let reason = playBlockedReason {
+            error = reason
+            return
+        }
         let c = LauncherCore.load(repo: repo)
         let binary = LauncherCore.findBinary(repo: repo)
         guard LauncherCore.isELF(c.elf), LauncherCore.isUSRDIR(c.vfs_root), !binary.isEmpty else {
