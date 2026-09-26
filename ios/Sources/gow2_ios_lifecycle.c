@@ -98,3 +98,21 @@ int gow2_ios_qos_from_string(const char* s, int* qos_out)
 #endif
     return 0;
 }
+
+const char* gow2_ios_qos_name(int qos)
+{
+#if defined(__APPLE__)
+    switch ((qos_class_t)qos) {
+    case QOS_CLASS_USER_INTERACTIVE: return "interactive";
+    case QOS_CLASS_USER_INITIATED: return "initiated";
+    case QOS_CLASS_DEFAULT: return "default";
+    case QOS_CLASS_UTILITY: return "utility";
+    case QOS_CLASS_BACKGROUND: return "background";
+    case QOS_CLASS_UNSPECIFIED: return "unspecified";
+    default: return "other";
+    }
+#else
+    (void)qos;
+    return "other";
+#endif
+}

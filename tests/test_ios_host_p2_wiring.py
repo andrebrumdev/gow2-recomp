@@ -102,6 +102,12 @@ def main():
         fails.append("iPhone orientations must include portrait (home)")
     if not mi or "Portrait" in mi.group(1):
         fails.append("iPad orientations stay landscape")
+    sg = body(host, r"int gow2_ios_start_game\(void\)")
+    if sg is None or not re.search(r"qrc\s*=\s*pthread_attr_set_qos_class_np\(", sg) \
+            or "qos requested=%s attr=%s" not in sg:
+        fails.append("gow2_ios_start_game must check pthread_attr_set_qos_class_np and log requested/attr")
+    if gm is None or "qos effective=%s" not in gm or "qos_class_self()" not in gm:
+        fails.append("guest_main must log its effective QoS (qos_class_self)")
     for f in fails:
         print("FAIL:", f)
     print("PASS" if not fails else f"FAIL {len(fails)}")
