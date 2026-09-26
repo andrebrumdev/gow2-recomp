@@ -17,7 +17,9 @@ struct IOSDeps {
     var scripts: ScriptRunning
     var readProfile: (URL) throws -> Data
     var xcodePrefs: () -> Data?
-    var macProcesses: () -> String
+    /// `ps -axo comm=`; throws when the list cannot be read (the flows then refuse:
+    /// an unreadable process list is never "the game is closed").
+    var macProcesses: () throws -> String
     /// Recorded device behaviours (Task 1): F5 gates the save sync, F6 the phone
     /// replace, F7 the lock reading, F8 the profile rotation on re-sign.
     var facts: DeviceFacts
@@ -28,8 +30,18 @@ struct IOSDeps {
         let facts = DeviceFacts.bundled(repo: repo)
         return IOSDeps(transport: DevicectlTransport(facts: facts), scripts: ProcessScriptRunner(),
                        readProfile: { try Signing.decodeProfile($0) }, xcodePrefs: { Signing.readXcodePrefs() },
-                       macProcesses: { (try? LauncherCore.run("/bin/ps", ["-axo", "comm="])) ?? "" },
+                       macProcesses: {
+                           let out: String
+                           do { out = try LauncherCore.run("/bin/ps", ["-axo", "comm="]) } catch { throw IOSFlowError.processListFailed }
+                           return try checkedPS(out)
+                       },
                        facts: facts, home: FileManager.default.homeDirectoryForCurrentUser, now: { Date() })
+    }
+
+    /// A `ps` that ran but listed nothing is a failure too (it always lists itself).
+    static func checkedPS(_ output: String) throws -> String {
+        guard !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw IOSFlowError.processListFailed }
+        return output
     }
 }
 
@@ -48,7 +60,7 @@ struct IOSInstallRecord: Codable, Equatable {
 
 enum IOSFlowError: Error {
     case build(ScriptResult), install(ScriptResult), noProfile(String), notReady(String)
-    case phoneAppRunning, notInstalled, missingSigning, configMismatch(String)
+    case phoneAppRunning, notInstalled, missingSigning, configMismatch(String), processListFailed
 
     static func lastError(_ out: String) -> String {
         out.split(separator: "\n").last { $0.contains("error") || $0.contains("ERROR") }.map(String.init) ?? ""
@@ -74,6 +86,8 @@ enum IOSFlowError: Error {
             return "O GoW2 com esse identificador não está neste iPhone: use Instalar no iPhone."
         case .missingSigning:
             return "Escolha a equipe (Apple ID) e o identificador do app antes de continuar."
+        case .processListFailed:
+            return "Não deu para ler a lista de processos do Mac para conferir se o GoW2 está aberto. Feche o jogo no Mac e tente de novo."
         case .configMismatch(let out):
             return "Os scripts do iOS leram outra configuração (ios/local.env ou variáveis GOW2_IOS_* no ambiente). Confira:\n\(out)"
         }
@@ -259,7 +273,7 @@ final class IOSBackend: ObservableObject {
     private func refuseIfGameRunning(_ d: IOSDevice) async throws {
         let ps = deps.macProcesses
         if game?.running == true { throw SaveSyncError.gameRunningMac }
-        if try await off({ IOSPolicy.macGameRunning(psComm: ps()) }) { throw SaveSyncError.gameRunningMac }
+        if try await off({ IOSPolicy.macGameRunning(psComm: try ps()) }) { throw SaveSyncError.gameRunningMac }
         try await refuseIfPhoneAppRunning(d)
     }
 
@@ -351,7 +365,12 @@ final class IOSBackend: ObservableObject {
                                                      movieCache: c.movie_cache.isEmpty ? nil : URL(fileURLWithPath: c.movie_cache))
             let app = try await buildApp(signOnly: false)
             let expiry = try readExpiry(app)
+            try await refuseIfGameRunning(d)             // the build takes minutes: re-check right before installing
             try await installApp()
+            record = loadRecord(d)                       // the app is on the phone now, whatever happens next
+            record.expiry = expiry
+            record.installedAt = deps.now()
+            try saveRecord(d)
             progress = "Conferindo os arquivos do jogo no Mac…"
             let cache = HashCache(url: supportDir.appendingPathComponent("hash-cache.json"))
             let manifest = try await off {
@@ -361,6 +380,7 @@ final class IOSBackend: ObservableObject {
             }
             let pusher = DataPusher(transport: deps.transport, device: d.udid, bundle: bundle, staging: staging(),
                                     recordURL: deviceDir(d).appendingPathComponent("pushed.json"))
+            try await refuseIfGameRunning(d)             // hashing takes minutes too: re-check before copying
             let flag = cancelFlag
             flag.set(false)
             canCancel = true
@@ -369,7 +389,7 @@ final class IOSBackend: ObservableObject {
                                 cancelled: { flag.isSet })
             }
             canCancel = false
-            record = IOSInstallRecord(expiry: expiry, installedAt: deps.now(), setID: manifest.setID)
+            record.setID = manifest.setID                // only once the phone holds this set
             try saveRecord(d)
             lastResult = IOSText.installed(outcome, badge: badge)
         } catch {
@@ -403,6 +423,7 @@ final class IOSBackend: ObservableObject {
                 throw error
             }
             let expiry = try readExpiry(app)
+            try await refuseIfGameRunning(d)             // re-check right before replacing the app
             try await installApp()
             record = loadRecord(d)
             record.expiry = expiry
@@ -422,7 +443,7 @@ final class IOSBackend: ObservableObject {
         let ps = deps.macProcesses
         return SaveSyncer(transport: deps.transport, device: d.udid, bundle: bundle, macRoot: LauncherCore.savedataRoot(c),
                           backupRoot: backupRoot(c), stateURL: deviceDir(d).appendingPathComponent("save-sync.json"),
-                          staging: staging(), facts: deps.facts, macGameRunning: { IOSPolicy.macGameRunning(psComm: ps()) },
+                          staging: staging(), facts: deps.facts, macGameRunning: { IOSPolicy.macGameRunning(psComm: try ps()) },
                           now: deps.now)
     }
 

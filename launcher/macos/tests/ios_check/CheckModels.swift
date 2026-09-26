@@ -90,7 +90,8 @@ func runModelChecks() {
     check(!IOSPolicy.appRunning(executables: ["file:///sbin/launchd"], appURL: apps[0].url), "GoW2 not running")
     check(IOSPolicy.appRunning(executables: ["file:///var/containers/Bundle/Application/9E07BD20-0000/GoW2.app/GoW2"],
                                appURL: apps[0].url), "/private prefix normalized")
-    check(!IOSPolicy.appRunning(executables: procs, appURL: ""), "no app url -> not running")
+    check(IOSPolicy.appRunning(executables: procs, appURL: ""), "no app url -> unknown, treated as running (fail closed)")
+    check(IOSPolicy.appRunning(executables: [], appURL: ""), "no app url, no processes -> still refused")
 
     let files = try! DevicectlJSON.files(Data(fxFiles.utf8))
     check(files == [RemoteFile(path: "EBOOT.ELF", size: 5673936, mtime: 1788380385, isDirectory: false),
@@ -118,4 +119,11 @@ func runModelChecks() {
     check(IOSPolicy.macGameRunning(psComm: "./boot_gow2_p3test\n"), "test binary")
     check(!IOSPolicy.macGameRunning(psComm: "/usr/bin/g2playlist\n/bin/zsh\n/Users/x/GoW2 Recomp.app/Contents/MacOS/GoW2Recomp\n"),
           "no false positives")
+    // Final review 8: suffixed builds with '.', '-' or '_' count; look-alikes do not.
+    for name in ["boot_gow2.new", "boot_gow2-p3", "boot_gow2_e435.bak", "boot_gow2_ios-p3"] {
+        check(IOSPolicy.macGameRunning(psComm: "/Users/x/gow2-recomp/\(name)\n"), "suffixed build \(name)")
+    }
+    for name in ["g2playlist", "boot_gow2x", "boot_gow2_", "xg2play", "boot_gow22", "myboot_gow2"] {
+        check(!IOSPolicy.macGameRunning(psComm: "/usr/bin/\(name)\n"), "look-alike \(name) is not the game")
+    }
 }

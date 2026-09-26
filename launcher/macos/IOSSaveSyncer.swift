@@ -26,13 +26,13 @@ final class SaveSyncer {
     let stateURL: URL
     let staging: URL
     let facts: DeviceFacts
-    let macGameRunning: () -> Bool
+    let macGameRunning: () throws -> Bool
     let now: () -> Date
     /// FileManager.moveItem; a test seam for the swap's failure points.
     var moveItem: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
 
     init(transport: DeviceTransport, device: String, bundle: String, macRoot: URL, backupRoot: URL, stateURL: URL,
-         staging: URL, facts: DeviceFacts, macGameRunning: @escaping () -> Bool, now: @escaping () -> Date) {
+         staging: URL, facts: DeviceFacts, macGameRunning: @escaping () throws -> Bool, now: @escaping () -> Date) {
         self.transport = transport
         self.device = device
         self.bundle = bundle
@@ -104,7 +104,7 @@ final class SaveSyncer {
     }
 
     private func guardNotRunning() throws {
-        if macGameRunning() { throw SaveSyncError.gameRunningMac }
+        if try macGameRunning() { throw SaveSyncError.gameRunningMac }
         guard let app = try transport.apps(device).first(where: { $0.bundleID == bundle }) else {
             throw SaveSyncError.appNotInstalled
         }

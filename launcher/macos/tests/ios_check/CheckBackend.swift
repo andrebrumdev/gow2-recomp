@@ -3,11 +3,19 @@ import Foundation
 final class FakeScripts: ScriptRunning {
     var results: [String: ScriptResult] = [:]
     private(set) var calls: [String] = []
+    /// Runs after the script "ran" (the world changing while a long build runs).
+    var onRun: ((String) -> Void)?
     func run(_ script: URL, _ args: [String], env: [String: String], log: URL) throws -> ScriptResult {
         let key = ([script.lastPathComponent] + args).joined(separator: " ")
         calls.append(key)
+        onRun?(key)
         return results[key] ?? ScriptResult(status: 127, output: "no fake for \(key)")
     }
+}
+
+/// `ps` output that a test changes while a flow runs.
+final class PSBox: @unchecked Sendable {
+    var text = "/bin/zsh\n"
 }
 
 @MainActor
@@ -79,6 +87,7 @@ func runBackendChecks() async {
     check(scripts.calls == ["print_config.sh", "build_ios.sh", "install_ios.sh"], "scripts \(scripts.calls)")
     check(probeState(phone.root.appendingPathComponent("Documents")) == 1, "the phone has a complete install")
     check(ios.record.expiry == Date(timeIntervalSince1970: 1790864343) && ios.badge == .ok(days: 6), "expiry \(ios.record)")
+    check(ios.record.setID != nil && ios.record.installedAt == now, "set id and install time recorded after the push: \(ios.record)")
     check(ios.lastResult?.contains("Instalado") == true && ios.busy == nil && !ios.canCancel, "result \(ios.lastResult ?? "")")
     check(LocalEnvFile.at(repo: repo).read() == ["GOW2_WORK": "/keep/me", "GOW2_IOS_TEAM": "ABCDE12345",
                                                  "GOW2_IOS_DEVICE": "00008110-TEST", "GOW2_IOS_BUNDLE_ID": "com.example.gow2"],
@@ -150,6 +159,74 @@ func runBackendChecks() async {
     check(ios.error?.contains("local.env") == true && scripts.calls.count == calls1 + 1, "config mismatch: \(ios.error ?? "")")
     scripts.results["print_config.sh"] = goodConfig
 
+    // Final review 1: the game opened on either side while the (minutes-long) build ran:
+    // the flow re-checks right before installing the app and again before copying data.
+    let gameOnPhone = [app.url + "GoW2"]
+    scripts.onRun = { key in if key == "build_ios.sh" { phone.running = gameOnPhone } }
+    var c0 = scripts.calls.count, o0 = phone.ops.count
+    await ios.install()
+    check(ios.error?.contains("alternador") == true && Array(scripts.calls.dropFirst(c0)) == ["print_config.sh", "build_ios.sh"]
+          && phone.ops.count == o0, "install: phone game opened during the build -> no install, no copy: \(ios.error ?? "") \(scripts.calls.dropFirst(c0))")
+    phone.running = []
+    scripts.onRun = { key in if key == "build_ios.sh --sign-only" { phone.running = gameOnPhone } }
+    c0 = scripts.calls.count
+    await ios.resign()
+    check(ios.error?.contains("alternador") == true
+          && Array(scripts.calls.dropFirst(c0)) == ["print_config.sh", "build_ios.sh --sign-only"],
+          "resign: phone game opened during the build -> no install: \(ios.error ?? "") \(scripts.calls.dropFirst(c0))")
+    phone.running = []
+    let psBox = PSBox()
+    var boxDeps = deps
+    boxDeps.macProcesses = { psBox.text }
+    let boxed = IOSBackend(repo: repo, game: g, deps: boxDeps)
+    scripts.onRun = { key in if key.hasPrefix("build_ios.sh") { psBox.text = "/Users/x/gow2-recomp/g2play\n" } }
+    c0 = scripts.calls.count
+    o0 = phone.ops.count
+    await boxed.install()
+    check(boxed.error?.contains("Mac") == true && !scripts.calls.dropFirst(c0).contains("install_ios.sh") && phone.ops.count == o0,
+          "install: Mac game opened during the build -> no install: \(boxed.error ?? "") \(scripts.calls.dropFirst(c0))")
+    psBox.text = "/bin/zsh\n"
+    c0 = scripts.calls.count
+    await boxed.resign()
+    check(boxed.error?.contains("Mac") == true && !scripts.calls.dropFirst(c0).contains("install_ios.sh"),
+          "resign: Mac game opened during the build -> no install: \(boxed.error ?? "") \(scripts.calls.dropFirst(c0))")
+    psBox.text = "/bin/zsh\n"
+    // ... and opened while the app was being installed: the app is in (its expiry and install
+    // time recorded right away -- final review 4), but no data is copied and no set id is written.
+    let installJSON = ios.supportDir.appendingPathComponent("00008110-TEST_com.example.gow2/install.json")
+    try? FileManager.default.removeItem(at: installJSON)
+    scripts.onRun = { key in if key == "install_ios.sh" { phone.running = gameOnPhone } }
+    c0 = scripts.calls.count
+    o0 = phone.ops.count
+    await ios.install()
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601
+    let rec = (try? Data(contentsOf: installJSON)).flatMap { try? dec.decode(IOSInstallRecord.self, from: $0) }
+    check(ios.error?.contains("alternador") == true && scripts.calls.dropFirst(c0).contains("install_ios.sh") && phone.ops.count == o0,
+          "install: phone game opened during the app install -> no data copied: \(ios.error ?? "") ops+\(phone.ops.count - o0)")
+    check(rec?.expiry == Date(timeIntervalSince1970: 1790864343) && rec?.installedAt == now && rec?.setID == nil,
+          "record saved right after the app install, set id only after a push: \(String(describing: rec))")
+    phone.running = []
+    scripts.onRun = { key in if key == "install_ios.sh" { psBox.text = "/Users/x/gow2-recomp/boot_gow2\n" } }
+    o0 = phone.ops.count
+    await boxed.install()
+    check(boxed.error?.contains("Mac") == true && phone.ops.count == o0, "install: Mac game opened during the app install -> no copy: \(boxed.error ?? "")")
+    psBox.text = "/bin/zsh\n"
+    scripts.onRun = nil
+
+    // Final review 8: `ps` failing is never "not running" -- the flows refuse.
+    var psFail = deps
+    psFail.macProcesses = { throw IOSFlowError.processListFailed }
+    let noPS = IOSBackend(repo: repo, game: g, deps: psFail)
+    c0 = scripts.calls.count
+    await noPS.install()
+    check(noPS.error?.contains("processos") == true && scripts.calls.count == c0, "install refuses when ps fails: \(noPS.error ?? "")")
+    await noPS.resign()
+    check(noPS.error?.contains("processos") == true && scripts.calls.count == c0, "resign refuses when ps fails: \(noPS.error ?? "")")
+    check(!(try! IOSDeps.checkedPS("/sbin/launchd\n")).isEmpty, "ps output kept")
+    do { _ = try IOSDeps.checkedPS("  \n"); check(false, "empty ps output must throw") }
+    catch { check((error as? IOSFlowError).map { if case .processListFailed = $0 { return true } else { return false } } == true, "\(error)") }
+
     // Save sync: refused with the Mac game open; Jogar blocked only while it runs.
     g.running = true
     await ios.syncSaves(.both)
@@ -202,6 +279,9 @@ func runBackendChecks() async {
     let ext = IOSBackend(repo: repo, game: g, deps: extPS)
     await ext.syncSaves(.both)
     check(ext.error?.contains("Mac") == true && g.holder == nil, "external g2play refuses: \(ext.error ?? "")")
+    let noPSSync = IOSBackend(repo: repo, game: g, deps: psFail)
+    await noPSSync.syncSaves(.both)
+    check(noPSSync.error?.contains("processos") == true && g.holder == nil, "sync refuses when ps fails: \(noPSSync.error ?? "")")
     check(IOSText.date(Date(timeIntervalSince1970: 1790372701), timeZone: TimeZone(identifier: "UTC")!) == "25/09 21:45", "date")
     check(IOSText.copying(PushProgress(file: "USRDIR/gow2.psarc", index: 2, count: 3, doneBytes: 1_200_000_000, totalBytes: 6_990_000_000))
           == "Copiando USRDIR/gow2.psarc (2 de 3) — 1,2 GB de 7,0 GB", "copy progress text")

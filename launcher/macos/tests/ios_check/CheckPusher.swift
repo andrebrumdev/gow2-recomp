@@ -128,6 +128,53 @@ func runPusherChecks() {
                         recordURL: root.appendingPathComponent("pushed2.json"))
     check((try? p2.push(m6)) == .installed(copied: 4, skipped: 0), "fresh container")
 
+    // 11. Cancel pressed while a file already on the phone is being invalidated (final review 5):
+    //     transport.cancel() may be lost in that window, so the pusher checks the flag again
+    //     right before the real copy -- the real copy never starts.
+    writeFile(g.movies.appendingPathComponent("intro.m2v"), "MOVIE5", mtime: Date(timeIntervalSince1970: 1784600003))
+    let m7 = try! InstallManifestBuilder.build(src, cache: cache)
+    var cancelNow = false
+    let introOp = "to Documents/movie_cache/intro.m2v"
+    fresh.failWhen = { op in
+        if op == introOp { cancelNow = true }                    // the placeholder upload of invalidate()
+        return nil
+    }
+    let opsCancel = fresh.ops.count
+    do { _ = try p2.push(m7, cancelled: { cancelNow }); check(false, "cancel during invalidate must throw") }
+    catch let e as PushError { check(e == .cancelled, "cancel during invalidate \(e)") }
+    catch { check(false, "\(error)") }
+    check(fresh.ops.dropFirst(opsCancel).filter { $0 == introOp }.count == 1,
+          "only the placeholder was uploaded, no real copy after the cancel: \(fresh.ops.dropFirst(opsCancel))")
+    fresh.failWhen = nil
+    check((try? p2.push(m7)) == .installed(copied: 1, skipped: 3), "resume after the cancel during invalidate")
+
+    // 12. Cancel pressed during a verify download (P1-style data, no record): nothing more is
+    //     copied after that download.
+    let p1b = FakeTransport(root: root.appendingPathComponent("container-p1b"))
+    for e in m7.entries {
+        let dst = p1b.root.appendingPathComponent("Documents/" + e.path)
+        try! FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try! FakeTransport.place(e.source, at: dst)
+    }
+    var cancelVerify = false
+    p1b.failWhen = { op in
+        if op.hasPrefix("from Documents/") && op != "from Documents/gow2-install.manifest" { cancelVerify = true }
+        return nil
+    }
+    let adoptB = DataPusher(transport: p1b, device: "d", bundle: "b", staging: root.appendingPathComponent("staging-p1b"),
+                            recordURL: root.appendingPathComponent("pushed-p1b.json"), verifyLimit: 6)
+    do { _ = try adoptB.push(m7, cancelled: { cancelVerify }); check(false, "cancel during a verify download must throw") }
+    catch let e as PushError { check(e == .cancelled, "cancel during verify \(e)") }
+    catch { check(false, "\(error)") }
+    if let i = p1b.ops.firstIndex(where: { $0.hasPrefix("from Documents/") && $0 != "from Documents/gow2-install.manifest" }) {
+        let after = Array(p1b.ops[(i + 1)...])
+        check(after.isEmpty, "nothing after the cancelled verify download: \(after)")
+        check(PushedRecord.load(root.appendingPathComponent("pushed-p1b.json")).files.isEmpty,
+              "the cancelled verify records nothing")
+    } else {
+        check(false, "no verify download happened: \(p1b.ops)")
+    }
+
     // Production argv and the F5 gate (the thin layer).
     check(Devicectl.args(.copyTo("D", bundle: "B", local: "/l", remote: "Documents/x", removeExisting: true), json: "/j")
           == ["devicectl", "device", "copy", "to", "--device", "D", "--domain-type", "appDataContainer",

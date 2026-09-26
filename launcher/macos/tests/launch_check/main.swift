@@ -145,8 +145,14 @@ MainActor.assumeIsolated {
 
 // 9. P3: while an iPhone save sync holds the launcher, Jogar refuses without
 //    starting anything; the lock has one holder and is released by the sync.
+// The Backend drives GOW2_REPO: point it at an empty temp checkout so a regressed
+// guard can never start the real game (no g2play/boot_gow2 there).
+let p3repo = tmp.appendingPathComponent("p3repo")
+try! FileManager.default.createDirectory(at: p3repo, withIntermediateDirectories: true)
+setenv("GOW2_REPO", p3repo.path, 1)
 MainActor.assumeIsolated {
     let bk = Backend()
+    check(bk.repo.path == p3repo.path, "Backend uses the temp GOW2_REPO: \(bk.repo.path)")
     check(bk.tryBeginExclusive("Sincronizando os saves"), "exclusive lock taken")
     check(!bk.tryBeginExclusive("outro"), "one holder at a time")
     let lockDefaults = UserDefaults(suiteName: "launch_check-p3-\(getpid())")!

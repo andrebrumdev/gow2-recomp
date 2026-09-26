@@ -86,7 +86,9 @@ final class DataPusher {
         var toCopy = plan.copy
         for e in plan.verify {                                  // on the phone already, no record: check the bytes
             if cancelled() { throw PushError.cancelled }
-            if try downloadHash(e) == e.sha256 {
+            let hash = try downloadHash(e)
+            if cancelled() { throw PushError.cancelled }        // a cancel during the download may have been lost
+            if hash == e.sha256 {
                 record.files[e.path] = PushedFile(size: e.size, mtime: e.mtime, sha256: e.sha256)
                 try record.save(recordURL)
             } else {
@@ -104,6 +106,7 @@ final class DataPusher {
             p.index = i + 1
             progress(p)
             if onPhone.contains(e.path) { try invalidate(e) }
+            if cancelled() { throw PushError.cancelled }        // transport.cancel() during invalidate() may be lost
             try transport.copyFileTo(device, bundle: bundle, local: e.source, remote: "Documents/" + e.path)
             try verifyCopied(e)
             record.files[e.path] = PushedFile(size: e.size, mtime: e.mtime, sha256: e.sha256)

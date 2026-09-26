@@ -214,19 +214,21 @@ enum IOSPolicy {
     }
 
     /// A process whose executable lives in the app's bundle (a suspended app counts).
+    /// An installed app without a bundle URL cannot be checked: treated as running
+    /// (fail closed -- the destructive flows refuse).
     static func appRunning(executables: [String], appURL: String) -> Bool {
-        guard !appURL.isEmpty else { return false }
+        guard !appURL.isEmpty else { return true }
         var base = norm(appURL)
         if !base.hasSuffix("/") { base += "/" }
         return executables.contains { norm($0).hasPrefix(base) }
     }
 
     /// `ps -axo comm=` output: the GoW2 binaries the launcher, jogar_g2.sh and the
-    /// test scripts start (g2play, boot_gow2, boot_gow2_<tag>).
+    /// test scripts start (g2play, boot_gow2, boot_gow2<sep><tag> with sep '.', '-' or '_').
     static func macGameRunning(psComm: String) -> Bool {
         psComm.split(separator: "\n").contains { line in
             let name = String(line.split(separator: "/").last ?? "")
-            return name.range(of: "^(g2play|boot_gow2(_[A-Za-z0-9]+)?)$", options: .regularExpression) != nil
+            return name.range(of: "^(g2play|boot_gow2([._-][A-Za-z0-9._-]+)?)$", options: .regularExpression) != nil
         }
     }
 }
