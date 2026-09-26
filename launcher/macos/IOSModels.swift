@@ -71,6 +71,12 @@ struct DeviceError: Error, Equatable {
     let message: String
     var isLocked: Bool { code == DeviceError.locked }
     var isNotFound: Bool { code == DeviceError.notFound }
+    /// The specific `notFound` (7000) shape devicectl raises when a path has no file node
+    /// at all ("Failed to retrieve the file node for …") — a listing or copy-from of a
+    /// directory the app's container never had, or had and lost (incident 2026-09-26:
+    /// Documents/USRDIR after the F10 wipe). Scoped to this exact message so some other,
+    /// unrelated error that happens to share code 7000 is never silently swallowed.
+    var isMissingFileNode: Bool { isNotFound && message.contains("Failed to retrieve the file node") }
     var userMessage: String {
         switch code {
         case DeviceError.locked:

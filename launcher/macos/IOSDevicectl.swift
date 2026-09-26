@@ -112,8 +112,13 @@ final class DevicectlTransport: DeviceTransport {
     func apps(_ device: String) throws -> [IOSApp] { try DevicectlJSON.apps(run(.apps(device))) }
     func processes(_ device: String) throws -> [String] { try DevicectlJSON.processes(run(.processes(device))) }
 
+    /// A directory devicectl has no file node for at all (never existed, or existed and was
+    /// removed) answers `info files` with CoreDeviceError 7000, not an empty result — mapped
+    /// here to "not present" so every caller sees the same shape regardless of which of those
+    /// two it is (incident 2026-09-26: `Documents/USRDIR` after the F10 wipe).
     func files(_ device: String, bundle: String, under dir: String) throws -> [RemoteFile] {
-        try DevicectlJSON.files(run(.files(device, bundle: bundle, dir: dir)))
+        do { return try DevicectlJSON.files(run(.files(device, bundle: bundle, dir: dir))) }
+        catch let e as DeviceError where e.isMissingFileNode { return [] }
     }
 
     func copyFileTo(_ device: String, bundle: String, local: URL, remote: String) throws {
@@ -130,12 +135,19 @@ final class DevicectlTransport: DeviceTransport {
 
     /// Always into a fresh temp dir, then the contents are moved into `local`,
     /// so the result does not depend on whether `local` existed (facts F5).
+    /// A `remote` with no file node at all (never existed, or existed and was removed —
+    /// incident 2026-09-26) is "nothing to copy": `local` still ends up created, empty.
     func copyDirectoryFrom(_ device: String, bundle: String, remote: String, local: URL) throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("devicectl-from-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: tmp) }
         _ = try Devicectl.contentsRoot(tmp: tmp, remote: remote, facts: facts)   // refuse before touching the phone
-        try run(.copyFrom(device, bundle: bundle, remote: remote, local: tmp.path))
+        do {
+            try run(.copyFrom(device, bundle: bundle, remote: remote, local: tmp.path))
+        } catch let e as DeviceError where e.isMissingFileNode {
+            try fm.createDirectory(at: local, withIntermediateDirectories: true)
+            return
+        }
         let src = try Devicectl.contentsRoot(tmp: tmp, remote: remote, facts: facts)
         try fm.createDirectory(at: local, withIntermediateDirectories: true)
         for item in try fm.contentsOfDirectory(atPath: src.path) {

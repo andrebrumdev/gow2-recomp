@@ -197,8 +197,17 @@ final class DataPusher {
                                    withIntermediateDirectories: true)
         }
         for t in tops.sorted(by: byteOrder) {
-            try transport.copyDirectoryTo(device, bundle: bundle, local: skel.appendingPathComponent(t),
-                                          remote: "Documents/" + t, removeExisting: false)
+            do {
+                try transport.copyDirectoryTo(device, bundle: bundle, local: skel.appendingPathComponent(t),
+                                              remote: "Documents/" + t, removeExisting: false)
+            } catch let e as DeviceError where e.isMissingFileNode {
+                // Best-effort only: this pre-creates an all-empty directory tree (no file
+                // bytes in it at all), which devicectl can fail to materialize when the
+                // destination has no file node yet (incident 2026-09-26: Documents/USRDIR
+                // never came back through this call after being wiped). Harmless to skip —
+                // the per-file `copy to` right after this loop creates any parent directory
+                // still missing on its own (fact F1).
+            }
         }
     }
 }

@@ -175,6 +175,27 @@ func runPusherChecks() {
         check(false, "no verify download happened: \(p1b.ops)")
     }
 
+    // 13. Incident 2026-09-26: after a wipe, Documents/USRDIR has no file node at all, and
+    //     the real device answered ensureDirectories's own pre-creation `copy to` with
+    //     CoreDeviceError 7000 "Failed to retrieve the file node for Documents/USRDIR" instead
+    //     of creating it -- uncaught, that aborted the whole install ("Instalar no iPhone"
+    //     failed outright). The push must still finish: fact F1 says the per-file `copy to`
+    //     that follows creates any parent directory still missing on its own.
+    //     (Before the ensureDirectories fix in IOSDataPusher.swift, this check fails: the
+    //     injected error propagates out of push() uncaught and `try?` below returns nil.)
+    let missingUSRDIR = DeviceError(code: DeviceError.notFound, domain: "com.apple.dt.CoreDeviceError",
+                                    message: "Failed to retrieve the file node for Documents/USRDIR")
+    let wiped = FakeTransport(root: root.appendingPathComponent("container-wiped"))
+    try! FileManager.default.createDirectory(at: wiped.root.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+    wiped.failWhen = { $0 == "dir to Documents/USRDIR" ? missingUSRDIR : nil }
+    let wipedPusher = DataPusher(transport: wiped, device: "d", bundle: "b", staging: root.appendingPathComponent("staging-wiped"),
+                                 recordURL: root.appendingPathComponent("pushed-wiped.json"))
+    check((try? wipedPusher.push(m7)) == .installed(copied: 4, skipped: 0),
+          "USRDIR pre-creation failing like the wiped phone still installs")
+    check(fileText(wiped.root.appendingPathComponent("Documents/USRDIR/gow2.psarc")) != nil
+          && fileText(wiped.root.appendingPathComponent("Documents/USRDIR/sub/a.bin")) != nil,
+          "the files themselves still landed under USRDIR despite the failed pre-creation")
+
     // Production argv and the F5 gate (the thin layer).
     check(Devicectl.args(.copyTo("D", bundle: "B", local: "/l", remote: "Documents/x", removeExisting: true), json: "/j")
           == ["devicectl", "device", "copy", "to", "--device", "D", "--domain-type", "appDataContainer",

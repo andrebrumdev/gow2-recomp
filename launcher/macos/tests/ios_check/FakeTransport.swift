@@ -2,9 +2,15 @@ import Foundation
 
 /// devicectl stand-in: `root` is the app's data container (root/Documents/…).
 /// Copies keep mtimes and a directory copy lands as the destination's contents
-/// (facts F2/F3/F5); stricter than devicectl where that helps: a single-file
-/// copy needs its parent directory to exist. A single-file copy onto a file with
-/// the same size and mtime is a no-op, as on the phone (fact F4).
+/// (facts F2/F3/F5); a single-file copy creates its missing parent directories on
+/// its own, exactly like the real `copy to` (fact F1) — a launcher that relied on
+/// some other step (e.g. a directory pre-creation) to have made that parent first
+/// would not be caught by a fake stricter than the real thing, so this one is not.
+/// A single-file copy onto a file with the same size and mtime is a no-op, as on
+/// the phone (fact F4). A listing or `copy from` of a directory with no file node
+/// at all (fact: incident 2026-09-26, Documents/USRDIR after the F10 wipe) throws
+/// the same CoreDeviceError 7000 "Failed to retrieve the file node" shape as the
+/// real device, not an empty result.
 final class FakeTransport: DeviceTransport {
     let root: URL
     var deviceList: [IOSDevice] = []
@@ -56,7 +62,8 @@ final class FakeTransport: DeviceTransport {
         try op("to \(remote)")
         if dropped(remote) { return }
         let dst = url(remote)
-        guard LauncherCore.isDir(dst.deletingLastPathComponent().path) else { throw notFound(remote) }
+        // Fact F1: `copy to` creates missing parent directories on its own.
+        try FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Fact F4: devicectl skips a file the destination already holds with the
         // same size and mtime ("unchanged"), whatever the bytes are.
         if LauncherCore.isFile(dst.path), let d = try? HashCache.fileInfo(dst), let l = try? HashCache.fileInfo(local),

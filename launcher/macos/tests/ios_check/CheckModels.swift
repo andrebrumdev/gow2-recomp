@@ -103,8 +103,14 @@ func runModelChecks() {
     check(DevicectlJSON.seconds("yesterday") == nil, "junk date")
 
     do { _ = try DevicectlJSON.files(Data(fxError7000.utf8)); check(false, "7000 must throw") }
-    catch let e as DeviceError { check(e.isNotFound && e.message.contains("nope.txt"), "7000 \(e)") }
+    catch let e as DeviceError {
+        check(e.isNotFound && e.message.contains("nope.txt"), "7000 \(e)")
+        check(e.isMissingFileNode, "real 'Failed to retrieve the file node' 7000 is the missing-node shape \(e)")
+    }
     catch { check(false, "7000 wrong error \(error)") }
+    // Incident 2026-09-26: only THIS message maps to "not present" -- a different 7000 must not.
+    check(!DeviceError(code: DeviceError.notFound, domain: "com.apple.dt.CoreDeviceError", message: "some other 7000 meaning")
+              .isMissingFileNode, "isMissingFileNode is scoped to the exact message, not the bare code")
     do { _ = try DevicectlJSON.lockState(Data(fxErrorLocked.utf8)); check(false, "locked must throw") }
     catch let e as DeviceError { check(e.isLocked && e.userMessage.contains("bloqueado"), "10002 nested \(e)") }
     catch { check(false, "10002 wrong error \(error)") }
