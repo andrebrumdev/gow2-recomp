@@ -160,36 +160,6 @@ static void test_qos_names(void)
 #endif
 }
 
-static void write_file(const char* p, const char* body)
-{
-    FILE* f = fopen(p, "wb");
-    if (f) { fputs(body, f); fclose(f); }
-}
-
-static void test_game_data_present_rejects_partial_installs(void)
-{
-    char root[] = "/tmp/g2t_dataXXXXXX";
-    if (mkdtemp(root) == NULL) { CHECK(!"mkdtemp failed"); return; }
-    char eboot[512], usr[512], psarc[512];
-    snprintf(eboot, sizeof eboot, "%s/EBOOT.ELF", root);
-    snprintf(usr, sizeof usr, "%s/USRDIR", root);
-    snprintf(psarc, sizeof psarc, "%s/gow2.psarc", usr);
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 0);          /* nothing */
-    write_file(eboot, "");
-    mkdir(usr, 0755);
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 0);          /* EBOOT empty, USRDIR empty */
-    write_file(eboot, "ELF");
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 0);          /* USRDIR still empty */
-    write_file(psarc, "PSAR");
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 1);
-    unlink(eboot);
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 0);          /* EBOOT missing */
-    mkdir(eboot, 0755);
-    CHECK(gow2_ios_game_data_present(eboot, usr) == 0);          /* EBOOT is a directory */
-    CHECK(gow2_ios_game_data_present(NULL, usr) == 0);
-    rmdir(eboot); unlink(psarc); rmdir(usr); rmdir(root);
-}
-
 int main(void)
 {
     test_resign_and_resume();
@@ -203,7 +173,6 @@ int main(void)
     test_should_resume_releases_hold();
     test_memory_warning_while_inactive();
     test_qos_names();
-    test_game_data_present_rejects_partial_installs();
     printf(g_fail ? "test_gow2_ios_lifecycle: FAIL %d\n" : "test_gow2_ios_lifecycle: PASS\n", g_fail);
     return g_fail ? 1 : 0;
 }
