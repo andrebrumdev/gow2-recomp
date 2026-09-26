@@ -13,6 +13,25 @@ targets:
       - path: Sources
       - path: Generated/gow2.env
         buildPhase: resources
+    # xcodegen's `type: folder` sources resolve `path` relative to the spec
+    # file and hardcode sourceTree=SOURCE_ROOT regardless of --project's
+    # output dir (verified empirically: an absolute path is silently turned
+    # back into a spec-relative one). Since the project is generated into
+    # $B/xcode (not next to project.yml), that folder ref would point at
+    # $B/xcode/Generated/licenses, which doesn't exist ("couldn't be opened
+    # because there is no such file"). Copy the licenses folder into the
+    # bundle with a build script instead, using $(GOW2_IOS_HERE) (an actual
+    # absolute Xcode build setting, resolved at build time, not by xcodegen).
+    preBuildScripts:
+      - name: Copy FFmpeg licenses
+        shell: /bin/bash
+        script: |
+          set -euo pipefail
+          DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/licenses"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          cp -R "$GOW2_IOS_HERE/Generated/licenses/." "$DEST/"
+        basedOnDependencyAnalysis: false
     info:
       path: Generated/Info.plist
       properties:
