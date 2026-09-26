@@ -31,6 +31,9 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# Kit stage hashes (no-op unless KIT_STAGE_DIR is set).
+[ -f "$HERE/kit/lib/stages.sh" ] && . "$HERE/kit/lib/stages.sh"
+command -v stage_capture >/dev/null 2>&1 || stage_capture() { :; }
 # Raiz do motor. Override por PS3_ENGINE_ROOT para compilar contra uma worktree
 # git do ps3recomp em vez do checkout ao lado -- necessario quando duas sessoes
 # partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
@@ -52,8 +55,11 @@ esac
 export TGT
 # Keep the Metal ring-fence fix reproducible across runtime rebuilds. The patch
 # is idempotent and preserves PS3_METAL_FRAME_FENCE=0 as an explicit unsafe A/B.
+METAL_DIR="$HERE/../ps3recomp/libs/video"   # what patch_metal_*.py edit (Path(__file__).parents[2])
+stage_capture engine_metal_pre "$METAL_DIR" rsx_metal_backend.m
 "$PYBIN" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
 "$PYBIN" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
+stage_capture engine_metal_post "$METAL_DIR" rsx_metal_backend.m
 # The Xcode clang selected on this host does not infer the active SDK when it
 # is invoked directly.  Without SDKROOT every lifted C++ TU fails at the first
 # standard-library include (for example, <atomic>).  Keep an explicitly
@@ -457,6 +463,7 @@ LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
 # shellcheck disable=SC2086
 "$PYBIN" "$PS3/tools/gen_hle_nids.py" \
     --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
+stage_capture hle_nids "$LIFT/gen" ppu_hle_nids.cpp
 clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
 
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
@@ -529,6 +536,9 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
               "$d/spu_recomp.c" -o "$o"
     fi
     SPU_OBJS+=("$o")
+done
+for d in "$HERE"/spu_lifted/spu?_v2; do
+    [ -f "$d/spu_recomp.c" ] && stage_capture spu_postbuild "$HERE/spu_lifted" "$(basename "$d")/spu_recomp.c" "$(basename "$d")/spu_recomp.h"
 done
 printf '%s' "$SPU_FLAGS_VALUE" > "$SPU_FLAGS_FILE"
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then

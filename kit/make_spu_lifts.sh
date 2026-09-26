@@ -34,6 +34,7 @@ EBOOT=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 OUT=$2
 PS3=$(cd "$3" && pwd)
 GOW2=$(cd "${4:-$PS3/../gow2-recomp}" && pwd)
+. "$GOW2/kit/lib/stages.sh"
 PY=${PY:-$PS3/.venv/bin/python}
 [ -x "$PY" ] || PY=python3
 RE_PROBES=${RE_PROBES:-1}
@@ -197,11 +198,13 @@ if __name__ == "__main__":
 PYEOF
 export W PY T_HEAD SPU6P
 H() { "$PY" "$W/helper.py" "$@"; }
-L() { local t=$1 o=$2; shift 2; "$PY" "$t/spu_lifter.py" "$@" -o "$o" > "$o.log" 2>&1 || { cat "$o.log" >&2; exit 1; }; }
+L() { local t=$1 o=$2; shift 2; "$PY" "$t/spu_lifter.py" "$@" -o "$o" > "$o.log" 2>&1 || { cat "$o.log" >&2; exit 1; }
+      stage_capture spu_raw "$(dirname "$o")" "$(basename "$o")/spu_recomp.c" "$(basename "$o")/spu_recomp.h"; }
 
 echo "== SPU images from $EBOOT"
 "$PY" "$T_HEAD/extract_spu_images.py" "$EBOOT" -o "$W/extracted" > /dev/null
 H prep "$EBOOT" "$W/extracted"
+stage_capture spu_images "$W" img0.bin img1.bin img2.bin img3.bin img4.bin img5.bin img6.bin
 
 # Manual function-pointer-only boundaries (gow2-recomp recomp_mid_v2/spu{0,1}_funcs.json: these are
 # the only entries of those files that the 5f36a40e detector does not already find).
@@ -239,6 +242,7 @@ for n in 4 5; do
 done
 echo "== spu6"
 mkdir -p "$B/spu6_v2"; "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+stage_capture spu_raw "$B" spu6_v2/spu_recomp.c spu6_v2/spu_recomp.h
 # brsl/bih* halfword conditions of the lifts made by 2026-07-21..09-23 lifters.
 "$PY" "$GOW2/recomp_mid_v2/patch_spu_halfword_cond.py" "$B"/spu?_v2 > /dev/null
 
@@ -246,6 +250,7 @@ for n in 0 1 2 3 4 5 6; do
     rm -rf "$OUT/spu${n}_v2"; mkdir -p "$OUT/spu${n}_v2"
     cp "$B/spu${n}_v2/spu_recomp.c" "$B/spu${n}_v2/spu_recomp.h" "$OUT/spu${n}_v2/"
 done
+for n in 0 1 2 3 4 5 6; do stage_capture spu_final "$OUT" "spu${n}_v2/spu_recomp.c" "spu${n}_v2/spu_recomp.h"; done
 echo "== wrote $OUT/spu{0..6}_v2"
 
 # build_macos.sh step 3b re-verifies spu0/spu1/spu6 against the runtime's image

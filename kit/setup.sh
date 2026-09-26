@@ -45,6 +45,8 @@ done
 [ -n "$GAME_ARG" ] || usage
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 KIT="$HERE/kit"
+. "$KIT/lib/stages.sh"
+PPU_FILES="ppu_recomp.h ppu_recomp_000.cpp ppu_recomp_001.cpp ppu_recomp_002.cpp ppu_recomp_003.cpp ppu_recomp_004.cpp ppu_recomp_005.cpp ppu_recomp_006.cpp"
 ENGINE="$(cd "${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}" 2>/dev/null && pwd)" \
     || die "motor ps3recomp nao encontrado (esperado em $HERE/../ps3recomp ou PS3_ENGINE_ROOT)"
 GAME_IN="$(cd "$GAME_ARG" && pwd)" || die "pasta do jogo nao encontrada: $GAME_ARG"
@@ -119,6 +121,9 @@ else
         || die "movie_cache nao confere com kit/movie_cache.sha256 (psarc diferente?)"
     echo "   17 arquivos verificados"
 fi
+# shellcheck disable=SC2046
+stage_capture movie_cache "$HERE/movie_cache" $(awk '{print $2}' "$KIT/movie_cache.sha256")
+kit_stop_after 3
 
 # ---- 4. PPU recompilation ---------------------------------------------------------
 say "4/6 recompilacao do PPU"
@@ -140,6 +145,8 @@ else
     # The lifter stamps its git revision; an exported snapshot has no git, so
     # it writes "unknown". The revision is the pinned one.
     sed -i '' "s|/\* lifter-rev: unknown \*/|/* lifter-rev: $PPU_LIFTER_REV */|" "$T"/lift/ppu_recomp_00?.cpp
+    # shellcheck disable=SC2086
+    stage_capture ppu_raw "$T/lift" $PPU_FILES
     echo "   scripts de patch (apply_all_patches.sh)"
     # apply_all_patches.sh takes a lift dir RELATIVE to the repo root.
     W=".kit_lift"; rm -rf "$HERE/$W"; mv "$T/lift" "$HERE/$W"
@@ -147,6 +154,8 @@ else
     # does not match (the kit delta below covers them). A missing dir is not.
     (cd "$HERE" && ./apply_all_patches.sh "$W" > "$T/patches.log" 2>&1) || true
     grep -q "^ERRO" "$T/patches.log" && { cat "$T/patches.log"; die "apply_all_patches.sh falhou"; }
+    # shellcheck disable=SC2086
+    stage_capture ppu_patched "$HERE/$W" $PPU_FILES
     echo "   delta do kit (kit/ppu_lift_delta.patch)"
     (cd "$HERE/$W" && patch -p1 -s < "$KIT/ppu_lift_delta.patch") || die "o delta do kit nao aplicou"
     (cd "$HERE/$W" && shasum -a 256 -c "$KIT/ppu_lift.sha256" >/dev/null) \
@@ -157,6 +166,9 @@ else
     rm -rf "$T"; trap - EXIT
     echo "   8 arquivos verificados"
 fi
+# shellcheck disable=SC2086
+stage_capture ppu_final "$LIFT" $PPU_FILES
+kit_stop_after 4
 
 # ---- 5. SPU recompilation ---------------------------------------------------------
 say "5/6 recompilacao dos SPU"
@@ -171,6 +183,7 @@ else
         || die "os SPU recompilados nao conferem com kit/spu_lift.sha256"
     echo "   7 programas SPU verificados"
 fi
+kit_stop_after 5
 
 # ---- 6. engine + link -------------------------------------------------------------
 say "6/6 motor e binario (alguns minutos)"
