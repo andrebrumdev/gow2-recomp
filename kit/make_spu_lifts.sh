@@ -40,18 +40,22 @@ PY=${PY:-$PS3/.venv/bin/python}
 RE_PROBES=${RE_PROBES:-1}
 E427="$GOW2/recomp_mid_v2/patch_e427_spu_il_double_sext.py"
 SPU6P="$GOW2/recomp_mid_v2/patch_spu6_extra_funcs.py"
-for f in "$EBOOT" "$E427" "$SPU6P" "$PS3/tools/spu_lifter.py" "$PS3/tools/patch_spu_add_entries.py"; do
+for f in "$EBOOT" "$E427" "$SPU6P"; do
     [ -f "$f" ] || { echo "missing: $f" >&2; exit 2; }
 done
 
 REV_OLD=5f36a40e   # spu0..3 base lifts (July lift; == edfad917 output)
 REV_45=11a1c3c5    # spu4/5 (heqi/hgti decoded as .word TODO in this window)
+# spu2, spu6 and every promotion step: the lifter of the engine the kit was cut
+# from (release kit-macos-20260923 = ps3recomp 305dd109). Pinned so a newer
+# engine cannot silently change the kit's SPU output.
+REV_HEAD=${SPU_LIFTER_HEAD_REV:-305dd109}
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 W=$(mktemp -d "${TMPDIR:-/tmp}/gow2_spu_lifts.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 
-echo "== lifter revisions $REV_OLD $REV_45"
-for r in $REV_OLD $REV_45; do
+echo "== lifter revisions $REV_OLD $REV_45 $REV_HEAD"
+for r in $REV_OLD $REV_45 $REV_HEAD; do
     mkdir -p "$W/rev_$r"
     if [ -d "$PS3/tools_pinned/$r/tools" ]; then
         # release kit: the engine snapshot ships the pinned revisions (no git history)
@@ -60,7 +64,10 @@ for r in $REV_OLD $REV_45; do
         git -C "$PS3" archive "$r" tools | tar -x -C "$W/rev_$r"
     fi
 done
-T_OLD="$W/rev_$REV_OLD/tools"; T_45="$W/rev_$REV_45/tools"; T_HEAD="$PS3/tools"
+T_OLD="$W/rev_$REV_OLD/tools"; T_45="$W/rev_$REV_45/tools"; T_HEAD="$W/rev_$REV_HEAD/tools"
+for f in "$T_HEAD/spu_lifter.py" "$T_HEAD/patch_spu_add_entries.py" "$T_HEAD/extract_spu_images.py"; do
+    [ -f "$f" ] || { echo "missing in pinned $REV_HEAD: $f" >&2; exit 2; }
+done
 
 cat > "$W/helper.py" <<'PYEOF'
 import json, os, re, struct, subprocess, sys, pathlib, importlib.util
