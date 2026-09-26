@@ -28,8 +28,15 @@ struct SaveConflict: Equatable, Identifiable {
 enum SaveSyncError: Error, Equatable {
     case gameRunningMac, gameRunningPhone, appNotInstalled, verifyFailed(String), unknownSave(String)
     case cannotReplaceExactly(String), restoreFailed(String, String)
+    /// The snapshot fails closed: a save it cannot read completely (or an empty one)
+    /// and a save holding a symbolic link are errors, never a smaller snapshot.
+    case unreadableSave(String), symlinkInSave(String)
     var userMessage: String {
         switch self {
+        case .unreadableSave(let n):
+            return "Não deu para ler todo o save \(n) (pasta vazia, sem permissão ou com algo que não é arquivo). Nada foi copiado; confira a pasta e tente de novo."
+        case .symlinkInSave(let n):
+            return "O save \(n) é ou contém um link simbólico. Nada foi copiado: troque o link pelos arquivos de verdade e tente de novo."
         case .cannotReplaceExactly(let n):
             return "O save \(n) do iPhone tem arquivos que o do Mac não tem, e o devicectl deste Mac não apaga arquivos a mais numa cópia (fato F6). Nada foi copiado."
         case .restoreFailed(let n, let backup):
@@ -77,36 +84,51 @@ enum SaveSnapshot {
 
     static func hex(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
 
-    /// Regular, non-hidden files under `dir`, sorted by path.
+    /// Regular, non-hidden files under `dir`, sorted by path. Fails closed (spec:
+    /// never lose a save): `dir` or anything inside it being a symbolic link, an
+    /// enumeration error (unreadable folder), an entry that is neither a regular
+    /// file nor a folder, or no file at all throws instead of returning a smaller
+    /// snapshot. Links are never followed (checked on the link itself).
     static func digest(_ dir: URL) throws -> Digest {
+        let fm = FileManager.default
+        let name = dir.lastPathComponent
+        let top = (try? fm.attributesOfItem(atPath: dir.path)[.type]) as? FileAttributeType
+        if top == .typeSymbolicLink { throw SaveSyncError.symlinkInSave(name) }
+        guard top == .typeDirectory else { throw SaveSyncError.unreadableSave(name) }
+        var failed = false
+        let keys: [URLResourceKey] = [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey]
+        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: keys,
+                                    options: [.skipsHiddenFiles, .producesRelativePathURLs],
+                                    errorHandler: { _, _ in failed = true; return false })
+        else { throw SaveSyncError.unreadableSave(name) }
         var rows: [Row] = []
         var newest: Int64 = 0
-        if let e = FileManager.default.enumerator(atPath: dir.path) {
-            while let rel = e.nextObject() as? String {
-                let type = e.fileAttributes?[.type] as? FileAttributeType
-                if (rel as NSString).lastPathComponent.hasPrefix(".") {
-                    if type == .typeDirectory { e.skipDescendants() }
-                    continue
-                }
-                guard type == .typeRegular else { continue }
-                let u = dir.appendingPathComponent(rel)
-                let data = try Data(contentsOf: u)
-                rows.append(Row(rel: rel, size: Int64(data.count), sha: hex(data)))
-                newest = max(newest, try HashCache.fileInfo(u).mtime)
-            }
+        while let u = e.nextObject() as? URL {
+            let v = try u.resourceValues(forKeys: Set(keys))
+            if v.isSymbolicLink == true { throw SaveSyncError.symlinkInSave(name) }
+            if v.isDirectory == true { continue }
+            guard v.isRegularFile == true else { throw SaveSyncError.unreadableSave(name) }
+            let data = try Data(contentsOf: u)
+            rows.append(Row(rel: u.relativePath, size: Int64(data.count), sha: hex(data)))
+            newest = max(newest, try HashCache.fileInfo(u).mtime)
         }
+        if failed || rows.isEmpty { throw SaveSyncError.unreadableSave(name) }
         rows.sort { $0.rel < $1.rel }
         let text = rows.map { "\($0.rel)\t\($0.size)\t\($0.sha)\n" }.joined()
         return Digest(hash: hex(Data(text.utf8)), newest: newest, rows: rows)
     }
 
     /// GoW2's save directories under a savedata root (missing root = none).
+    /// A `BCUS98229*` entry that is a folder or a symbolic link is a save and
+    /// must digest cleanly (a link throws); a plain file of that name is ignored.
     static func take(_ root: URL) throws -> [String: SaveDirSnapshot] {
         guard LauncherCore.isDir(root.path) else { return [:] }
+        let fm = FileManager.default
         var out: [String: SaveDirSnapshot] = [:]
-        for name in try FileManager.default.contentsOfDirectory(atPath: root.path).sorted() where name.hasPrefix(titlePrefix) {
+        for name in try fm.contentsOfDirectory(atPath: root.path).sorted() where name.hasPrefix(titlePrefix) {
             let d = root.appendingPathComponent(name)
-            guard LauncherCore.isDir(d.path) else { continue }
+            let type = try fm.attributesOfItem(atPath: d.path)[.type] as? FileAttributeType
+            guard type == .typeDirectory || type == .typeSymbolicLink else { continue }
             let g = try digest(d)
             out[name] = SaveDirSnapshot(name: name, hash: g.hash, newest: g.newest, files: g.rows.count)
         }
@@ -161,6 +183,7 @@ enum SaveBackup {
     /// "<sha>  <name>/<file>" lines to <folder>/sha256.txt. Returns the folder.
     static func write(dir: URL, name: String, into root: URL, folder: String) throws -> URL {
         let fm = FileManager.default
+        let src = try SaveSnapshot.digest(dir)   // refuses links/unreadable saves before creating anything
         var target = root.appendingPathComponent(folder)
         var n = 2
         while fm.fileExists(atPath: target.appendingPathComponent(name).path) {
@@ -170,7 +193,6 @@ enum SaveBackup {
         try fm.createDirectory(at: target, withIntermediateDirectories: true)
         let copy = target.appendingPathComponent(name)
         try fm.copyItem(at: dir, to: copy)
-        let src = try SaveSnapshot.digest(dir)
         guard try SaveSnapshot.digest(copy).hash == src.hash else { throw SaveSyncError.verifyFailed(name) }
         let list = target.appendingPathComponent("sha256.txt")
         let old = (try? String(contentsOf: list, encoding: .utf8)) ?? ""

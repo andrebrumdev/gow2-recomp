@@ -64,4 +64,82 @@ func runSaveSyncPlanChecks() {
     check(SaveSyncError.gameRunningPhone.userMessage.contains("alternador")
           && SaveSyncError.gameRunningMac.userMessage.contains("Mac"), "refusal messages")
     try? FileManager.default.removeItem(at: root)
+    runSaveSnapshotFailClosedChecks()
+}
+
+/// The snapshot fails closed (spec: never lose a save): anything it cannot read
+/// or that is not plain files and folders is an error, never a smaller snapshot.
+func runSaveSnapshotFailClosedChecks() {
+    let G = "BCUS98229_GOW2"
+    let fm = FileManager.default
+    func throwsError(_ f: () throws -> Any) -> Error? {
+        do { _ = try f(); return nil } catch { return error }
+    }
+    func fresh(_ tag: String) -> (root: URL, save: URL) {
+        let r = tempDir(tag)
+        let s = r.appendingPathComponent("saves/\(G)")
+        writeFile(s.appendingPathComponent("MASTER.BIN"), "m1")
+        writeFile(s.appendingPathComponent("SUB/DATA00.BIN"), "d1")
+        return (r, s)
+    }
+    func chmod(_ u: URL, _ mode: Int) { try! fm.setAttributes([.posixPermissions: mode], ofItemAtPath: u.path) }
+
+    // (a) unreadable subfolder: two different saves must not hash equal.
+    do {
+        let (r, s) = fresh("sfc-sub")
+        let sub = s.appendingPathComponent("SUB")
+        chmod(sub, 0o000)
+        let e = throwsError { try SaveSnapshot.take(r.appendingPathComponent("saves")) }
+        check(e as? SaveSyncError == .unreadableSave(G), "unreadable subfolder -> throws: \(String(describing: e))")
+        check(throwsError { try SaveSnapshot.digest(s) } != nil, "digest of a save with an unreadable subfolder throws")
+        chmod(sub, 0o755)
+        try? fm.removeItem(at: r)
+    }
+    // (b) unreadable save folder: never a well-formed empty snapshot.
+    do {
+        let (r, s) = fresh("sfc-top")
+        chmod(s, 0o000)
+        let e = throwsError { try SaveSnapshot.take(r.appendingPathComponent("saves")) }
+        check(e as? SaveSyncError == .unreadableSave(G), "unreadable save folder -> throws: \(String(describing: e))")
+        chmod(s, 0o755)
+        try? fm.removeItem(at: r)
+    }
+    // (c) empty save folder (only hidden files) is not a save.
+    do {
+        let r = tempDir("sfc-empty")
+        writeFile(r.appendingPathComponent("saves/\(G)/.DS_Store"), "x")
+        let e = throwsError { try SaveSnapshot.take(r.appendingPathComponent("saves")) }
+        check(e as? SaveSyncError == .unreadableSave(G), "empty save folder -> throws: \(String(describing: e))")
+        try? fm.removeItem(at: r)
+    }
+    // (d) symlinked save folder.
+    do {
+        let (r, s) = fresh("sfc-linkdir")
+        let other = r.appendingPathComponent("other")
+        try! fm.createDirectory(at: other, withIntermediateDirectories: true)
+        try! fm.createSymbolicLink(at: other.appendingPathComponent(G), withDestinationURL: s)
+        let e = throwsError { try SaveSnapshot.take(other) }
+        check(e as? SaveSyncError == .symlinkInSave(G), "symlinked save folder -> throws: \(String(describing: e))")
+        check(throwsError { try SaveSnapshot.digest(other.appendingPathComponent(G)) } != nil, "digest of a symlinked save folder throws")
+        // (f) a backup of a symlinked folder is impossible, and leaves nothing behind.
+        let bk = r.appendingPathComponent("backups")
+        let be = throwsError { try SaveBackup.write(dir: other.appendingPathComponent(G), name: G, into: bk, folder: "f") }
+        check(be as? SaveSyncError == .symlinkInSave(G), "backup of a symlinked save folder -> throws: \(String(describing: be))")
+        check(!fm.fileExists(atPath: bk.appendingPathComponent("f").path), "a refused backup creates no folder")
+        try? fm.removeItem(at: r)
+    }
+    // (e) symlink inside a save (to a file and to a folder).
+    for (tag, dest) in [("file", "MASTER.BIN"), ("dir", "SUB")] {
+        let (r, s) = fresh("sfc-link\(tag)")
+        try! fm.createSymbolicLink(at: s.appendingPathComponent("LINK_\(tag)"),
+                                   withDestinationURL: s.appendingPathComponent(dest))
+        let e = throwsError { try SaveSnapshot.take(r.appendingPathComponent("saves")) }
+        check(e as? SaveSyncError == .symlinkInSave(G), "symlink (\(tag)) inside a save -> throws: \(String(describing: e))")
+        let be = throwsError { try SaveBackup.write(dir: s, name: G, into: r.appendingPathComponent("backups"), folder: "f") }
+        check(be != nil, "backup of a save holding a symlink (\(tag)) -> throws")
+        try? fm.removeItem(at: r)
+    }
+    // Messages the user sees.
+    check(SaveSyncError.unreadableSave(G).userMessage.contains(G)
+          && SaveSyncError.symlinkInSave(G).userMessage.contains(G), "fail-closed messages name the save")
 }
