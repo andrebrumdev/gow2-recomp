@@ -31,6 +31,9 @@ enum SaveSyncError: Error, Equatable {
     /// The snapshot fails closed: a save it cannot read completely (or an empty one)
     /// and a save holding a symbolic link are errors, never a smaller snapshot.
     case unreadableSave(String), symlinkInSave(String)
+    /// A phone copy that did not verify, rolled back: the phone holds its old save again
+    /// (re-downloaded and hash-checked). verifyFailed = nothing existing was replaced.
+    case phoneRestored(String)
     var userMessage: String {
         switch self {
         case .unreadableSave(let n):
@@ -44,7 +47,8 @@ enum SaveSyncError: Error, Equatable {
         case .gameRunningMac: return "O GoW2 está aberto no Mac. Feche o jogo e tente de novo."
         case .gameRunningPhone: return "O GoW2 está aberto no iPhone (mesmo em segundo plano). Feche-o no alternador de apps (deslize o app para cima) e tente de novo."
         case .appNotInstalled: return "O GoW2 não está instalado neste iPhone: use Instalar no iPhone."
-        case .verifyFailed(let n): return "A cópia de \(n) não conferiu depois de gravada. Nada foi perdido (o lado substituído está na pasta de backups); tente de novo."
+        case .verifyFailed(let n): return "A cópia de \(n) não conferiu depois de gravada. Nenhum save existente foi substituído (o do Mac está intacto); tente de novo."
+        case .phoneRestored(let n): return "A cópia de \(n) para o iPhone não conferiu depois de gravada. O save anterior do iPhone foi restaurado e conferido (e há uma cópia dele na pasta de backups): nada foi perdido; tente de novo."
         case .unknownSave(let n): return "O save \(n) não existe mais nesse lado. Sincronize de novo."
         }
     }

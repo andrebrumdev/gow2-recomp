@@ -143,6 +143,22 @@ MainActor.assumeIsolated {
     check(threw && bad.hides == 0 && bad.shows == 0 && bad.exits == 0, "start failure never hides (\(bad.hides)/\(bad.shows))")
 }
 
+// 9. P3: while an iPhone save sync holds the launcher, Jogar refuses without
+//    starting anything; the lock has one holder and is released by the sync.
+MainActor.assumeIsolated {
+    let bk = Backend()
+    check(bk.tryBeginExclusive("Sincronizando os saves"), "exclusive lock taken")
+    check(!bk.tryBeginExclusive("outro"), "one holder at a time")
+    let lockDefaults = UserDefaults(suiteName: "launch_check-p3-\(getpid())")!
+    let gs = GameSettings(overlayFile: OverlaySettingsFile(url: tmp.appendingPathComponent("p3.settings")), legacy: lockDefaults)
+    bk.play(resume: false, settings: gs)
+    check(bk.error == "Sincronizando os saves" && !bk.running, "Jogar blocked during a sync: \(bk.error ?? "nil")")
+    bk.endExclusive()
+    check(bk.playBlockedReason == nil && bk.tryBeginExclusive("x"), "released")
+    bk.endExclusive()
+    lockDefaults.removePersistentDomain(forName: "launch_check-p3-\(getpid())")
+}
+
 try? FileManager.default.removeItem(at: tmp)
 print(fails == 0 ? "PASS" : "FAIL \(fails)")
 exit(fails == 0 ? 0 : 1)

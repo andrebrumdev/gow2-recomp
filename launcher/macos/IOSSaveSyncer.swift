@@ -222,7 +222,7 @@ final class SaveSyncer {
         guard let b = backup, let old = phone else { throw SaveSyncError.verifyFailed(n) }
         try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
         phoneBackToOld(&state)
-        throw SaveSyncError.verifyFailed(n)
+        throw SaveSyncError.phoneRestored(n)
     }
 
     /// Copies the verified backup back to the phone; throws restoreFailed (naming the

@@ -135,7 +135,7 @@ func runSaveSyncerChecks() {
     writeFile(v.mac.appendingPathComponent("\(G)/DATA00.BIN"), "v-mac")
     v.phone.dropWritesUnder = "Documents/savedata/"
     do { _ = try syncer(v).run(.both); check(false, "verify must fail") }
-    catch let x as SaveSyncError { check(x == .verifyFailed(G), "\(x)") }
+    catch let x as SaveSyncError { check(x == .phoneRestored(G), "\(x)") }
     catch { check(false, "\(error)") }
     check(SyncState.load(v.state).base[G] == base, "base unchanged after a failed push")
 
@@ -144,7 +144,7 @@ func runSaveSyncerChecks() {
     v.phone.corruptPrefix = "Documents/savedata/"
     v.phone.corruptNext = 1
     do { _ = try syncer(v).run(.both); check(false, "corrupted push must fail") }
-    catch let x as SaveSyncError { check(x == .verifyFailed(G), "\(x)") }
+    catch let x as SaveSyncError { check(x == .phoneRestored(G), "\(x)") }
     catch { check(false, "\(error)") }
     check(fileText(v.phoneSaves.appendingPathComponent("\(G)/DATA00.BIN")) == "d1"
           && fileText(v.phoneSaves.appendingPathComponent("\(G)/MASTER.BIN")) == "m1", "phone restored from the backup")
