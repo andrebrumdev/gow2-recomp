@@ -24,6 +24,7 @@ t_false "scratch equal to the game folder refused" bash "$REC" "$T/game" "$T/EBO
 t_true "the game folder kept its kit/ and stages/" test -f "$T/game/kit/keep.txt" -a -d "$T/game/stages"
 t_false "scratch inside the game folder refused" bash "$REC" "$T/game" "$T/EBOOT.ELF" "$T/game/USRDIR/s"
 t_true "the refusal created no dir in the game folder" test ! -e "$T/game/USRDIR/s"
+t_false "scratch / refused (resolves to /, no endless loop)" bash "$REC" "$T/game" "$T/EBOOT.ELF" /
 t_false "scratch containing the game folder refused" bash "$REC" "$T/game" "$T/EBOOT.ELF" "$T"
 # a non-empty scratch that record.sh did not create is refused and left untouched
 mkdir -p "$T/busy/kit" && : > "$T/busy/kit/keep.txt"

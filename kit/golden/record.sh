@@ -63,6 +63,7 @@ physical_target() { # <abs path> -> physical abs path on stdout
         rest="/$base$rest"; p=${p%/*}; [ -n "$p" ] || p=/
     done
     p="$(cd "$p" && pwd -P)" || return 1
+    [ "$p" = / ] && [ -z "$rest" ] && { echo /; return 0; }
     printf '%s%s\n' "${p%/}" "$rest"
 }
 refuse_scratch() { echo "scratch $S: $* -- refused (game-derived files)" >&2; exit 2; }
@@ -73,7 +74,7 @@ A=$S; while [ ! -d "$A" ]; do A=${A%/*}; [ -n "$A" ] || A=/; done
 git -C "$A" rev-parse --show-toplevel >/dev/null 2>&1 && refuse_scratch "inside a git work tree"
 GAMEP="$(cd "$GAME" && pwd -P)"
 case "$S/" in "$GAMEP/"*) refuse_scratch "equal to or inside the game folder $GAMEP" ;; esac
-case "$GAMEP/" in "$S/"*) refuse_scratch "contains the game folder $GAMEP" ;; esac
+case "$GAMEP/" in "${S%/}/"*) refuse_scratch "contains the game folder $GAMEP" ;; esac
 # Only an empty dir, or one a previous record.sh run created (marker), is reused:
 # its kit/ and stages/ are deleted below.
 MARK=.kit_record_scratch
