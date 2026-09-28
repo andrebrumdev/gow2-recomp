@@ -33,7 +33,7 @@ PPU_LIFTER_REV=5b004fc7
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die()  { printf '\n\033[31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,29p' "$0"; exit 2; }
+usage() { sed -n '2,26p' "$0"; exit 2; }
 GAME_ARG=""; RAP_IN=""; ELF_IN=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -89,6 +89,8 @@ if [ "$KIT_TOOLS" = cpp ]; then
         || die "nao compilou o ps3kit (log: .kit_tools/ps3kit.log). KIT_TOOLS=py usa as ferramentas Python."
     PS3KIT="$HERE/.kit_tools/ps3kit/ps3kit"; export PS3KIT
     echo "   ps3kit: $("$PS3KIT" --version)"
+else
+    unset PS3KIT   # the py path must not pick up a ps3kit from the caller's environment
 fi
 
 # ---- 2. game files ----------------------------------------------------------

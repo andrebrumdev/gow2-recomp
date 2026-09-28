@@ -116,7 +116,7 @@ if [ "$WRITE" = 1 ]; then
         echo "# Recorded $(date -u +%Y-%m-%dT%H:%MZ) by kit/golden/record.sh$( [ "$FULL" = 1 ] && echo ' --full')"
         echo "# gow2-recomp $(git -C "$HERE" rev-parse --short HEAD)$( [ -n "$(git -C "$HERE" status --porcelain --untracked-files=no)" ] && echo '+dirty')" \
              "ps3recomp $(git -C "$ENGINE" rev-parse --short HEAD)$( [ -n "$(git -C "$ENGINE" status --porcelain --untracked-files=no)" ] && echo '+dirty')" \
-             "KIT_TOOLS=${KIT_TOOLS:-py} EBOOT_SHA=$(kit_sha256 "$ELF")"
+             "KIT_TOOLS=${KIT_TOOLS:-cpp} EBOOT_SHA=$(kit_sha256 "$ELF")"
         LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k2,2 "$CAND"
     } > "$NEW"
     mv "$NEW" "$GOLDEN"

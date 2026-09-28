@@ -30,4 +30,5 @@ t_true "setup.sh psarc via ps3kit"            has "$R/kit/setup.sh" '"$PS3KIT" p
 t_true "make_spu_lifts images via ps3kit"     has "$R/kit/make_spu_lifts.sh" '"$PS3KIT" spu-images'
 t_true "build_macos NIDs via ps3kit"          has "$R/build_macos.sh" '"$PS3KIT" hle-nids'
 t_true "KIT_TOOLS validated"                  has "$R/kit/setup.sh" 'KIT_TOOLS must be py or cpp'
+t_true "setup.sh drops an inherited PS3KIT on the py path" has "$R/kit/setup.sh" 'unset PS3KIT'
 t_done
