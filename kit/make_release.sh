@@ -47,14 +47,13 @@ PYLINE="$(vendor_cpython_source "$HERE/kit/python.lock" "$R" "${KIT_CPYTHON_TARB
 } > "$R/VERSIONS.txt"
 cp "$HERE/kit/README.md" "$R/README.md"
 
-# Nothing from the game may ride along: refuse the usual suspects.
-if find "$R" \( -iname 'EBOOT.*' -o -iname '*.psarc' -o -iname '*.self' -o -iname '*.m2v' \
-        -o -iname '*.wad_ps3' -o -iname '*.wav' -o -iname 'spu_hit_*' -o -iname 'spu_miss_*' \) \
-        -print | grep -q .; then
+# Nothing from the game may ride along, and the kit ships source only (a
+# prebuilt executable would meet Gatekeeper's quarantine).
+. "$HERE/kit/lib/release_guards.sh"
+if kit_find_game_files "$R" >&2; then
     echo "arquivo de jogo no pacote -- abortado" >&2; exit 1
 fi
-# The kit ships source only: a prebuilt executable would meet Gatekeeper's quarantine.
-if find "$R" -type f -print0 | xargs -0 file | grep -q 'Mach-O'; then
+if kit_find_macho "$R" >&2; then
     echo "binario Mach-O no pacote -- abortado" >&2; exit 1
 fi
 (cd "$T" && zip -qr -X "$OUT/$NAME.zip" "$NAME")
