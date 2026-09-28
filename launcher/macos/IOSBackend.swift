@@ -290,7 +290,7 @@ final class IOSBackend: ObservableObject {
 
     private func runScript(_ name: String, _ args: [String], log: String) async throws -> ScriptResult {
         let script = IOSScripts.dir(repo: repo).appendingPathComponent(name)
-        let env = IOSScripts.environment(ProcessInfo.processInfo.environment)
+        let env = IOSScripts.environment(ProcessInfo.processInfo.environment, repo: repo)
         let logURL = logsDir.appendingPathComponent(log)
         let s = deps.scripts
         return try await off { try s.run(script, args, env: env, log: logURL) }

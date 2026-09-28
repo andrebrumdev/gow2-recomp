@@ -58,15 +58,25 @@ say "1/6 ferramentas"
 command -v clang >/dev/null || die "falta o clang: xcode-select --install"
 command -v cmake >/dev/null || die "falta o CMake: brew install cmake"
 command -v ninja >/dev/null || die "falta o Ninja: brew install ninja"
-if [ -z "${PY:-}" ]; then
-    for c in python3.14 python3.13 python3.12 python3.11 /opt/homebrew/bin/python3 python3; do
-        if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
-            PY="$(command -v "$c")"; break
-        fi
-    done
+. "$KIT/lib/pick_python.sh"
+. "$KIT/lib/cpython_src.sh"
+KIT_ROOT="$(cd "$HERE/.." && pwd)"
+rc=0; PY="$(kit_pick_python "$HERE")" || rc=$?
+if [ "$rc" = 2 ]; then die "PY nao e' um Python >= 3.11"; fi
+if [ "$rc" = 1 ]; then
+    # '|| true': with no tarball, ls fails and pipefail + errexit would exit silently.
+    TB="$(ls "$KIT_ROOT"/third_party/cpython/Python-*.tar.xz 2>/dev/null | head -1 || true)"
+    [ -n "$TB" ] || die "falta Python >= 3.11 (brew install python) e este kit nao traz o codigo do CPython"
+    echo "   nenhum Python >= 3.11: compilando o do kit (uma vez, alguns minutos)"
+    mkdir -p "$HERE/.kit_tools"
+    kit_build_python "$TB" "$(sed -n 's/^PYTHON_SHA256=//p' "$KIT/python.lock")" \
+        "$HERE/.kit_tools/python" "$HERE/.kit_tools/cpython-build" > "$HERE/.kit_tools/cpython.log" 2>&1 \
+        || die "a compilacao do Python do kit falhou (log: .kit_tools/cpython.log)"
+    PY="$HERE/.kit_tools/python/bin/python3"
 fi
-[ -n "${PY:-}" ] || die "falta Python >= 3.11: brew install python"
 export PY
+# apply_all_patches.sh has its own discovery that ignores PY; point it at the same one.
+export PS3_PATCH_PYTHON="$PY"
 echo "   clang $(clang --version | head -1 | sed 's/.*version //;s/ .*//'), cmake $(cmake --version | head -1 | awk '{print $3}'), $("$PY" --version)"
 
 # ---- 2. game files ----------------------------------------------------------

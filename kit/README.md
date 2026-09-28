@@ -10,8 +10,11 @@ your Mac from the files you provide.
 
 - A Mac with Apple Silicon (M1 or newer) running a recent macOS.
 - Xcode Command Line Tools: `xcode-select --install`.
-- [Homebrew](https://brew.sh), then `brew install cmake ninja python`.
-  Python must be 3.11 or newer.
+- [Homebrew](https://brew.sh), then `brew install cmake ninja`.
+  If no Python 3.11 or newer is installed, `setup.sh` compiles the one whose
+  source comes with the kit (`third_party/cpython`, PSF licence) the first
+  time, which adds a few minutes. It is only used by the build tools that are
+  still being moved to C++.
 - Your game, **God of War II HD, NPUA80491 v01.00**:
   - the game folder (`PS3_GAME`, with `USRDIR/EBOOT.BIN` and
     `USRDIR/gow2.psarc`), from RPCS3's `dev_hdd0/game/NPUA80491` or from your

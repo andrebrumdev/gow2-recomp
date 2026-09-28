@@ -36,10 +36,14 @@ for rev in $PINNED; do
     mkdir -p "$R/ps3recomp/tools_pinned/$rev"
     git -C "$ENGINE" archive "$rev" tools | tar -x -C "$R/ps3recomp/tools_pinned/$rev"
 done
+. "$HERE/kit/lib/cpython_src.sh"
+PYLINE="$(vendor_cpython_source "$HERE/kit/python.lock" "$R" "${KIT_CPYTHON_TARBALL:-}")" \
+    || { echo "codigo do CPython falhou" >&2; exit 1; }
 {
     echo "gow2-recomp $(git -C "$HERE" rev-parse HEAD)"
     echo "ps3recomp   $(git -C "$ENGINE" rev-parse HEAD)"
     for rev in $PINNED; do echo "pinned      $(git -C "$ENGINE" rev-parse "$rev")"; done
+    echo "$PYLINE"
 } > "$R/VERSIONS.txt"
 cp "$HERE/kit/README.md" "$R/README.md"
 
@@ -48,6 +52,10 @@ if find "$R" \( -iname 'EBOOT.*' -o -iname '*.psarc' -o -iname '*.self' -o -inam
         -o -iname '*.wad_ps3' -o -iname '*.wav' -o -iname 'spu_hit_*' -o -iname 'spu_miss_*' \) \
         -print | grep -q .; then
     echo "arquivo de jogo no pacote -- abortado" >&2; exit 1
+fi
+# The kit ships source only: a prebuilt executable would meet Gatekeeper's quarantine.
+if find "$R" -type f -print0 | xargs -0 file | grep -q 'Mach-O'; then
+    echo "binario Mach-O no pacote -- abortado" >&2; exit 1
 fi
 (cd "$T" && zip -qr -X "$OUT/$NAME.zip" "$NAME")
 echo "$OUT/$NAME.zip ($(du -h "$OUT/$NAME.zip" | cut -f1))"

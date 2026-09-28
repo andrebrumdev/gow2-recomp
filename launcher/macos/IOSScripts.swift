@@ -56,13 +56,19 @@ enum IOSScripts {
 
     static func dir(repo: URL) -> URL { repo.appendingPathComponent("ios") }
 
-    /// A Finder-launched app has PATH=/usr/bin:/bin:/usr/sbin:/sbin: xcodegen and
-    /// the build's python live in Homebrew; the system python3 is 3.9 (too old).
-    static func environment(_ base: [String: String],
+    /// A Finder-launched app has PATH=/usr/bin:/bin:/usr/sbin:/sbin: xcodegen lives in
+    /// Homebrew, and the build's remaining Python tools need >= 3.11 (the system one is
+    /// 3.9). A Python the kit compiled (<repo>/.kit_tools/python) wins over Homebrew's;
+    /// a caller-supplied PY always wins.
+    static func environment(_ base: [String: String], repo: URL? = nil,
                             isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> [String: String] {
         var e = base
         let path = base["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         e["PATH"] = path.split(separator: ":").contains("/opt/homebrew/bin") ? path : "/opt/homebrew/bin:/usr/local/bin:" + path
+        if e["PY"] == nil, let repo {
+            let kitPy = repo.appendingPathComponent(".kit_tools/python/bin/python3").path
+            if isExecutable(kitPy) { e["PY"] = kitPy }
+        }
         if e["PY"] == nil, isExecutable("/opt/homebrew/bin/python3") { e["PY"] = "/opt/homebrew/bin/python3" }
         if e["DEVELOPER_DIR"] == nil { e["DEVELOPER_DIR"] = "/Applications/Xcode.app/Contents/Developer" }
         return e

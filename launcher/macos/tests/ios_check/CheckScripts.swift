@@ -18,6 +18,15 @@ func runScriptChecks() {
           "caller values kept \(keep)")
     let bare = IOSScripts.environment([:], isExecutable: { _ in false })
     check(bare["PY"] == nil && bare["PATH"] == "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "defaults \(bare)")
+    let repo = tempDir("kitpy")
+    let kitPy = repo.appendingPathComponent(".kit_tools/python/bin/python3").path
+    let withKit = IOSScripts.environment(["PATH": "/usr/bin"], repo: repo,
+                                         isExecutable: { $0 == kitPy || $0 == "/opt/homebrew/bin/python3" })
+    check(withKit["PY"] == kitPy, "the kit-built python wins over Homebrew \(withKit)")
+    let callerPY = IOSScripts.environment(["PY": "/my/py"], repo: repo, isExecutable: { _ in true })
+    check(callerPY["PY"] == "/my/py", "caller PY still wins \(callerPY)")
+    let noRepo = IOSScripts.environment(["PATH": "/usr/bin"], isExecutable: { $0 == "/opt/homebrew/bin/python3" })
+    check(noRepo["PY"] == "/opt/homebrew/bin/python3", "without a repo: current behaviour kept \(noRepo)")
 
     let cfg = IOSScripts.config(ScriptResult(status: 0,
         output: "GOW2_IOS_TEAM=T\nGOW2_IOS_DEVICE=D\nGOW2_IOS_BUNDLE=com.t.g\nGOW2_IOS_APP=/a/GoW2.app\n"))
