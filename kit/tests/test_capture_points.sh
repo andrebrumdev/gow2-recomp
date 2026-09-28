@@ -22,4 +22,7 @@ for f in kit/setup.sh kit/make_spu_lifts.sh build_macos.sh; do t_true "$f parses
 t_true "make_spu_lifts pins the HEAD lifter"  has "$R/kit/make_spu_lifts.sh" 'REV_HEAD=${SPU_LIFTER_HEAD_REV:-305dd109}'
 t_false "make_spu_lifts no longer uses the moving tools/" has "$R/kit/make_spu_lifts.sh" 'T_HEAD="$PS3/tools"'
 t_true "make_release ships the 4th pinned rev" has "$R/kit/make_release.sh" 'PINNED="5b004fc7 5f36a40e 11a1c3c5 305dd109"'
+t_false "make_spu_lifts never runs patch_spu6_extra_funcs.py directly (its LIFTER is the moving tools/)" has "$R/kit/make_spu_lifts.sh" '"$PY" "$SPU6P"'
+t_true "make_spu_lifts lifts spu6 through the helper" has "$R/kit/make_spu_lifts.sh" 'H spu6 "$W/img6.bin" "$B/spu6_v2"'
+t_true "the spu6 helper overrides LIFTER with the pinned T_HEAD" has "$R/kit/make_spu_lifts.sh" 'm.LIFTER = pathlib.Path(os.environ["T_HEAD"]) / "spu_lifter.py"'
 t_done

@@ -181,18 +181,14 @@ def promote(n, d, steps):
              "--extra-funcs", extra, "--symbol-prefix", "spu%d_" % n)
         add_entries(d, f / "spu_recomp.c", "spu%d_" % n, ",".join(cum))
 
-def spu6(out):
+def spu6(img, out):
+    # patch_spu6_extra_funcs.py carries its own LIFTER constant (the engine's moving tools/);
+    # override it so spu6 is lifted by the pinned T_HEAD like every other HEAD-lifter step.
     spec = importlib.util.spec_from_file_location("p6", os.environ["SPU6P"])
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-    starts = [0x3000, 0x3090, 0x3C00, 0x3CE0, 0x4178, 0x4920, 0x4930, 0x4960, 0x4A18, 0x4BD0,
-              0x4C60, 0x4C64, 0x4C68, 0x4C98, 0x4CC8, 0x4D20, 0x4E08, 0x4EC4, 0x4EF0, 0x4F30,
-              0x4F98, 0x5028, 0x5120, 0x51F0, 0x5258, 0x5260, 0x5368, 0x53B8, 0x53F8, 0x5478,
-              0x54E0, 0x5530, 0x5638, 0x57C8, 0x5868, 0x5920, 0x5B68, 0x5B78, 0x5B88, 0x5BA0,
-              0x5BE0, 0x5C70]
-    m.INPUT = W / "img6.bin"; m.OUTPUT = pathlib.Path(out)
     m.LIFTER = pathlib.Path(os.environ["T_HEAD"]) / "spu_lifter.py"
-    m.existing_starts = lambda _p: starts   # the script bootstraps from its own previous output
     m.sys.executable = PY
+    sys.argv = [os.environ["SPU6P"], img, out]
     if m.main():
         raise SystemExit("spu6 relift failed")
 
@@ -201,7 +197,7 @@ if __name__ == "__main__":
     if cmd == "prep": prep(sys.argv[2], sys.argv[3])
     elif cmd == "probes": probes(int(sys.argv[2]), sys.argv[3])
     elif cmd == "promote": promote(int(sys.argv[2]), sys.argv[3], sys.argv[4:])
-    elif cmd == "spu6": spu6(sys.argv[2])
+    elif cmd == "spu6": spu6(sys.argv[2], sys.argv[3])
 PYEOF
 export W PY T_HEAD SPU6P
 H() { "$PY" "$W/helper.py" "$@"; }
@@ -248,7 +244,7 @@ for n in 4 5; do
     L "$T_45" "$B/spu${n}_v2" --auto-functions "$W/img$n.bin" --symbol-prefix spu${n}_
 done
 echo "== spu6"
-mkdir -p "$B/spu6_v2"; "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+mkdir -p "$B/spu6_v2"; H spu6 "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
 stage_capture spu_raw "$B" spu6_v2/spu_recomp.c spu6_v2/spu_recomp.h
 # brsl/bih* halfword conditions of the lifts made by 2026-07-21..09-23 lifters.
 "$PY" "$GOW2/recomp_mid_v2/patch_spu_halfword_cond.py" "$B"/spu?_v2 > /dev/null
