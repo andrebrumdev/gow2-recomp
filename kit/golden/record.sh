@@ -6,8 +6,8 @@
 #
 #   PS3_GAME   the user's game folder (read-only; setup.sh links it as extracted/)
 #   EBOOT.ELF  the user's decrypted ELF (copied into the scratch tree)
-#   scratch    an empty or absent dir OUTSIDE both git repositories: it receives a
-#              copy of the ELF and lifted code, which must never be committed
+#   scratch    an empty/absent dir (or one record.sh made) outside any git tree and the
+#              game folder: gets a copy of the ELF and lifted code, never to be committed
 #   --write    write kit/golden/stages.tsv in this repo instead of checking it. Only
 #              with KIT_TOOLS=py and --full, and only if the run's ppu_final,
 #              spu_final and movie_cache equal the committed kit/*.sha256
@@ -53,10 +53,34 @@ inside_repo() { # <abs path>: rc 0 when it is inside either repository
     return 1
 }
 case "$S" in /*) ;; *) S="$PWD/$S" ;; esac
-# checked before mkdir (never create a dir inside a repo) and again on the physical path
-inside_repo "$S" && { echo "scratch $S is inside a repository: refused (game-derived files)" >&2; exit 2; }
-mkdir -p "$S"; S="$(cd "$S" && pwd -P)"
-inside_repo "$S" && { echo "scratch $S is inside a repository: refused (game-derived files)" >&2; exit 2; }
+# Resolve the scratch to a physical path BEFORE creating anything: the nearest existing
+# ancestor through `pwd -P` (symlinks, ..), plus the missing components, which may not
+# contain . or .. themselves.
+physical_target() { # <abs path> -> physical abs path on stdout
+    local p=$1 rest="" base
+    while [ ! -d "$p" ]; do
+        base=${p##*/}; case "$base" in .|..) return 1 ;; esac
+        rest="/$base$rest"; p=${p%/*}; [ -n "$p" ] || p=/
+    done
+    p="$(cd "$p" && pwd -P)" || return 1
+    printf '%s%s\n' "${p%/}" "$rest"
+}
+refuse_scratch() { echo "scratch $S: $* -- refused (game-derived files)" >&2; exit 2; }
+S="$(physical_target "$S")" || refuse_scratch "cannot resolve it (a missing component is . or ..)"
+inside_repo "$S" && refuse_scratch "inside a repository"
+# any git work tree (e.g. the user's playing tree), found from the nearest existing ancestor
+A=$S; while [ ! -d "$A" ]; do A=${A%/*}; [ -n "$A" ] || A=/; done
+git -C "$A" rev-parse --show-toplevel >/dev/null 2>&1 && refuse_scratch "inside a git work tree"
+GAMEP="$(cd "$GAME" && pwd -P)"
+case "$S/" in "$GAMEP/"*) refuse_scratch "equal to or inside the game folder $GAMEP" ;; esac
+case "$GAMEP/" in "$S/"*) refuse_scratch "contains the game folder $GAMEP" ;; esac
+# Only an empty dir, or one a previous record.sh run created (marker), is reused:
+# its kit/ and stages/ are deleted below.
+MARK=.kit_record_scratch
+if [ -d "$S" ] && [ ! -f "$S/$MARK" ] && [ -n "$(ls -A "$S")" ]; then
+    refuse_scratch "not empty and not created by record.sh (no $MARK)"
+fi
+mkdir -p "$S"; : > "$S/$MARK"
 K="$S/kit"; rm -rf "$K" "$S/stages"; mkdir -p "$K/gow2-recomp" "$K/ps3recomp"
 # Tracked files as they are in the working tree (uncommitted edits included, so a
 # change can be accepted before it is committed). A tracked file deleted but not yet
