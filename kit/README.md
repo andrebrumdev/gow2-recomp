@@ -15,6 +15,8 @@ your Mac from the files you provide.
   source comes with the kit (`third_party/cpython`, PSF licence) the first
   time, which adds a few minutes. It is only used by the build tools that are
   still being moved to C++.
+  The kit builds its own tool, `ps3kit`, in step 1; `KIT_TOOLS=py` falls back
+  to the Python tools.
 - Your game, **God of War II HD, NPUA80491 v01.00**:
   - the game folder (`PS3_GAME`, with `USRDIR/EBOOT.BIN` and
     `USRDIR/gow2.psarc`), from RPCS3's `dev_hdd0/game/NPUA80491` or from your

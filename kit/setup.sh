@@ -22,7 +22,8 @@
 #   6. builds the engine runtime and links ./g2play.
 # Re-running skips the steps whose output already verifies.
 #
-# Env: PS3_ENGINE_ROOT (default ../ps3recomp), PY (a Python >= 3.11), JOBS.
+# Env: PS3_ENGINE_ROOT (default ../ps3recomp), PY (a Python >= 3.11), JOBS,
+#      KIT_TOOLS (cpp = build and use ps3kit, the default; py = the Python tools).
 set -euo pipefail
 
 EBOOT_SHA=23cfd435be284adb83745c3e1bcad7b7660782470f71255cb74a1d2be8b1163b
@@ -78,6 +79,17 @@ export PY
 # apply_all_patches.sh has its own discovery that ignores PY; point it at the same one.
 export PS3_PATCH_PYTHON="$PY"
 echo "   clang $(clang --version | head -1 | sed 's/.*version //;s/ .*//'), cmake $(cmake --version | head -1 | awk '{print $3}'), $("$PY" --version)"
+KIT_TOOLS="${KIT_TOOLS:-cpp}"
+case "$KIT_TOOLS" in py|cpp) ;; *) die "KIT_TOOLS must be py or cpp (got '$KIT_TOOLS')" ;; esac
+export KIT_TOOLS
+if [ "$KIT_TOOLS" = cpp ]; then
+    mkdir -p "$HERE/.kit_tools"
+    { cmake -S "$ENGINE/tools/kit" -B "$HERE/.kit_tools/ps3kit" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      && cmake --build "$HERE/.kit_tools/ps3kit" --target ps3kit; } > "$HERE/.kit_tools/ps3kit.log" 2>&1 \
+        || die "nao compilou o ps3kit (log: .kit_tools/ps3kit.log). KIT_TOOLS=py usa as ferramentas Python."
+    PS3KIT="$HERE/.kit_tools/ps3kit/ps3kit"; export PS3KIT
+    echo "   ps3kit: $("$PS3KIT" --version)"
+fi
 
 # ---- 2. game files ----------------------------------------------------------
 say "2/6 arquivos do jogo"
@@ -125,7 +137,11 @@ else
         case "$lc" in *.m2v|*.wav) src="/_movies/$lc" ;; *) src="/wad/$lc" ;; esac
         [ -f "$HERE/movie_cache/$name" ] && (cd "$HERE/movie_cache" && grep " $name\$" "$KIT/movie_cache.sha256" | shasum -a 256 -c - >/dev/null 2>&1) && continue
         echo "   $src"
-        "$PY" "$ENGINE/tools/psarc_extract.py" "$GAME_IN/USRDIR/gow2.psarc" "$src" "$HERE/movie_cache/$name" >/dev/null
+        if [ -n "${PS3KIT:-}" ]; then
+            "$PS3KIT" psarc-extract "$GAME_IN/USRDIR/gow2.psarc" "$src" "$HERE/movie_cache/$name" >/dev/null
+        else
+            "$PY" "$ENGINE/tools/psarc_extract.py" "$GAME_IN/USRDIR/gow2.psarc" "$src" "$HERE/movie_cache/$name" >/dev/null
+        fi
     done < "$KIT/movie_cache.sha256"
     (cd "$HERE/movie_cache" && shasum -a 256 -c "$KIT/movie_cache.sha256" >/dev/null) \
         || die "movie_cache nao confere com kit/movie_cache.sha256 (psarc diferente?)"

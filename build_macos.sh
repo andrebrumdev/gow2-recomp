@@ -460,9 +460,13 @@ mkdir -p "$LIFT/gen"
 # saltar o ficheiro tambem -- senao declara simbolos que nao existem na .a.
 LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
        | grep -vx 'sceNpCommerce')
-# shellcheck disable=SC2086
-"$PYBIN" "$PS3/tools/gen_hle_nids.py" \
-    --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
+if [ -n "${PS3KIT:-}" ] && [ -x "$PS3KIT" ]; then
+    # shellcheck disable=SC2086
+    "$PS3KIT" hle-nids --root "$PS3" --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
+else
+    # shellcheck disable=SC2086
+    "$PYBIN" "$PS3/tools/gen_hle_nids.py" --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
+fi
 stage_capture hle_nids "$LIFT/gen" ppu_hle_nids.cpp
 clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
 

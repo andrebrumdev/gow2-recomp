@@ -25,4 +25,9 @@ t_true "make_release ships the 4th pinned rev" has "$R/kit/make_release.sh" 'PIN
 t_false "make_spu_lifts never runs patch_spu6_extra_funcs.py directly (its LIFTER is the moving tools/)" has "$R/kit/make_spu_lifts.sh" '"$PY" "$SPU6P"'
 t_true "make_spu_lifts lifts spu6 through the helper" has "$R/kit/make_spu_lifts.sh" 'H spu6 "$W/img6.bin" "$B/spu6_v2"'
 t_true "the spu6 helper overrides LIFTER with the pinned T_HEAD" has "$R/kit/make_spu_lifts.sh" 'm.LIFTER = pathlib.Path(os.environ["T_HEAD"]) / "spu_lifter.py"'
+t_true "setup.sh builds ps3kit"               has "$R/kit/setup.sh" 'cmake -S "$ENGINE/tools/kit"'
+t_true "setup.sh psarc via ps3kit"            has "$R/kit/setup.sh" '"$PS3KIT" psarc-extract'
+t_true "make_spu_lifts images via ps3kit"     has "$R/kit/make_spu_lifts.sh" '"$PS3KIT" spu-images'
+t_true "build_macos NIDs via ps3kit"          has "$R/build_macos.sh" '"$PS3KIT" hle-nids'
+t_true "KIT_TOOLS validated"                  has "$R/kit/setup.sh" 'KIT_TOOLS must be py or cpp'
 t_done

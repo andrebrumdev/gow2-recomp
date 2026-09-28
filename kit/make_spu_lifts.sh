@@ -205,8 +205,12 @@ L() { local t=$1 o=$2; shift 2; "$PY" "$t/spu_lifter.py" "$@" -o "$o" > "$o.log"
       stage_capture spu_raw "$(dirname "$o")" "$(basename "$o")/spu_recomp.c" "$(basename "$o")/spu_recomp.h"; }
 
 echo "== SPU images from $EBOOT"
-"$PY" "$T_HEAD/extract_spu_images.py" "$EBOOT" -o "$W/extracted" > /dev/null
-H prep "$EBOOT" "$W/extracted"
+if [ -n "${PS3KIT:-}" ]; then
+    "$PS3KIT" spu-images "$EBOOT" "$W"
+else
+    "$PY" "$T_HEAD/extract_spu_images.py" "$EBOOT" -o "$W/extracted" > /dev/null
+    H prep "$EBOOT" "$W/extracted"
+fi
 stage_capture spu_images "$W" img0.bin img1.bin img2.bin img3.bin img4.bin img5.bin img6.bin
 
 # Manual function-pointer-only boundaries (gow2-recomp recomp_mid_v2/spu{0,1}_funcs.json: these are
