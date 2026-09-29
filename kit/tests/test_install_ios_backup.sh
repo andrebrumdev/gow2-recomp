@@ -104,6 +104,12 @@ run "$T/appsfail.log" FAKE_APPS_RC=1; t_eq 1 $? "app list fails -> rc 1"
 t_false "app list fails -> no app install" grep -q 'install app' "$T/appsfail.log"
 run "$T/appsbad.log" FAKE_APPS_JSON='{"info":{"outcome":"failed"}}'; t_eq 1 $? "app list without result.apps -> rc 1"
 t_false "app list without result.apps -> no app install" grep -q 'install app' "$T/appsbad.log"
+# Codex re-review CRITICAL (Task 7): devicectl can exit 0 and still write a failed outcome;
+# an empty array under a failed outcome is not "not installed" / "no save".
+run "$T/appsfailed0.log" FAKE_APPS_JSON='{"info":{"outcome":"failed"},"result":{"apps":[]}}'; t_eq 1 $? "app list outcome failed + [] -> rc 1"
+t_false "app list outcome failed -> no app install" grep -q 'install app' "$T/appsfailed0.log"
+run "$T/filesfailed0.log" FAKE_LISTING_JSON='{"info":{"outcome":"failed"},"result":{"files":[]}}'; t_eq 1 $? "file listing outcome failed + [] -> rc 1"
+t_false "file listing outcome failed -> no app install" grep -q 'install app' "$T/filesfailed0.log"
 t_true "reinstall -> apps listed before the files" test "$(line_of 'info apps' "$T/ok.log")" -lt "$(line_of 'info files' "$T/ok.log")"
 
 run "$T/skip.log" GOW2_IOS_SAVES_BACKED_UP=1; t_eq 0 $? "caller already backed up -> install"

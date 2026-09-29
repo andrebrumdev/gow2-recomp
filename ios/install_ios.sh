@@ -37,7 +37,12 @@ if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
         echo "could not list the apps on the phone: nothing installed." >&2
         exit 1
     fi
-    NAPPS="$(plutil -extract result.apps raw -o - "$AJ" 2>/dev/null || true)"
+    # devicectl can exit 0 and still write a failed outcome (Codex re-review CRITICAL):
+    # an empty array is only believed under outcome "success".
+    NAPPS=""
+    if [ "$(plutil -extract info.outcome raw -o - "$AJ" 2>/dev/null || true)" = success ]; then
+        NAPPS="$(plutil -extract result.apps raw -o - "$AJ" 2>/dev/null || true)"
+    fi
     case "$NAPPS" in
         ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone app list: nothing installed." >&2; exit 1 ;;
     esac
@@ -67,6 +72,7 @@ elif [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
     # refuses the install instead of being read as "nothing to keep".
     : > "$LISTING"
     NFILES="$(plutil -extract result.files raw -o - "$LJ" 2>/dev/null || true)"
+    [ "$(plutil -extract info.outcome raw -o - "$LJ" 2>/dev/null || true)" = success ] || NFILES=bad
     case "$NFILES" in
         ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone file listing: nothing installed." >&2; exit 1 ;;
     esac
