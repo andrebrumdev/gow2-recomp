@@ -132,6 +132,14 @@ else
     case "$NFILES" in
         ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone file listing: nothing installed." >&2; exit 1 ;;
     esac
+    # One safe, normalised relative path per listed save: no control characters (the
+    # listing is TSV, read back line by line), no leading '/', no '.', '..' or empty
+    # component. rc 0 = unsafe.
+    unsafe_rel() {
+        case "$1" in ''|/*|*//*|*/|.|..|./*|../*|*/.|*/..|*/./*|*/../*) return 0 ;; esac
+        [[ "$1" == *[[:cntrl:]]* ]] && return 0
+        return 1
+    }
     pb() { /usr/libexec/PlistBuddy -c "Print :result:files:$1" "$LP" 2>/dev/null; }
     i=0
     while [ "$i" -lt "$NFILES" ]; do
@@ -145,6 +153,8 @@ else
                     case "$size" in
                         ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable entry $rel in the phone file listing (no size): nothing installed." >&2; exit 1 ;;
                     esac
+                    unsafe_rel "${rel#savedata/}" \
+                        && { rm -rf "$LT"; echo "unsafe path in the phone file listing ($(printf '%q' "$rel")): nothing installed." >&2; exit 1; }
                     printf '%s\t%s\n' "${rel#savedata/}" "$size" >> "$LISTING"
                 fi
                 ;;

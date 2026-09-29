@@ -99,6 +99,26 @@ for c in nopath nosize; do
     t_true "$c entry -> says why" grep -q 'unreadable entry' "$T/$c.log.out"
 done
 
+# Codex re-review HIGH/MEDIUM (6fdd8c1): a listed save path must be one safe, normalised
+# relative path -- a tab or newline would split the TSV the checks read back, and '.',
+# '..', empty components or a leading '/' would name something other than what was listed.
+for c in tab nl dotdot dot empty abs; do
+    rm -rf "$T/bk"
+    case $c in
+        tab)    rp='savedata/BCUS98229_GOW2/A\tB' ;;      # JSON escape -> a real TAB
+        nl)     rp='savedata/BCUS98229_GOW2/A\nB' ;;      # JSON escape -> a real newline
+        dotdot) rp=savedata/BCUS98229_GOW2/../../x ;;
+        dot)    rp=savedata/./BCUS98229_GOW2/SYS.BIN ;;
+        empty)  rp=savedata/BCUS98229_GOW2//SYS.BIN ;;
+        abs)    rp=savedata//etc/x ;;
+    esac
+    bad="{\"relativePath\":\"$rp\",\"metadata\":{\"size\":1},\"resources\":{\"isDirectory\":false}}"
+    run "$T/unsafe_$c.log" FAKE_LISTING_JSON="{\"info\":{\"outcome\":\"success\"},\"result\":{\"files\":[$bad,{\"relativePath\":\"savedata/BCUS98229_GOW2/SYS.BIN\",\"metadata\":{\"size\":5},\"resources\":{\"isDirectory\":false}}]}}"
+    t_eq 1 $? "unsafe listed path ($c) -> rc 1"
+    t_false "unsafe listed path ($c) -> no app install" grep -q "install app" "$T/unsafe_$c.log"
+    t_true "unsafe listed path ($c) -> says why" grep -q "unsafe path" "$T/unsafe_$c.log.out"
+done
+
 # Codex review IMPORTANT (Task 7): first install of a bundle (the phone's own app list does
 # not have it) needs no backup and no override; a failed app listing is still a refusal.
 rm -rf "$T/bk"
