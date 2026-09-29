@@ -68,7 +68,7 @@ func runBackendChecks() async {
     let deps = IOSDeps(transport: phone, scripts: scripts,
                        readProfile: { _ in profilePlist(expires: "2026-10-01T14:19:03Z") },
                        xcodePrefs: { Data(fxXcodePrefs.utf8) }, macProcesses: { "/bin/zsh\n" },
-                       facts: facts, home: home, now: { now })
+                       facts: facts, home: home, now: { now }, prereqs: { _, _ in [] })
     let g = FakeGame()
     let ios = IOSBackend(repo: repo, game: g, deps: deps)
 
@@ -285,5 +285,16 @@ func runBackendChecks() async {
     check(IOSText.date(Date(timeIntervalSince1970: 1790372701), timeZone: TimeZone(identifier: "UTC")!) == "25/09 21:45", "date")
     check(IOSText.copying(PushProgress(file: "USRDIR/gow2.psarc", index: 2, count: 3, doneBytes: 1_200_000_000, totalBytes: 6_990_000_000))
           == "Copiando USRDIR/gow2.psarc (2 de 3) — 1,2 GB de 7,0 GB", "copy progress text")
+    // A missing prerequisite: install and re-sign refuse before any script, with its pt-BR text.
+    var noXcode = deps
+    noXcode.prereqs = { _, _ in [Prereq(id: "xcode", ok: false, message: "Falta o Xcode completo (teste).")] }
+    let nx = IOSBackend(repo: repo, game: g, deps: noXcode)
+    let cN = scripts.calls.count
+    await nx.install()
+    check(nx.error == "Falta o Xcode completo (teste)." && scripts.calls.count == cN, "install refuses with a missing prerequisite: \(nx.error ?? "")")
+    await nx.resign()
+    check(nx.error == "Falta o Xcode completo (teste)." && scripts.calls.count == cN, "resign refuses with a missing prerequisite: \(nx.error ?? "")")
+    await nx.refresh()
+    check(nx.prereqsMissing && nx.prereqs.map(\.id) == ["xcode"], "prerequisites published on refresh: \(nx.prereqs)")
     try? FileManager.default.removeItem(at: root)
 }

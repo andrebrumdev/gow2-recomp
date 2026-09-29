@@ -25,6 +25,8 @@ struct IOSDeps {
     var facts: DeviceFacts
     var home: URL
     var now: () -> Date
+    /// The iPhone build's prerequisites for (repo, the ios scripts' environment).
+    var prereqs: (URL, [String: String]) -> [Prereq] = { IOSPrereqs.check(repo: $0, env: $1) }
 
     static func live(repo: URL) -> IOSDeps {
         let facts = DeviceFacts.bundled(repo: repo)
@@ -185,6 +187,8 @@ final class IOSBackend: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var lastResult: String?
     @Published private(set) var conflicts: [SaveConflict] = []
+    @Published private(set) var prereqs: [Prereq] = []
+    var prereqsMissing: Bool { prereqs.contains { !$0.ok } }
 
     let repo: URL
     let deps: IOSDeps
@@ -230,6 +234,7 @@ final class IOSBackend: ObservableObject {
     }
 
     private func refreshDevice() async {
+        refreshPrereqs()
         let env = LocalEnvFile.at(repo: repo).read()
         if team.isEmpty { team = env["GOW2_IOS_TEAM"] ?? "" }
         if bundle.isEmpty { bundle = env["GOW2_IOS_BUNDLE_ID"] ?? "" }
@@ -284,6 +289,18 @@ final class IOSBackend: ObservableObject {
             return IOSPolicy.appRunning(executables: try t.processes(udid), appURL: app.url)
         }
         if running { throw IOSFlowError.phoneAppRunning }
+    }
+
+    // MARK: prerequisites
+
+    private func refreshPrereqs() {
+        prereqs = deps.prereqs(repo, IOSScripts.environment(ProcessInfo.processInfo.environment, repo: repo))
+    }
+
+    /// Instalar and Reassinar need Xcode, xcodegen, a Python and the Mac build.
+    private func requirePrereqs() throws {
+        refreshPrereqs()
+        if let p = prereqs.first(where: { !$0.ok }) { throw IOSFlowError.notReady(p.message) }
     }
 
     // MARK: scripts
@@ -356,6 +373,7 @@ final class IOSBackend: ObservableObject {
         lastResult = nil
         defer { busy = nil; progress = ""; canCancel = false }
         do {
+            try requirePrereqs()
             let d = try await readyDevice()
             try await refuseIfGameRunning(d)
             try writeLocalEnv(d)
@@ -405,6 +423,7 @@ final class IOSBackend: ObservableObject {
         lastResult = nil
         defer { busy = nil; progress = "" }
         do {
+            try requirePrereqs()
             let d = try await readyDevice()
             guard installedBundle != nil, installedBundle == bundle else { throw IOSFlowError.notInstalled }
             try await refuseIfGameRunning(d)
