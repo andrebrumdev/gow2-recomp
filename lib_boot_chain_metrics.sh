@@ -28,7 +28,7 @@ arm_menu_fast_recipe() {
   export PS3_AUTO_LOAD_RUN=1
   export PS3_PAD_AUTOSTART=1
   export PS3_TYPE15_UNSTICK=1
-  export PS3_SPU1=1 PS3_SPU4=1 PS3_SPU5=1
+  export PS3_SPU4=1 PS3_SPU5=1
   export PS3_RSX_BACKEND=metal
   export PS3_FULLSCREEN=0
   export PS3_PERF_FSM=1

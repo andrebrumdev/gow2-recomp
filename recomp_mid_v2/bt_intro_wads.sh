@@ -34,6 +34,7 @@ export PS3_VDEC_FORCE_SEQDONE_MS=8000
 # se aplica aqui.
 export PS3_VDEC_ASYNC=1
 # spu1 off no baseline Task 1 (mede WAD open only; Task 4 liga depois)
+# NOTA 2026-09-29: no macOS/iOS o spu1 e' sempre registado; este A/B so' vale no Windows.
 unset PS3_SPU1 PS3_SPU_ALL
 # nunca setar PS3_NOMOVIES aqui — conflita com o movie path do recipe
 unset PS3_NOMOVIES

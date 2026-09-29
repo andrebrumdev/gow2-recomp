@@ -12,9 +12,10 @@ typedef struct gow2_spu_config {
     unsigned char spu0, spu1, spu2, spu3, spu4, spu5, spu6;   /* 1 = register the workload image */
 } gow2_spu_config;
 
-/* The historical switches: spu0 on unless PS3_SPU0 starts with '0'; spu1..spu5
- * on when PS3_SPU<n> or PS3_SPU_ALL is PRESENT (any value); spu6 is always on
- * (the field stays so callers/tests can inspect the config). */
+/* The historical switches: spu0 on unless PS3_SPU0 starts with '0'; spu2..spu5
+ * on when PS3_SPU<n> or PS3_SPU_ALL is PRESENT (any value); spu6 is always on,
+ * and so is spu1 on macOS/iOS (other hosts keep its PS3_SPU<n>/PS3_SPU_ALL
+ * opt-in). The fields stay so callers/tests can inspect the config. */
 void gow2_spu_config_from_env(gow2_spu_config* cfg);
 
 /* Registers the lifted functions of every image and the enabled workload

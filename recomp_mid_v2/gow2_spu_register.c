@@ -40,7 +40,11 @@ void gow2_spu_config_from_env(gow2_spu_config* c)
     const char* e0 = getenv("PS3_SPU0");
     const int all = getenv("PS3_SPU_ALL") != NULL;
     c->spu0 = !(e0 && e0[0] == '0');
+#if defined(__APPLE__)
+    c->spu1 = 1;   /* dearch / EDGE-zlib: HIT, MISS=0 (84fd9db); 0x6074 fixed (72ce581, 305 s, 0 ICALL-BAD) */
+#else
     c->spu1 = all || getenv("PS3_SPU1") != NULL;
+#endif
     c->spu2 = all || getenv("PS3_SPU2") != NULL;
     c->spu3 = all || getenv("PS3_SPU3") != NULL;
     c->spu4 = all || getenv("PS3_SPU4") != NULL;
@@ -71,18 +75,10 @@ void gow2_register_spu_workloads(const gow2_spu_config* cfg)
     /* PS3_SPU0=0 (A/B, opt-in): leave spu0 unregistered (its jobs MISS). */
     if (cfg->spu0)
         spu_workload_register_image(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0", 1);
-    /* spu1 (dearch / EDGE-zlib) VERIFICADO no caminho intro->WAD (Task 4 do
-     * plano 2): sob PS3_SPU1=1 o dispatch vai de MISS constante (~332/120s) a
-     * HIT, e o job liftado RODA ATE O FIM e retorna limpo ("[SPUJOB] spu job
-     * returned cleanly") em runs repetidas, SEM SPUCRASH e sem matar o host
-     * (SEH do plano 1 protege). No boot ele faz DMA real de dearch: varre uma
-     * tabela de descritores de 224 B (GET/PUT ~350 cada) e empurra na fila
-     * lock-free (LFQPUSHBT). PORE'M o inflate do CONTEUDO dos WADs ainda NAO
-     * foi exercido: R_LglScA/R_PermA abrem mas o jogo nao faz stream/dearchive
-     * dos 20 MB do R_PermA dentro da janela da intro -- os HITs pos-WAD nao
-     * geram DMA em massa. O gargalo agora e' UPSTREAM do spu1 (loader de asset
-     * nao avanca ao consumo do WAD), nao o spu1 em si. Fica opt-in (nao default)
-     * ate o inflate de membro ser observavel. Toggle: PS3_SPU1 ou PS3_SPU_ALL. */
+    /* spu1 (dearch / EDGE-zlib): always registered on macOS/iOS -- HIT with
+     * MISS=0 in-boot (84fd9db), the 0x6074 write-into-PPU-code defect fixed in
+     * 72ce581 (305 s, 0 ICALL-BAD). Other hosts keep the PS3_SPU1 / PS3_SPU_ALL
+     * opt-in. */
     if (cfg->spu1)
         spu_workload_register_image(0x2A5C4E67A14505B8ull, spu1_spu_func_00003050, "gow2_spu1", 2);
     /* spu2/3 stay opt-in: their lifted entries may still fault mid-run. O host

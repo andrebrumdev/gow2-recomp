@@ -28,7 +28,6 @@ export PS3_BOOT_LOGO_MS="${PS3_BOOT_LOGO_MS:-300}"
 export PS3_AUTO_LOAD_RUN=1
 export PS3_PAD_AUTOSTART=1
 export PS3_TYPE15_UNSTICK="${PS3_TYPE15_UNSTICK:-1}"
-export PS3_SPU1=1
 # Frontend schedul workloads (optional; can fault — isolated)
 export PS3_SPU4="${PS3_SPU4:-1}"
 export PS3_SPU5="${PS3_SPU5:-1}"

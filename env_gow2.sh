@@ -62,12 +62,6 @@ export PS3_MOVIE_CACHE
 : "${PS3_MUTE:=1}";            export PS3_MUTE
 [ -n "${PS3_MUTE:-}" ] || unset PS3_MUTE
 
-# SPU1 = dearch / EDGE-zlib (fp 0x2A5C4E67A14505B8). Hit limpo in-boot
-# (2026-07-22: HIT>=1, MISS=0, SPUJOB clean). Necessario para consumo
-# real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
-# texturas WAD/UI nao avanca. spu2/3 continuam opt-in (PS3_SPU2/3).
-: "${PS3_SPU1:=1}";             export PS3_SPU1
-
 # Backend RSX (M10): no Darwin, default Metal com janela. Headless usa
 # PS3_NO_RSX=1 e nao precisa de backend. Respeita valor ja definido.
 if [ -z "${PS3_NO_RSX:-}" ]; then
