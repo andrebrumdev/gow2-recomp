@@ -80,8 +80,6 @@ fi
 : "${PS3_FIOS_STICKY_OWNER:=1}";   export PS3_FIOS_STICKY_OWNER
 : "${PS3_MOVIE_DONE_MS:=3000}";    export PS3_MOVIE_DONE_MS
 
-# E466: sem isto os draws caem num só RT (texturas amassadas, sem 3D).
-: "${PS3_METAL_PER_DRAW_RT:=1}";   export PS3_METAL_PER_DRAW_RT
 # Host present: MetalFX spatial 720p→Retina, in-encoder clears, GPU Morton,
 # vsync/ProMotion. HDR EDR off: estourava o manto do Colosso em ciano.
 # PS3_METAL_HDR=1 religa. PS3_METALFX=0 desliga o MetalFX. VSync NAO e' forcado aqui: sem PS3_METAL_VSYNC do chamador
