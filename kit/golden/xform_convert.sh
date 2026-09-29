@@ -17,9 +17,10 @@
 # fragment (any length) of every draft with its status in the patch script. rc 0 only when
 # the audit passes (XFORM-CONVERT FAIL, rc 1, otherwise); rc 2 on a refusal. Residual
 # patches' own output goes to <scratch>/residual.log, drafts only to their file (--out).
-# Env: PS3KIT (required), PY (default kit_pick_python), KIT_GOLDEN (test-only).
+# Env: PS3KIT (required), PY (default kit_pick_python), KIT_GOLDEN (test-only),
+# XFORM_DRAFT_FLAGS (extra ps3kit xform-draft flags, e.g. "--collapse"; default none).
 set -uo pipefail
-usage() { sed -n '2,21p' "$0"; exit 2; }
+usage() { sed -n '2,22p' "$0"; exit 2; }
 [ $# -ge 3 ] || usage
 HERE="$(cd "$(dirname "$0")/../.." && pwd)"
 RAW=$1; SARG=$2; shift 2
@@ -68,7 +69,7 @@ while IFS= read -r line <&3; do
     c="$(git -C "$HERE" log -1 --format=%h -- "recomp_mid_v2/$n" 2>/dev/null)"
     [ -n "$c" ] || { echo "WARN: recomp_mid_v2/$n has no commit: authored-in gets 'uncommitted'" >&2; c=uncommitted; }
     d="$S/drafts/${n%.py}.xform"
-    "$PS3KIT" xform-draft --name "$n" --authored-in "recomp_mid_v2/$n@$c" --before "$S/before/$n" --diff-dir "$S/diffs/$n" --out "$d" \
+    "$PS3KIT" xform-draft ${XFORM_DRAFT_FLAGS:-} --name "$n" --authored-in "recomp_mid_v2/$n@$c" --before "$S/before/$n" --diff-dir "$S/diffs/$n" --out "$d" \
         || refuse "xform-draft failed for $n"
     ops=$(grep -c '^op ' "$d")
     [ "$ops" -gt 0 ] || refuse "$n changed nothing on the pinned lift but ORDER does not mark it noop -- ORDER and the golden hash chain disagree (re-run kit/golden/xform_order.sh)"
