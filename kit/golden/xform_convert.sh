@@ -14,10 +14,12 @@
 # other runs as residual Python -- that state is kept as before/<name>/, the patch runs
 # alone, diffs/<name>/<file>.diff = diff -U0, drafts/<stem>.xform = ps3kit xform-draft.
 # Then audit.txt = ps3kit xform-audit drafts/ <raw>, and fragments.tsv = every authored
-# fragment (any length) of every draft with its status in the patch script.
+# fragment (any length) of every draft with its status in the patch script. rc 0 only when
+# the audit passes (XFORM-CONVERT FAIL, rc 1, otherwise); rc 2 on a refusal. Residual
+# patches' own output goes to <scratch>/residual.log, drafts only to their file (--out).
 # Env: PS3KIT (required), PY (default kit_pick_python), KIT_GOLDEN (test-only).
 set -uo pipefail
-usage() { sed -n '2,19p' "$0"; exit 2; }
+usage() { sed -n '2,21p' "$0"; exit 2; }
 [ $# -ge 3 ] || usage
 HERE="$(cd "$(dirname "$0")/../.." && pwd)"
 RAW=$1; SARG=$2; shift 2
@@ -35,7 +37,7 @@ kit_check_raw "$RAW" "$GOLDEN" || refuse "$RAW is not the pinned raw lift (ppu_r
 S="$(kit_scratch_dir "$SARG" .kit_xform_scratch)" || exit 2
 PY="${PY:-$(kit_pick_python "$HERE")}" || refuse "no Python >= 3.11 for the residual patches"
 export PY
-rm -rf "$S/work" "$S/seg" "$S/before" "$S/diffs" "$S/drafts" "$S/convert.log" "$S/pending" "$S/one"
+rm -rf "$S/work" "$S/seg" "$S/before" "$S/diffs" "$S/drafts" "$S/convert.log" "$S/pending" "$S/one" "$S/residual.log"
 mkdir -p "$S/work" "$S/seg" "$S/before" "$S/diffs" "$S/drafts"
 for f in $KIT_PPU_FILES; do cp "$RAW/$f" "$S/work/$f"; done
 run_seg() { # run_seg <with_xforms 0|1> <file of ORDER lines>: apply these entries to work/
@@ -48,7 +50,7 @@ run_seg() { # run_seg <with_xforms 0|1> <file of ORDER lines>: apply these entri
             if [ -f "$X/${l%.py}.xform" ]; then cp "$X/${l%.py}.xform" "$S/seg/"; fi
         done < "$2"
     fi
-    "$PS3KIT" apply-xforms "$S/seg" "$S/work" --patch-dir "$HERE/recomp_mid_v2" >> "$S/convert.log" 2>&1 \
+    KIT_RESIDUAL_LOG="$S/residual.log" "$PS3KIT" apply-xforms "$S/seg" "$S/work" --patch-dir "$HERE/recomp_mid_v2" >> "$S/convert.log" 2>&1 \
         || refuse "apply-xforms failed (log $S/convert.log)"
 }
 is_target() { local p; for p in $TARGETS; do [ "$p" = "$1" ] && return 0; done; return 1; }
@@ -66,7 +68,7 @@ while IFS= read -r line <&3; do
     c="$(git -C "$HERE" log -1 --format=%h -- "recomp_mid_v2/$n" 2>/dev/null)"
     [ -n "$c" ] || { echo "WARN: recomp_mid_v2/$n has no commit: authored-in gets 'uncommitted'" >&2; c=uncommitted; }
     d="$S/drafts/${n%.py}.xform"
-    "$PS3KIT" xform-draft --name "$n" --authored-in "recomp_mid_v2/$n@$c" --before "$S/before/$n" --diff-dir "$S/diffs/$n" > "$d" \
+    "$PS3KIT" xform-draft --name "$n" --authored-in "recomp_mid_v2/$n@$c" --before "$S/before/$n" --diff-dir "$S/diffs/$n" --out "$d" \
         || refuse "xform-draft failed for $n"
     ops=$(grep -c '^op ' "$d")
     [ "$ops" -gt 0 ] || refuse "$n changed nothing on the pinned lift but ORDER does not mark it noop -- ORDER and the golden hash chain disagree (re-run kit/golden/xform_order.sh)"
@@ -74,7 +76,7 @@ while IFS= read -r line <&3; do
     left=$((left - 1)); [ "$left" -gt 0 ] || break
 done 3< "$X/ORDER"
 [ -f "$X/AUDIT_ALLOW.tsv" ] && cp "$X/AUDIT_ALLOW.tsv" "$S/drafts/"
-"$PS3KIT" xform-audit "$S/drafts" "$RAW" > "$S/audit.txt" 2>&1
+"$PS3KIT" xform-audit "$S/drafts" "$RAW" > "$S/audit.txt" 2>&1; arc=$?
 tail -1 "$S/audit.txt"
 : > "$S/fragments.tsv"
 for d in "$S"/drafts/*.xform; do
@@ -83,4 +85,5 @@ for d in "$S"/drafts/*.xform; do
     kit_xform_fragments "$d" "$HERE/recomp_mid_v2/${b%.xform}.py" >> "$S/fragments.tsv"
 done
 echo "   fragments: $(wc -l < "$S/fragments.tsv" | tr -d ' ') (not-in-script $(grep -c '	NOT-IN-SCRIPT	' "$S/fragments.tsv"), positional $(grep -c '	POSITIONAL	' "$S/fragments.tsv")) -> $S/fragments.tsv -- review EVERY row (gate)"
+if [ "$arc" != 0 ]; then echo "XFORM-CONVERT FAIL (xform-audit rc=$arc, $S/audit.txt): no draft may be committed"; exit 1; fi
 exit 0

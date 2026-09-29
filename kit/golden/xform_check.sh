@@ -26,7 +26,8 @@ PY="${PY:-$(kit_pick_python "$HERE")}" || refuse "no Python >= 3.11 for the resi
 export PY
 rm -rf "$S/lift" "$S/stages"; mkdir -p "$S/lift"
 for f in $KIT_PPU_FILES; do cp "$RAW/$f" "$S/lift/$f"; done
-KIT_STAGE_DIR="$S/stages" "$PS3KIT" apply-xforms "$X" "$S/lift" --patch-dir "$HERE/recomp_mid_v2" > "$S/apply.log" 2>&1
+rm -f "$S/residual.log"   # residual patches' own output (may quote the lift): scratch only
+KIT_RESIDUAL_LOG="$S/residual.log" KIT_STAGE_DIR="$S/stages" "$PS3KIT" apply-xforms "$X" "$S/lift" --patch-dir "$HERE/recomp_mid_v2" > "$S/apply.log" 2>&1
 rc=$?
 if [ "$rc" != 0 ]; then
     tail -5 "$S/apply.log" >&2

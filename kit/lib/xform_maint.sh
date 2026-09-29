@@ -14,6 +14,9 @@ kit_scratch_dir() {
     if git -C "$a" rev-parse --show-toplevel >/dev/null 2>&1; then
         echo "scratch $1: inside a git work tree -- refused (lifted code)" >&2; return 2
     fi
+    if [ -L "$s/$mark" ] || { [ -e "$s/$mark" ] && [ ! -f "$s/$mark" ]; }; then
+        echo "scratch $1: marker $mark is not a regular file (symlink?) -- refused" >&2; return 2
+    fi
     if [ -d "$s" ] && [ ! -f "$s/$mark" ] && [ -n "$(ls -A "$s")" ]; then
         echo "scratch $1: not empty and not created by this tool (no $mark) -- refused" >&2; return 2
     fi
@@ -21,6 +24,9 @@ kit_scratch_dir() {
     p="$(cd "$s" && pwd -P)" || return 2
     if git -C "$p" rev-parse --show-toplevel >/dev/null 2>&1; then
         echo "scratch $1: inside a git work tree -- refused (lifted code)" >&2; return 2
+    fi
+    if [ -L "$p/$mark" ] || { [ -e "$p/$mark" ] && [ ! -f "$p/$mark" ]; }; then
+        echo "scratch $1: marker $mark is not a regular file (symlink?) -- refused" >&2; return 2
     fi
     : > "$p/$mark"
     printf '%s\n' "$p"

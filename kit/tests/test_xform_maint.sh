@@ -33,8 +33,12 @@ mkdir -p "$T/bin"; cat > "$T/bin/ps3kit" <<'FAKE'
 #!/bin/bash
 echo "$*" >> "$FAKE_LOG"
 case "$1" in
-  apply-xforms) [ -n "${KIT_STAGE_DIR:-}" ] && { mkdir -p "$KIT_STAGE_DIR"; cat "$FAKE_RECORDS" >> "$KIT_STAGE_DIR/stages.tsv"; }
+  apply-xforms) echo "RL=${KIT_RESIDUAL_LOG:-}" >> "$FAKE_LOG"
+                [ -n "${KIT_STAGE_DIR:-}" ] && { mkdir -p "$KIT_STAGE_DIR"; cat "$FAKE_RECORDS" >> "$KIT_STAGE_DIR/stages.tsv"; }
                 echo "RESIDUAL patch_a.py rc=0"; echo "NOOP patch_n.py"; echo "XFORM patch_b.py"; exit "${FAKE_RC:-0}" ;;
+  xform-draft)  o=""; while [ $# -gt 0 ]; do [ "$1" = --out ] && o=$2; shift; done
+                [ -n "$o" ] && printf 'ps3kit-xform 1\nxform patch_b.py\nop insert-after\n' > "$o"; exit 0 ;;
+  xform-audit)  if [ "${FAKE_AUDIT_RC:-0}" = 0 ]; then echo "XFORM-AUDIT OK"; else echo "XFORM-AUDIT FAIL"; fi; exit "${FAKE_AUDIT_RC:-0}" ;;
   *) exit 0 ;;
 esac
 FAKE
@@ -52,6 +56,10 @@ git init -q "$T/gitwt"; SC="$T/gitwt/scr"; chk PS3KIT="$T/bin/ps3kit"; t_eq 2 $?
 t_true "  says why" grep -q 'inside a git work tree' "$T/out"
 t_true "  nothing created there" test ! -e "$T/gitwt/scr"
 mkdir -p "$T/busy"; : > "$T/busy/x"; SC="$T/busy"; chk PS3KIT="$T/bin/ps3kit"; t_eq 2 $? "non-empty scratch without marker: rc 2"
+printf 'keep\n' > "$T/victim"; mkdir -p "$T/lnk"; ln -s "$T/victim" "$T/lnk/.kit_xform_scratch"
+SC="$T/lnk"; chk PS3KIT="$T/bin/ps3kit"; t_eq 2 $? "a marker that is a symlink: rc 2"
+t_true "  says why" grep -q 'marker .* is not a regular file' "$T/out"
+t_eq keep "$(cat "$T/victim")" "  the symlink's target is never truncated"
 cp "$RAW/ppu_recomp_000.cpp" "$T/000.keep"; printf '// changed\n' >> "$RAW/ppu_recomp_000.cpp"
 SC="$T/scr1"; chk PS3KIT="$T/bin/ps3kit"; t_eq 2 $? "raw lift that is not the pinned one: rc 2"
 t_true "  says why" grep -q 'not the pinned raw lift' "$T/out"
@@ -65,6 +73,7 @@ t_true "  counts per kind" grep -q '^   xforms=1 noop=1 residual=1$' "$T/out"
 t_true "  apply-xforms ran on the scratch copy with the repo's patch dir" \
     grep -qF "apply-xforms $R/kit/ppu_xforms $(cd "$T/scr1" && pwd -P)/lift --patch-dir $R/recomp_mid_v2" "$T/fake.log"
 t_eq "$(sha "$T/000.keep")" "$(sha "$RAW/ppu_recomp_000.cpp")" "  the raw lift is never written"
+t_true "  residual output goes to a log in the scratch, never to the terminal" grep -qxF "RL=$(cd "$T/scr1" && pwd -P)/residual.log" "$T/fake.log"
 sed '$ s/[0-9a-f]\{64\}$/0000000000000000000000000000000000000000000000000000000000000000/' "$T/records.tsv" > "$T/records_bad.tsv"
 REC="$T/records_bad.tsv" chk PS3KIT="$T/bin/ps3kit"; t_eq 1 $? "one different hash: rc 1"
 t_true "  names the record" grep -q '^DIFF      ppu_after/patch_b.py	ppu_recomp_006.cpp$' "$T/out"
@@ -82,6 +91,15 @@ t_eq 2 $? "a patch that is not in ORDER: rc 2"
 env KIT_GOLDEN="$G" PY=/bin/bash PS3KIT="$T/bin/ps3kit" bash "$R/kit/golden/xform_convert.sh" "$RAW" "$SC" patch_n.py > "$T/out" 2>&1
 t_eq 2 $? "a noop target: rc 2 (nothing to draft)"
 t_true "  says why" grep -q "is 'noop' in ORDER" "$T/out"
+
+echo "== xform_convert.sh: the audit verdict is the converter's verdict"
+SC="$T/scr5"; : > "$T/fake.log"; cvt PS3KIT="$T/bin/ps3kit" FAKE_LOG="$T/fake.log"; t_eq 0 $? "audit OK: rc 0"
+t_true "  the draft goes to --out in the scratch, never through stdout" \
+    grep -qF -- "--out $(cd "$T/scr5" && pwd -P)/drafts/patch_b.xform" "$T/fake.log"
+t_true "  residual output of the replay goes to the scratch log" grep -qxF "RL=$(cd "$T/scr5" && pwd -P)/residual.log" "$T/fake.log"
+SC="$T/scr5"; cvt PS3KIT="$T/bin/ps3kit" FAKE_AUDIT_RC=1; t_eq 1 $? "audit FAIL: rc 1"
+t_true "  says so" grep -q '^XFORM-CONVERT FAIL (xform-audit rc=1' "$T/out"
+t_true "  the fragment list is still written for the review" test -f "$T/scr5/fragments.tsv"
 
 echo "== kit_xform_fragments: every fragment, any length, with its status"
 . "$R/kit/lib/xform_maint.sh"
