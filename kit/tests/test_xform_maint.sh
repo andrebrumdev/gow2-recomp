@@ -132,7 +132,7 @@ if [ -n "${PS3KIT:-}" ] && [ -x "$PS3KIT" ]; then
     /bin/bash "$R/recomp_mid_v2/patch_a.py" "$T/l4"; /bin/bash "$R/recomp_mid_v2/patch_b.py" "$T/l4"
     t_true "  xform result == residual result" cmp -s "$T/l3/ppu_recomp_000.cpp" "$T/l4/ppu_recomp_000.cpp"
     t_true "  apply-xforms skipped the noop entry too" test ! -e "$T/noop_ran"
-else
+else  # PS3KIT unset: the round trip is skipped
     # run_all.sh has no ps3kit; the task's acceptance (Step 4) and Task 10 run this file
     # with PS3KIT set and require this line to be ABSENT -- the fake alone proves nothing
     # about the applier.
