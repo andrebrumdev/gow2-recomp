@@ -39,11 +39,20 @@ done
 . "$HERE/kit/lib/cpython_src.sh"
 PYLINE="$(vendor_cpython_source "$HERE/kit/python.lock" "$R" "${KIT_CPYTHON_TARBALL:-}")" \
     || { echo "codigo do CPython falhou" >&2; exit 1; }
+# The iPhone build's two libraries, as pinned source (kit/lib/vendor_src.sh): SDL2 (zlib)
+# and FFmpeg (LGPL-2.1). KIT_SDL_TARBALL / KIT_FFMPEG_TARBALL skip the download.
+. "$HERE/kit/lib/vendor_src.sh"
+SDLLINE="$(vendor_source_tarball "$ENGINE/third_party/sdl2/sdl2.lock" "$R" "${KIT_SDL_TARBALL:-}")" \
+    || { echo "codigo do SDL2 falhou" >&2; exit 1; }
+FFLINE="$(vendor_source_tarball "$ENGINE/third_party/ffmpeg/ffmpeg.lock" "$R" "${KIT_FFMPEG_TARBALL:-}")" \
+    || { echo "codigo do FFmpeg falhou" >&2; exit 1; }
 {
     echo "gow2-recomp $(git -C "$HERE" rev-parse HEAD)"
     echo "ps3recomp   $(git -C "$ENGINE" rev-parse HEAD)"
     for rev in $PINNED; do echo "pinned      $(git -C "$ENGINE" rev-parse "$rev")"; done
     echo "$PYLINE"
+    echo "$SDLLINE"
+    echo "$FFLINE"
 } > "$R/VERSIONS.txt"
 cp "$HERE/kit/README.md" "$R/README.md"
 
