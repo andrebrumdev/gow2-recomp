@@ -77,3 +77,5 @@ God of War II HD. The engine (`ps3recomp`) is MIT-licensed. The iPhone build
 links FFmpeg's MPEG-2 decoder (libavcodec, LGPL-2.1-or-later), built from the
 unmodified FFmpeg 8.1.3 release on your Mac; its license is inside the app
 (`licenses/`) and the details are in the engine's `third_party/ffmpeg/README.md`.
+
+O APK para Android é compilado localmente a partir do seu próprio dump e instalado somente no seu próprio aparelho; ele nunca é distribuído. As bibliotecas do FFmpeg dentro do app continuam sob a LGPL-2.1 e podem ser copiadas, modificadas e substituídas.

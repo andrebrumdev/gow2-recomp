@@ -13,6 +13,8 @@ targets:
       - path: Sources
       - path: Generated/gow2.env
         buildPhase: resources
+      - path: Generated/Assets.xcassets
+        buildPhase: resources
     # xcodegen's `type: folder` sources resolve `path` relative to the spec
     # file and hardcode sourceTree=SOURCE_ROOT regardless of --project's
     # output dir (verified empirically: an absolute path is silently turned
@@ -46,6 +48,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(GOW2_IOS_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: $(GOW2_IOS_TEAM)
         CODE_SIGN_STYLE: Automatic
         # Absolute (via the xcconfig): the project is generated into $B/xcode,

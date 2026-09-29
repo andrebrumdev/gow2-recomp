@@ -20,6 +20,9 @@ printf '#!/bin/bash\ntouch "%s/GAME_BUILT"; exit 1\n' "$T" > "$W/build_macos.sh"
 printf '#!/bin/bash\ntouch "%s/RT_BUILT"; exit 1\n' "$T" > "$E/tools/ios/build_runtime_ios.sh"
 printf '#!/bin/bash\ntouch "%s/SDL_BUILT"; exit 1\n' "$T" > "$E/tools/ios/build_sdl2_ios.sh"
 printf '#!/bin/bash\ntouch "%s/FFMPEG_BUILT"; exit 1\n' "$T" > "$E/tools/ios/build_ffmpeg.sh"
+mkdir -p "$E/tools/icons"   # tools/icons/make_icons.sh stand-in: only the catalog layout build_ios.sh copies
+printf '#!/bin/bash\nmkdir -p "$1/ios/Assets.xcassets/AppIcon.appiconset"; echo "ICONS_OK $1 fallback"\n' > "$E/tools/icons/make_icons.sh"
+chmod +x "$E/tools/icons/make_icons.sh"
 printf '#!/bin/bash\nexit 0\n' > "$T/bin/xcodegen"
 printf '#!/bin/bash\necho "$@" > "%s/XCODEBUILD_ARGS"; exit 0\n' "$T" > "$T/bin/xcodebuild"
 chmod +x "$W/build_macos.sh" "$E"/tools/ios/*.sh "$T"/bin/*
@@ -54,6 +57,9 @@ OUT="$(PATH="$T/bin:$PATH" "$P/ios/build_ios.sh" --sign-only 2>&1)"; rc=$?
 for m in GAME_BUILT RT_BUILT SDL_BUILT FFMPEG_BUILT; do [ -e "$T/$m" ] && F "--sign-only ran the $m step"; done
 [ -f "$P/ios/Generated/licenses/FFmpeg-COPYING.LGPLv2.1.txt" ] || F "--sign-only must put FFmpeg's license into Generated/licenses"
 grep -q "ffmpeg-ios/lib/libavcodec.a" "$P/ios/Generated/Gow2.xcconfig" || F "the app must link libavcodec.a"
+[ -d "$P/ios/Generated/Assets.xcassets/AppIcon.appiconset" ] || F "--sign-only must put the generated asset catalog (AppIcon) into Generated/Assets.xcassets"
+grep -q "Generated/Assets.xcassets" "$PORT/ios/project.yml" || F "project.yml must include Generated/Assets.xcassets as a resource"
+grep -q "ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon" "$PORT/ios/project.yml" || F "project.yml must name the AppIcon set"
 grep -q -- "-allowProvisioningUpdates" "$T/XCODEBUILD_ARGS" 2>/dev/null || F "xcodebuild must sign with -allowProvisioningUpdates"
 grep -q "gow2-install.manifest" "$P/ios/install_ios.sh" || F "install_ios.sh --data must point to the launcher's manifest"
 

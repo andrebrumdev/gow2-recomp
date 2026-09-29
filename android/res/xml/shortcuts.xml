@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="licenses"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/licenses">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="io.github.andrebrumdev.gow2"
+            android:targetClass="io.github.andrebrumdev.gow2.LicensesActivity" />
+    </shortcut>
+</shortcuts>

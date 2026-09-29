@@ -1,7 +1,7 @@
 /* GoW2 iOS install manifest check; see gow2_ios_install_manifest.h. */
 #include "gow2_ios_install_manifest.h"
 
-#include <CommonCrypto/CommonDigest.h>
+#include "gow2_sha256.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,8 +69,8 @@ gow2_install_state gow2_ios_install_state(const char* docs, char* why, size_t ca
         return GOW2_INSTALL_MISSING;
     }
     int header = 0, have_set = 0, ended = 0, files = 0, have_eboot = 0, have_usrdir = 0;
-    CC_SHA256_CTX digest;
-    CC_SHA256_Init(&digest);
+    gow2_sha256_ctx digest;
+    gow2_sha256_init(&digest);
     gow2_install_state state = GOW2_INSTALL_OK;
     while (state == GOW2_INSTALL_OK && fgets(line, sizeof line, f) != NULL) {
         size_t len = strlen(line);
@@ -119,8 +119,8 @@ gow2_install_state gow2_ios_install_state(const char* docs, char* why, size_t ca
                 break;
             }
             snprintf(prev, sizeof prev, "%s", rel);
-            CC_SHA256_Update(&digest, line + 5, (CC_LONG)(len - 5));
-            CC_SHA256_Update(&digest, "\n", 1);
+            gow2_sha256_update(&digest, line + 5, len - 5);
+            gow2_sha256_update(&digest, "\n", 1);
             if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
                 say(why, cap, "%s: missing", rel);
                 state = GOW2_INSTALL_INCOMPLETE;
@@ -156,11 +156,10 @@ gow2_install_state gow2_ios_install_state(const char* docs, char* why, size_t ca
         say(why, cap, "manifest: no set line");
         return GOW2_INSTALL_INCOMPLETE;
     }
-    unsigned char d[CC_SHA256_DIGEST_LENGTH];
+    uint8_t d[32];
     char hex[65];
-    CC_SHA256_Final(d, &digest);
-    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++)
-        snprintf(hex + 2 * i, 3, "%02x", d[i]);
+    gow2_sha256_final(&digest, d);
+    gow2_sha256_hex(d, hex);
     if (strcmp(hex, set_hex) != 0) {
         say(why, cap, "manifest: set digest does not match the file list");
         return GOW2_INSTALL_INCOMPLETE;

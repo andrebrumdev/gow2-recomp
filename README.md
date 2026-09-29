@@ -164,6 +164,8 @@ affiliated with or endorsed by Sony. It distributes no copyrighted game code
 or assets; you must own the game. The engine is MIT licensed
 (© sp00nznet and contributors).
 
+O APK para Android é compilado localmente a partir do seu próprio dump e instalado somente no seu próprio aparelho; ele nunca é distribuído. As bibliotecas do FFmpeg dentro do app continuam sob a LGPL-2.1 e podem ser copiadas, modificadas e substituídas.
+
 ---
 
 ### Em português
@@ -174,6 +176,8 @@ C/C++ e compilado para arm64, rodando sobre uma reimplementação do sistema do
 PS3 com Metal, VideoToolbox e CoreAudio. Nenhum código ou arquivo do jogo é
 distribuído: como no Dusk, você fornece sua própria cópia e o kit de
 instalação (`kit/setup.sh`) descriptografa, traduz e compila tudo na sua máquina.
+
+O APK para Android é compilado localmente a partir do seu próprio dump e instalado somente no seu próprio aparelho; ele nunca é distribuído. As bibliotecas do FFmpeg dentro do app continuam sob a LGPL-2.1 e podem ser copiadas, modificadas e substituídas.
 
 Full technical history lives in the Claude project memory (`ps3recomp-feasibility`,
 levas 13-17) and in `ps3recomp/docs/`.
