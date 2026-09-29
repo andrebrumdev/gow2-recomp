@@ -1,0 +1,37 @@
+ps3kit-xform 1
+xform patch_212ed0_lazyinit_probe.py
+authored-in recomp_mid_v2/patch_212ed0_lazyinit_probe.py@c4950e4
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_212ed0_lazyinit_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -484642,0 +484643,14
+scope func 00212ED0
+at line sha256:14f85a468c2a26a99a586d67bcd04b61feb524d59f099a06ff44ced842a1cc83 nth 1 of 1
+op insert-after
+template <<END
+        /* LAZYINIT-212ED0-PROBE: gestor, flag de init e o slot +0xD0 lido aqui.
+         * Ver docs/re_sessions/2026-08-05-E30-sintese-e-o-que-resolver.md */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_LAZYINIT"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_LAZYINIT_CAP"); _cap=(_c&&*_c)?atoi(_c):400; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _m=(uint32_t)ctx->gpr[31];
+            uint32_t _f=(uint32_t)ctx->gpr[0];
+            uint32_t _p0=vm_read32(_m + 0xD0u);
+            fprintf(stderr,"[LAZYINIT] #%d mgr=0x%08X flag=0x%08X pool0=0x%08X init_vai_correr=%d%s\n",
+              _n, _m, _f, _p0, (_f==0u)?1:0,
+              (_p0==0u)?" <POOL0-NULO>":"");
+            fflush(stderr); } } }
+END
+# hunk -484645,0 +484660,5
+scope func 00212ED0
+at line sha256:21dda25beb28f35c786b79d36980f90c2593ca99c5897e7e20af6289573df718 nth 1 of 1
+op insert-after
+template <<END
+        { static int _on2=-1; if(_on2<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_LAZYINIT"); _on2=(_e&&*_e&&*_e!='0')?1:0; }
+          if(_on2){ fprintf(stderr,"[LAZYINIT] ..init CORREU: mgr=0x%08X flag=0x%08X pool0=0x%08X\n",
+              (uint32_t)ctx->gpr[31], vm_read32((uint32_t)ctx->gpr[31] + 0x12Cu),
+              vm_read32((uint32_t)ctx->gpr[31] + 0xD0u)); fflush(stderr); } }
+END

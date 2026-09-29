@@ -1,0 +1,26 @@
+ps3kit-xform 1
+xform patch_2182a4_caller_probe.py
+authored-in recomp_mid_v2/patch_2182a4_caller_probe.py@3b87d53
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_2182a4_caller_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -490120,0 +490121,14
+scope func 002182A4
+at line sha256:8bdd3cd2e36421dadfb15f624365a2d19919e394c3ce97233d59cc266152b6e8 nth 1 of 1
+op insert-after
+template <<END
+        /* CALLER-2182A4-PROBE: quem chama func_002182A4, e com que objecto.
+         * ctx->lr aqui ainda e' o LR do CHAMADOR guest -- o prologo ja' o
+         * copiou para gpr[0] mas nenhum bl interno correu ainda. Ver
+         * docs/re_sessions/2026-08-05-E13-o-objecto-errado.md */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_CALLER2182A4"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_CALLER2182A4_CAP"); _cap=(_c&&*_c)?atoi(_c):200; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _this=(uint32_t)ctx->gpr[3];
+            fprintf(stderr,"[CALL2182A4] #%d this=0x%08X%s lr=0x%08X r4=0x%08X r5=0x%08X\n",
+              _n, _this, (_this==0x400C6C68u)?" <O-MAU>":"", (uint32_t)ctx->lr,
+              (uint32_t)ctx->gpr[4], (uint32_t)ctx->gpr[5]);
+            fflush(stderr); } } }
+END

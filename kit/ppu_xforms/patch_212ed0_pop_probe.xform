@@ -1,0 +1,37 @@
+ps3kit-xform 1
+xform patch_212ed0_pop_probe.py
+authored-in recomp_mid_v2/patch_212ed0_pop_probe.py@c4950e4
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_212ed0_pop_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -484685,0 +484686,5
+scope func 00212ED0
+at line sha256:a6034ba6f01e087c6ba4d19e62d9f50a64bfd410535a516f8487ad4abc54ffc4 nth 1 of 1
+op insert-after
+template <<END
+        /* POP212-PROBE-V2: os dois lados da MESMA chamada ao pop. Sitio
+         * unico, sonda propria -- ver E28 para porque nao se usa a FLHEAD. */
+        uint32_t _p212_pool = (uint32_t)ctx->gpr[3];
+        uint32_t _p212_mgr  = (uint32_t)ctx->gpr[31];
+        uint32_t _p212_off  = (uint32_t)ctx->gpr[9];
+END
+# hunk -484686,0 +484692,14
+scope func 00212ED0
+at line sha256:257c1e402b8117a6e6441f5711eeeb0300ea7d64c64a8c62677ef7f400ffda32 nth 1 of 1
+op insert-after
+template <<END
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_POP212"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_POP212_CAP"); _cap=(_c&&*_c)?atoi(_c):400; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _r=(uint32_t)ctx->gpr[3];
+            char _a[5]; for(int _b=0;_b<4;_b++){ unsigned _c2=(_r>>(8*(3-_b)))&0xFFu;
+              _a[_b]=(_c2>=32&&_c2<127)?(char)_c2:'.'; } _a[4]='\0';
+            fprintf(stderr,"[POP212] #%d mgr=0x%08X off=0x%X pool=0x%08X -> ret=0x%08X \"%s\"%s\n",
+              _n, _p212_mgr, _p212_off, _p212_pool, _r, _a,
+              (_r==0x2F725F70u)?" <ENVENENADO>":"");
+            if(_p212_pool==0u){ fprintf(stderr,"[POP212] ..pool NULO: vm_read32(4)=0x%08X vm_read32(0)=0x%08X\n",
+                vm_read32(4u), vm_read32(0u)); }
+            fflush(stderr); } } }
+END

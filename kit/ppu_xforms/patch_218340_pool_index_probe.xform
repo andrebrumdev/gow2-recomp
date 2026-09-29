@@ -1,0 +1,32 @@
+ps3kit-xform 1
+xform patch_218340_pool_index_probe.py
+authored-in recomp_mid_v2/patch_218340_pool_index_probe.py@8ee06e6
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_218340_pool_index_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -490209,0 +490210,20
+scope func 002182A4
+at line sha256:5843ebda794bf6c7a298a66da76907d5bf12f8c9b5cbc7261f795548e6d4a65c nth 1 of 1
+op insert-after
+template <<END
+        /* POOLIDX-PROBE: de onde vem o pool passado ao pop */
+        { static int _on=-1; static int _all=0;
+          if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_POOLIDX");
+            _on=(_e&&*_e&&*_e!='0')?1:0; _all=(_e&&*_e=='a')?1:0; }
+          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_POOLIDX_CAP"); _cap=(_c&&*_c)?atoi(_c):60; }
+          if(_on){ uint32_t _pool=(uint32_t)ctx->gpr[3];
+            uint32_t _slot=(uint32_t)ctx->gpr[9];
+            uint32_t _base=(uint32_t)vm_read32(ctx->gpr[29] + 0x14);
+            uint32_t _div =(uint32_t)vm_read32(ctx->gpr[29] + 0x0);
+            int _mau=(_pool<0x10000u)||(_pool>=0x4F000000u);
+            if(_all||_mau){ static int _n=0; if(_cap<0||_n++<_cap){
+              fprintf(stderr,"[POOLIDX] %s pool=0x%08X slot=0x%08X base=0x%08X "
+                "idx=%u divisor=%u r28=0x%08X r30=0x%08X obj=0x%08X\n",
+                _mau?"MAU":"ok ", _pool,_slot,_base,
+                (_slot>=_base)?((_slot-_base)>>2):0xFFFFFFFFu, _div,
+                (uint32_t)ctx->gpr[28],(uint32_t)ctx->gpr[30],
+                (uint32_t)ctx->gpr[29]);
+              fflush(stderr); } } } }
+END

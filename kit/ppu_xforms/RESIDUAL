@@ -2,19 +2,7 @@
 # One line per patch: <name> TAB <reason>. 'pending: ...' = not converted yet (a Phase-2c batch
 # removes the line when it commits the .xform); any other reason = stays Python on purpose until
 # Phase 4 (lifter port). ps3kit apply-xforms refuses an effective name that is neither a .xform nor here.
-patch_146cb8_autoload_creator_probe.py	pending: Phase 2c conversion
-patch_210878_alloc_probe.py	pending: Phase 2c conversion
-patch_212ed0_lazyinit_probe.py	pending: Phase 2c conversion
-patch_212ed0_mgrlookup_probe.py	pending: Phase 2c conversion
-patch_212ed0_pop_probe.py	pending: Phase 2c conversion
-patch_2182a4_anchor_live_probe.py	pending: Phase 2c conversion
-patch_2182a4_caller_probe.py	pending: Phase 2c conversion
-patch_2182a4_tocchain_probe.py	pending: Phase 2c conversion
-patch_218340_pool_index_probe.py	pending: Phase 2c conversion
 patch_218364_pool_null_gate.py	pending: Phase 2c conversion
-patch_220284_copyloop_probe.py	pending: Phase 2c conversion
-patch_227788_allocsrc_probes.py	pending: Phase 2c conversion
-patch_227788_sizeclass_probe.py	pending: Phase 2c conversion
 patch_22851c_poolstore_probe.py	pending: Phase 2c conversion
 patch_242c94_state_dispatch_probe.py	pending: Phase 2c conversion
 patch_24e3d0_victim_probe.py	pending: Phase 2c conversion
