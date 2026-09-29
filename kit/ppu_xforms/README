@@ -4,6 +4,10 @@ plan docs/superpowers/plans/2026-09-26-gow2-kit-sem-python.md, format in ps3reco
 ORDER             every recomp_mid_v2/patch_*.py, in ./apply_all_patches.sh --print-order order;
                   'noop <name>' = no effect on the pinned lift per the golden hash chain
                   (regenerate with kit/golden/xform_order.sh <scratch>; never edit the marks by hand).
+RESIDUAL          effective ORDER names that still run as Python: '<name> TAB <reason>'.
+                  'pending: ...' = not converted yet; any other reason = stays Python until the
+                  lifter port (Phase 4). apply-xforms refuses an effective name that has neither
+                  a .xform nor a RESIDUAL line.
 <stem>.xform      patch <stem>.py as hash locators + text we wrote ('ps3kit-xform 1').
 AUDIT_ALLOW.tsv   reviewed collisions for the template audit.
 

@@ -126,6 +126,7 @@ if [ -n "${PS3KIT:-}" ] && [ -x "$PS3KIT" ]; then
     t_eq 0 "$(grep -c '	NOT-IN-SCRIPT	' "$T/scr3/fragments.tsv")" "  no fragment outside the patch script"
     # the draft, applied after patch_a, reproduces the Python run
     mkdir -p "$T/x3"; cp "$D" "$T/x3/"; cp "$R/kit/ppu_xforms/ORDER" "$T/x3/"
+    printf 'patch_a.py\tsynthetic residual\n' > "$T/x3/RESIDUAL"
     mkdir -p "$T/l3"; for f in $FILES; do cp "$RAW/$f" "$T/l3/$f"; done
     PY=/bin/bash "$PS3KIT" apply-xforms "$T/x3" "$T/l3" --patch-dir "$R/recomp_mid_v2" > /dev/null 2>&1
     mkdir -p "$T/l4"; for f in $FILES; do cp "$RAW/$f" "$T/l4/$f"; done

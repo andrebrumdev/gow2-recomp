@@ -33,6 +33,22 @@ if [ -f "$X/AUDIT_ALLOW.tsv" ]; then
     t_eq "" "$(grep -v -e '^#' -e '^$' "$X/AUDIT_ALLOW.tsv" | awk -F'\t' 'NF != 3 || $1 !~ /^[0-9a-f]{64}$/ || $2 ~ /^[[:space:]]*$/ || $3 ~ /^[[:space:]]*$/' )" \
          "AUDIT_ALLOW.tsv: every entry is <sha256> TAB <reason> TAB <reviewer>"
 fi
-t_eq "" "$(cd "$X" 2>/dev/null && ls -A | grep -v -e '^ORDER$' -e '^README$' -e '^AUDIT_ALLOW\.tsv$' -e '\.xform$')" \
-     "only ORDER, README, AUDIT_ALLOW.tsv and *.xform in kit/ppu_xforms"
+# RESIDUAL (Phase 2c): every effective (non-noop) ORDER name is exactly one of <stem>.xform or a
+# RESIDUAL line; RESIDUAL lines are '<name> TAB <non-empty reason>' for effective ORDER names only.
+t_true "kit/ppu_xforms/RESIDUAL exists" test -f "$X/RESIDUAL"
+rl() { grep -v -e '^#' -e '^[[:space:]]*$' "$X/RESIDUAL" 2>/dev/null; }
+t_eq "" "$(rl | awk -F'\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9_.-]+\.py$/ || $2 ~ /^[[:space:]]*$/')" \
+     "RESIDUAL: every line is <name.py> TAB <reason>"
+t_eq "" "$(rl | cut -f1 | sort | uniq -d)" "RESIDUAL names are unique"
+lines | awk '$1 != "noop"' > "$T/eff"
+t_eq "" "$(rl | cut -f1 | grep -vxF -f "$T/eff")" "RESIDUAL lists effective ORDER names only (never noop, never unknown)"
+: > "$T/bad"
+while read -r n; do
+    x=0; [ -f "$X/${n%.py}.xform" ] && x=1
+    r=0; rl | cut -f1 | grep -qx -- "$n" && r=1
+    [ $((x + r)) = 1 ] || echo "$n xform=$x residual=$r" >> "$T/bad"
+done < "$T/eff"
+t_eq "" "$(cat "$T/bad")" "every effective ORDER name is exactly one of: .xform, RESIDUAL line"
+t_eq "" "$(cd "$X" 2>/dev/null && ls -A | grep -v -e '^ORDER$' -e '^README$' -e '^AUDIT_ALLOW\.tsv$' -e '^RESIDUAL$' -e '\.xform$')" \
+     "only ORDER, README, AUDIT_ALLOW.tsv, RESIDUAL and *.xform in kit/ppu_xforms"
 t_done

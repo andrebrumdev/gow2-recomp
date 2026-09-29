@@ -44,12 +44,12 @@ run_seg() { # run_seg <with_xforms 0|1> <file of ORDER lines>: apply these entri
     local use=$1 l
     rm -f "$S/seg/"*
     cp "$2" "$S/seg/ORDER"                           # lines verbatim: 'noop <name>' stays noop
-    if [ "$use" = 1 ]; then
-        while IFS= read -r l; do
-            case "$l" in "noop "*) continue ;; esac  # a noop entry has no .xform and runs nothing
-            if [ -f "$X/${l%.py}.xform" ]; then cp "$X/${l%.py}.xform" "$S/seg/"; fi
-        done < "$2"
-    fi
+    : > "$S/seg/RESIDUAL"                            # apply-xforms runs a non-xform name only if listed
+    while IFS= read -r l; do
+        case "$l" in "noop "*|'') continue ;; esac  # a noop entry has no .xform and runs nothing
+        if [ "$use" = 1 ] && [ -f "$X/${l%.py}.xform" ]; then cp "$X/${l%.py}.xform" "$S/seg/"
+        else printf '%s\tconverter replay\n' "$l" >> "$S/seg/RESIDUAL"; fi
+    done < "$2"
     KIT_RESIDUAL_LOG="$S/residual.log" "$PS3KIT" apply-xforms "$S/seg" "$S/work" --patch-dir "$HERE/recomp_mid_v2" >> "$S/convert.log" 2>&1 \
         || refuse "apply-xforms failed (log $S/convert.log)"
 }
