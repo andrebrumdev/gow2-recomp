@@ -21,7 +21,6 @@ cd "$HERE"
 export PS3_VDEC_FORCE_SEQDONE_MS="${PS3_VDEC_FORCE_SEQDONE_MS:-1500}"
 export PS3_MOVIE_EOS=1
 export PS3_MOVIE_HLE=1
-export PS3_MOVIE_IO=1
 export PS3_BOOT_LOGO_MS="${PS3_BOOT_LOGO_MS:-300}"
 # Keep movie path for WAD/R_Perm (do NOT set PS3_NOMOVIES=1)
 

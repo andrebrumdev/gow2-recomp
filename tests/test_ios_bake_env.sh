@@ -26,6 +26,7 @@ mustnot '^PS3_METAL_PASS_MERGE='
 mustnot '^PS3_METAL_GPU_DESWIZZLE='
 mustnot '^PS3_VDEC_ASYNC='
 mustnot '^PS3_RSX_FIFO='
+mustnot '^PS3_MOVIE_IO='
 # unset == baked value in libs/video/rsx_depth_debug.c and rsx_metal_backend.m
 # for all three (verified 2026-09-24 fix round 1) -- baking them is pure noise.
 mustnot '^PS3_METAL_DEBUG_'

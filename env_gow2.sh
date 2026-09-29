@@ -46,10 +46,7 @@ export PS3_VFS_ROOT
 # Task 3 diz isto por palavras). Quem quiser saltar a intro poe =1 a mao.
 : "${PS3_NOMOVIES:=0}";         export PS3_NOMOVIES
 
-# Caminho de I/O dos membros do psarc ja extraidos (R_PermA, R_LglScA e a
-# intro). Sem MOVIE_IO=1 o movie_io_open nem e' consultado e o jogo cai no
-# cellFs normal, que nao acha estes nomes.
-: "${PS3_MOVIE_IO:=1}";         export PS3_MOVIE_IO
+# Membros do psarc ja' extraidos (R_PermA, R_LglScA e a intro): o runtime usa a cache sempre que PS3_MOVIE_CACHE aponta para um diretorio que existe.
 : "${PS3_MOVIE_CACHE:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/movie_cache}"
 export PS3_MOVIE_CACHE
 : "${PS3_MOVIE_EOS:=1}";        export PS3_MOVIE_EOS

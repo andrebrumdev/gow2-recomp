@@ -50,7 +50,6 @@ fi
 . "$HERE/env_gow2.sh"
 export PS3_NO_RSX="${PS3_NO_RSX:-1}"          # CPU/I/O focus; set 0 for window
 export PS3_TRACE_SPURS="${PS3_TRACE_SPURS:-1}"
-export PS3_MOVIE_IO="${PS3_MOVIE_IO:-1}"
 export PS3_MOVIE_HLE="${PS3_MOVIE_HLE:-1}"
 export PS3_NOMOVIES="${PS3_NOMOVIES:-0}"
 # Intro probes (patches already on recomp_macos_v2; gated no-ops if missing):
