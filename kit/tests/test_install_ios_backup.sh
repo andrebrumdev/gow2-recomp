@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# ios/install_ios.sh never installs without a copy of the phone's saves, and nothing in
-# the iOS scripts or the launcher passes --remove-existing-content outside the F6 guard.
+# ios/install_ios.sh never installs without a copy of the phone's saves: its own verified
+# backup, or a backup folder the caller just wrote that the script can verify itself
+# (GOW2_IOS_SAVES_BACKUP_DIR: fresh, sha256.txt checks, same bundle and device). No env
+# flag alone skips it (Codex review BLOCKER, 2026-09-28). Nothing in the iOS scripts or the
+# launcher asks devicectl to delete destination content (it once wiped the app's Documents).
 # Fake xcrun; no device.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; R="$(cd "$HERE/../.." && pwd)"
@@ -45,7 +48,7 @@ EOF
 chmod +x "$T/bin/xcrun"
 run() { # run <log> [VAR=value...]
     local log=$1; shift
-    env -u GOW2_WORK -u GOW2_IOS_SAVES_BACKED_UP PATH="$T/bin:/usr/bin:/bin" FAKE_LOG="$log" \
+    env -u GOW2_WORK -u GOW2_IOS_SAVES_BACKED_UP -u GOW2_IOS_SAVES_BACKUP_DIR PATH="$T/bin:/usr/bin:/bin" FAKE_LOG="$log" \
         GOW2_IOS_DEVICE=00008110-TEST GOW2_IOS_TEAM=ABCDE12345 GOW2_IOS_SAVE_BACKUP_DIR="$T/bk" \
         "$@" /bin/bash "$T/g/ios/install_ios.sh" > "$log.out" 2>&1
 }
@@ -61,11 +64,13 @@ t_true "... copy before the app install" test "$(line_of 'copy from' "$T/ok.log"
 BK="$(ls -d "$T"/bk/*-iphone-cli 2>/dev/null | head -1)"
 t_true "backup folder holds the save" test -f "$BK/BCUS98229_GOW2/SYS.BIN"
 t_true "with its sha256 list" grep -q 'BCUS98229_GOW2/SYS.BIN' "$BK/sha256.txt"
+t_true "and a backup.meta naming the bundle" grep -qx 'bundle=com.abcde12345.gow2recomp' "$BK/backup.meta"
+t_true "... and the device" grep -qx 'udid=00008110-TEST' "$BK/backup.meta"
 
 rm -rf "$T/bk"; run "$T/fail.log" FAKE_FROM_RC=1; t_eq 1 $? "backup failed -> rc 1"
 t_false "backup failed -> no app install" grep -q 'install app' "$T/fail.log"
 t_eq "" "$(ls -A "$T/bk" 2>/dev/null)" "backup failed -> no empty backup folder left"
-t_true "and says how to go on" grep -q 'GOW2_IOS_SAVES_BACKED_UP=1' "$T/fail.log.out"
+t_false "and never offers an env flag to skip the backup" grep -q 'GOW2_IOS_SAVES_BACKED_UP' "$T/fail.log.out"
 
 # Codex review MAJOR, 2026-09-28: a "copy from" that exits 0 but does not actually match
 # what the phone listed (here: the phone says the file is 999 bytes) must refuse the
@@ -112,11 +117,56 @@ run "$T/filesfailed0.log" FAKE_LISTING_JSON='{"info":{"outcome":"failed"},"resul
 t_false "file listing outcome failed -> no app install" grep -q 'install app' "$T/filesfailed0.log"
 t_true "reinstall -> apps listed before the files" test "$(line_of 'info apps' "$T/ok.log")" -lt "$(line_of 'info files' "$T/ok.log")"
 
-run "$T/skip.log" GOW2_IOS_SAVES_BACKED_UP=1; t_eq 0 $? "caller already backed up -> install"
-t_false "caller already backed up -> no listing, no copy from" grep -qE 'info apps|info files|copy from' "$T/skip.log"
+# Codex review BLOCKER, 2026-09-28: the old flag alone no longer skips the backup.
+rm -rf "$T/bk"
+run "$T/legacy.log" GOW2_IOS_SAVES_BACKED_UP=1; t_eq 0 $? "legacy flag -> still installs"
+t_true "legacy flag -> the script lists the phone itself" grep -q 'info files' "$T/legacy.log"
+t_true "legacy flag -> and copies the saves itself" grep -q 'copy from' "$T/legacy.log"
+t_true "legacy flag -> copy before the app install" \
+    test "$(line_of 'copy from' "$T/legacy.log")" -lt "$(line_of 'install app' "$T/legacy.log")"
 
-t_false "no --remove-existing-content reaches devicectl" grep -q -- '--remove-existing-content' "$T/ok.log" "$T/skip.log"
-t_eq "" "$(grep -l -- '--remove-existing-content' "$R"/ios/*.sh 2>/dev/null)" "no ios script passes --remove-existing-content"
-t_eq "IOSDevicectl.swift IOSModels.swift" "$(cd "$R/launcher/macos" && grep -l -- '--remove-existing-content' *.swift | tr '\n' ' ' | sed 's/ $//')" \
-    "only the F6-guarded transport (and a comment in IOSModels) mention it"
+# The launcher's handshake: GOW2_IOS_SAVES_BACKUP_DIR = the folder it just wrote.
+mk_bk() { # mk_bk <dir> [bundle] [udid]: a backup folder like the launcher writes
+    rm -rf "$1"; mkdir -p "$1/BCUS98229_GOW2"
+    echo save > "$1/BCUS98229_GOW2/SYS.BIN"
+    ( cd "$1" && shasum -a 256 BCUS98229_GOW2/SYS.BIN > sha256.txt )
+    printf 'bundle=%s\nudid=%s\n' "${2:-com.abcde12345.gow2recomp}" "${3:-00008110-TEST}" > "$1/backup.meta"
+}
+V="$T/handshake"
+mk_bk "$V"; rm -rf "$T/bk"
+run "$T/hs_ok.log" GOW2_IOS_SAVES_BACKUP_DIR="$V"; t_eq 0 $? "valid handshake -> installs"
+t_false "valid handshake -> no second copy from the phone" grep -qE 'info files|copy from' "$T/hs_ok.log"
+t_true "valid handshake -> app installed" grep -q 'install app' "$T/hs_ok.log"
+t_true "valid handshake -> says which backup it trusted" grep -q "$V" "$T/hs_ok.log.out"
+t_true "valid handshake -> the app list is still read (first install is decided by the phone)" \
+    grep -q 'info apps' "$T/hs_ok.log"
+for c in missing nosha tampered old otherbundle otherudid nometa emptysha; do
+    mk_bk "$V"
+    case $c in
+        missing)     rm -rf "$V" ;;
+        nosha)       rm -f "$V/sha256.txt" ;;
+        tampered)    echo forged > "$V/BCUS98229_GOW2/SYS.BIN" ;;
+        old)         touch -t 202001010000 "$V" ;;
+        otherbundle) mk_bk "$V" com.other.app ;;
+        otherudid)   mk_bk "$V" com.abcde12345.gow2recomp 00008110-OTHER ;;
+        nometa)      rm -f "$V/backup.meta" ;;
+        emptysha)    : > "$V/sha256.txt" ;;
+    esac
+    rm -rf "$T/bk"
+    run "$T/hs_$c.log" GOW2_IOS_SAVES_BACKUP_DIR="$V"; t_eq 0 $? "forged handshake ($c) -> still installs"
+    t_true "forged handshake ($c) -> rejected, says so" grep -q 'not accepted' "$T/hs_$c.log.out"
+    t_true "forged handshake ($c) -> own listing + copy" grep -q 'copy from' "$T/hs_$c.log"
+    t_true "forged handshake ($c) -> own copy before the app install" \
+        test "$(line_of 'copy from' "$T/hs_$c.log")" -lt "$(line_of 'install app' "$T/hs_$c.log")"
+done
+# A forged handshake whose own backup then fails: nothing installed.
+mk_bk "$V"; rm -f "$V/sha256.txt"; rm -rf "$T/bk"
+run "$T/hs_fail.log" GOW2_IOS_SAVES_BACKUP_DIR="$V" FAKE_FROM_RC=1; t_eq 1 $? "forged handshake + failed own backup -> rc 1"
+t_false "forged handshake + failed own backup -> no app install" grep -q 'install app' "$T/hs_fail.log"
+
+# Static bans over the scripts and the launcher sources.
+t_eq "" "$(grep -l -- 'remove-existing-content' "$R"/ios/*.sh "$R"/launcher/macos/*.swift 2>/dev/null)" \
+    "no ios script or launcher source mentions remove-existing-content"
+t_eq "" "$(grep -l -- 'GOW2_IOS_SAVES_BACKED_UP' "$R"/ios/*.sh "$R"/launcher/macos/*.swift "$R"/launcher/macos/tests/ios_check/*.swift 2>/dev/null)" \
+    "no script or launcher source still knows the old skip flag"
 t_done

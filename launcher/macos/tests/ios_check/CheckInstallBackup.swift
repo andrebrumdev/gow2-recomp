@@ -29,8 +29,7 @@ func runInstallBackupChecks() async {
     scripts.results["build_ios.sh --sign-only"] = ScriptResult(status: 0, output: "GOW2_IOS_APP=\(appPath)\n")
     scripts.results["install_ios.sh"] = ScriptResult(status: 0, output: "GOW2_IOS_INSTALL_OK\n")
     let now = Date(timeIntervalSince1970: 1790372701)
-    let facts = DeviceFacts(measured: "test", copyFromNestsDirectory: false, removeExistingContentDeletesExtras: nil,
-                            lockStateTracksLock: true, retireProfileRenews: nil)
+    let facts = DeviceFacts(measured: "test", copyFromNestsDirectory: false, lockStateTracksLock: true, retireProfileRenews: nil)
     let deps = IOSDeps(transport: phone, scripts: scripts,
                        readProfile: { _ in profilePlist(expires: "2026-10-01T14:19:03Z") },
                        xcodePrefs: { Data(fxXcodePrefs.utf8) }, macProcesses: { "/bin/zsh\n" },
@@ -50,7 +49,18 @@ func runInstallBackupChecks() async {
     check(seen.count == 1 && seen[0].hasSuffix("-iphone/\(G)/SYS.BIN"), "phone save backed up before install_ios.sh: \(seen)")
     check((try? String(contentsOf: backups.appendingPathComponent(seen.first ?? "x"), encoding: .utf8)) == "phone-save",
           "the backup holds the phone's bytes")
-    check(scripts.envs["install_ios.sh"]?["GOW2_IOS_SAVES_BACKED_UP"] == "1", "install_ios.sh is told the saves are backed up")
+    // Codex review BLOCKER (2026-09-28): no "trust me" flag; install_ios.sh gets the folder
+    // and verifies it itself (fresh, sha256.txt checks, backup.meta = this bundle + device).
+    let env = scripts.envs["install_ios.sh"] ?? [:]
+    check(env.keys.filter { $0.hasPrefix("GOW2_IOS_SAVES_") }.sorted() == ["GOW2_IOS_SAVES_BACKUP_DIR"],
+          "install_ios.sh gets only the backup folder, no skip flag: \(env.keys.filter { $0.hasPrefix("GOW2_IOS_SAVES_") })")
+    let hs = URL(fileURLWithPath: env["GOW2_IOS_SAVES_BACKUP_DIR"] ?? "/nonexistent")
+    check(seen.count == 1 && hs.standardizedFileURL.path == backups.appendingPathComponent(seen[0]).deletingLastPathComponent()
+              .deletingLastPathComponent().standardizedFileURL.path,
+          "the folder passed is the one holding the backup: \(hs.path)")
+    check(fileText(hs.appendingPathComponent("backup.meta")) == "bundle=com.example.gow2\nudid=00008110-TEST\n",
+          "backup.meta names the bundle and the device: \(fileText(hs.appendingPathComponent("backup.meta")) ?? "nil")")
+    check(shasumChecks(hs), "the folder's sha256.txt passes shasum -c, as install_ios.sh runs it")
     check(ios.lastResult?.contains("Saves do iPhone copiados") == true, "result names the backup: \(ios.lastResult ?? "")")
 
     // Re-sign backs up again before replacing the app.
@@ -77,5 +87,27 @@ func runInstallBackupChecks() async {
     await ios.install()
     check(ios.error == nil && phone.ops.filter { $0.hasPrefix("dir from") }.count == from0,
           "first install: no backup read, install ok: \(ios.error ?? "")")
+    check(scripts.envs["install_ios.sh"]?["GOW2_IOS_SAVES_BACKUP_DIR"] == nil,
+          "first install: no backup folder handed to install_ios.sh (it asks the phone itself)")
+
+    // A phone with the app but no save: nothing to hand over either; install_ios.sh checks the phone.
+    phone.installed = [app]
+    try? FileManager.default.removeItem(at: phone.root.appendingPathComponent("Documents/savedata"))
+    await ios.install()
+    check(ios.error == nil && scripts.envs["install_ios.sh"]?["GOW2_IOS_SAVES_BACKUP_DIR"] == nil,
+          "no phone save: no backup folder handed over: \(ios.error ?? "")")
     try? FileManager.default.removeItem(at: root)
+}
+
+/// `shasum -a 256 -c --status sha256.txt` inside `dir` (what install_ios.sh runs).
+func shasumChecks(_ dir: URL) -> Bool {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/shasum")
+    p.arguments = ["-a", "256", "-c", "--status", "sha256.txt"]
+    p.currentDirectoryURL = dir
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    guard (try? p.run()) != nil else { return false }
+    p.waitUntilExit()
+    return p.terminationStatus == 0
 }

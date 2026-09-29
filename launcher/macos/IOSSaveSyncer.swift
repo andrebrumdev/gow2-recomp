@@ -190,20 +190,32 @@ final class SaveSyncer {
     }
 
     /// Before an install or re-sign replaces the app: a verified copy of every phone save
-    /// into <backupRoot>/<stamp>-iphone[-N]/<save> (never deleted). [] only when a
-    /// SUCCESSFUL listing of Documents shows no savedata; any read error throws -- it is
-    /// never read as "the phone has no save" (see fetchPhone).
-    func backupPhone() throws -> [URL] {
+    /// into ONE fresh folder <backupRoot>/<stamp>-iphone[-N]/<save> (never deleted), with its
+    /// sha256.txt and a backup.meta naming this bundle and device -- the folder install_ios.sh
+    /// is handed (GOW2_IOS_SAVES_BACKUP_DIR) and verifies itself before skipping its own copy.
+    /// nil only when a SUCCESSFUL listing of Documents shows no savedata; any read error
+    /// throws -- it is never read as "the phone has no save" (see fetchPhone).
+    func backupPhone() throws -> URL? {
         let phoneDir = try fetchPhone()
         defer { try? FileManager.default.removeItem(at: phoneDir) }
         let phone = try SaveSnapshot.take(phoneDir)
-        let folder = SaveBackup.folderName(now(), side: .iphone)
-        var out: [URL] = []
-        for n in phone.keys.sorted() {
-            let f = try SaveBackup.write(dir: phoneDir.appendingPathComponent(n), name: n, into: backupRoot, folder: folder)
-            if !out.contains(f) { out.append(f) }
+        guard !phone.isEmpty else { return nil }
+        // A folder name nothing uses yet, so every save of this backup lands in it.
+        let fm = FileManager.default, base = SaveBackup.folderName(now(), side: .iphone)
+        var folder = base, n = 2
+        while fm.fileExists(atPath: backupRoot.appendingPathComponent(folder).path) {
+            folder = "\(base)-\(n)"
+            n += 1
         }
-        return out
+        var out: URL?
+        for name in phone.keys.sorted() {
+            let f = try SaveBackup.write(dir: phoneDir.appendingPathComponent(name), name: name, into: backupRoot, folder: folder)
+            guard out == nil || out == f else { throw SaveSyncError.verifyFailed(name) }   // never split across folders
+            out = f
+        }
+        guard let target = out else { return nil }
+        try SaveBackup.writeMeta(target, bundle: bundle, device: device)                    // last: the folder's mtime is now
+        return target
     }
 
     /// Right before a push that has no phone backup: is `n` on the phone now? Only a
@@ -229,16 +241,14 @@ final class SaveSyncer {
 
     private func push(_ n: String, mac: SaveDirSnapshot, phone: SaveDirSnapshot?, phoneDir: URL, stamp: Date,
                       state: inout SyncState, report: inout SaveSyncReport) throws {
-        let exact = facts.removeExistingContentDeletesExtras == true          // F6
         var backup: URL?
         if phone != nil {
-            if !exact {
-                // Without F6 a copy only adds/overwrites: extra phone files would survive and
-                // mix two saves. Refuse before touching the phone.
-                let macFiles = Set(try SaveSnapshot.digest(macRoot.appendingPathComponent(n)).rows.map(\.rel))
-                let phoneFiles = Set(try SaveSnapshot.digest(phoneDir.appendingPathComponent(n)).rows.map(\.rel))
-                if !phoneFiles.isSubset(of: macFiles) { throw SaveSyncError.cannotReplaceExactly(n) }
-            }
+            // The copy only adds/overwrites (the launcher never asks the phone to delete
+            // anything: that option once wiped the app's Documents): extra phone files would
+            // survive and mix two saves. Refuse before touching the phone.
+            let macFiles = Set(try SaveSnapshot.digest(macRoot.appendingPathComponent(n)).rows.map(\.rel))
+            let phoneFiles = Set(try SaveSnapshot.digest(phoneDir.appendingPathComponent(n)).rows.map(\.rel))
+            if !phoneFiles.isSubset(of: macFiles) { throw SaveSyncError.cannotReplaceExactly(n) }
             let folder = try SaveBackup.write(dir: phoneDir.appendingPathComponent(n), name: n, into: backupRoot,
                                               folder: SaveBackup.folderName(stamp, side: .iphone))   // verified copy
             report.backups.append(folder)
@@ -261,14 +271,13 @@ final class SaveSyncer {
             try? s.save(stateURL)
         }
         do {
-            try transport.copyDirectoryTo(device, bundle: bundle, local: macRoot.appendingPathComponent(n), remote: remote,
-                                          removeExisting: exact)
+            try transport.copyDirectoryTo(device, bundle: bundle, local: macRoot.appendingPathComponent(n), remote: remote)
         } catch {
             // The copy may have stopped half-way (cable, lock): if the phone no longer holds
             // its old save, put the verified backup back; then report the transport's error.
             if let b = backup, let old = phone {
                 if (try? phoneHash(remote)) != old.hash {
-                    try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
+                    try restorePhone(n, backup: b, old: old, remote: remote)
                 }
                 phoneBackToOld(&state)
             }
@@ -277,15 +286,15 @@ final class SaveSyncer {
         if try phoneHash(remote) == mac.hash { return }
         // The phone copy is wrong: put the backed-up save back and say whether that conferred.
         guard let b = backup, let old = phone else { throw SaveSyncError.verifyFailed(n) }
-        try restorePhone(n, backup: b, old: old, remote: remote, exact: exact)
+        try restorePhone(n, backup: b, old: old, remote: remote)
         phoneBackToOld(&state)
         throw SaveSyncError.phoneRestored(n)
     }
 
     /// Copies the verified backup back to the phone; throws restoreFailed (naming the
     /// backup folder) unless the re-downloaded save matches the old one.
-    private func restorePhone(_ n: String, backup b: URL, old: SaveDirSnapshot, remote: String, exact: Bool) throws {
-        try? transport.copyDirectoryTo(device, bundle: bundle, local: b, remote: remote, removeExisting: exact)
+    private func restorePhone(_ n: String, backup b: URL, old: SaveDirSnapshot, remote: String) throws {
+        try? transport.copyDirectoryTo(device, bundle: bundle, local: b, remote: remote)
         if (try? phoneHash(remote)) != old.hash { throw SaveSyncError.restoreFailed(n, b.path) }
     }
 

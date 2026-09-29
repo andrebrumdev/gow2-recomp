@@ -208,7 +208,7 @@ final class DataPusher {
         for t in tops.sorted(by: byteOrder) {
             do {
                 try transport.copyDirectoryTo(device, bundle: bundle, local: skel.appendingPathComponent(t),
-                                              remote: "Documents/" + t, removeExisting: false)
+                                              remote: "Documents/" + t)
             } catch let e as DeviceError where e.isMissingFileNode {
                 // Best-effort only: this pre-creates an all-empty directory tree (no file
                 // bytes in it at all), which devicectl can fail to materialize when the

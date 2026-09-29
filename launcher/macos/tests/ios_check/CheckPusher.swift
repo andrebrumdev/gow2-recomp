@@ -222,10 +222,10 @@ func runPusherChecks() {
           "nothing written, no manifest published \(flaky.ops)")
 
     // Production argv and the F5 gate (the thin layer).
-    check(Devicectl.args(.copyTo("D", bundle: "B", local: "/l", remote: "Documents/x", removeExisting: true), json: "/j")
+    check(Devicectl.args(.copyTo("D", bundle: "B", local: "/l", remote: "Documents/x"), json: "/j")
           == ["devicectl", "device", "copy", "to", "--device", "D", "--domain-type", "appDataContainer",
               "--domain-identifier", "B", "--source", "/l", "--destination", "Documents/x",
-              "--remove-existing-content", "true", "-j", "/j", "-q"], "copy to argv")
+              "-j", "/j", "-q"], "copy to argv: a plain copy, never asking the phone to delete anything")
     check(Devicectl.args(.files("D", bundle: "B", dir: "Documents"), json: "/j")
           == ["devicectl", "device", "info", "files", "--device", "D", "--domain-type", "appDataContainer",
               "--domain-identifier", "B", "--subdirectory", "Documents", "-t", "120", "-j", "/j", "-q"], "files argv")
@@ -258,12 +258,11 @@ func runPusherChecks() {
     catch let e as DeviceError { check(e.isMissingFileNode, "production copy-from 7000 comes back \(e)") }
     catch { check(false, "\(error)") }
     check(!FileManager.default.fileExists(atPath: simLocal.path), "a failed copy from leaves no empty 'save' behind")
-    //  MINOR: --remove-existing-content only with F6 measured true (it wiped Documents once).
+    //  Codex review MAJOR (2026-09-28): the directory copy is a plain `copy to`; the
+    //  delete-destination flag (it wiped the app's Documents once) is gone from the builder.
     simOps = []
-    do { try sim.copyDirectoryTo("D", bundle: "B", local: root, remote: "Documents/savedata/X", removeExisting: true)
-         check(false, "removeExisting without F6 must refuse") }
-    catch let e as DeviceError { check(e.code == DeviceError.factMissing, "F6 gate \(e)") }
-    catch { check(false, "\(error)") }
-    check(simOps.isEmpty, "the refused copy never reached devicectl \(simOps)")
+    try? sim.copyDirectoryTo("D", bundle: "B", local: root, remote: "Documents/savedata/X")
+    check(simOps == [.copyTo("D", bundle: "B", local: root.path, remote: "Documents/savedata/X")],
+          "the directory copy reaches devicectl as a plain copy to \(simOps)")
     try? FileManager.default.removeItem(at: root)
 }

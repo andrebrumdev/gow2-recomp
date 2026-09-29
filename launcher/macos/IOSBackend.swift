@@ -20,8 +20,8 @@ struct IOSDeps {
     /// `ps -axo comm=`; throws when the list cannot be read (the flows then refuse:
     /// an unreadable process list is never "the game is closed").
     var macProcesses: () throws -> String
-    /// Recorded device behaviours (Task 1): F5 gates the save sync, F6 the phone
-    /// replace, F7 the lock reading, F8 the profile rotation on re-sign.
+    /// Recorded device behaviours (Task 1): F5 gates the save sync, F7 the lock
+    /// reading, F8 the profile rotation on re-sign.
     var facts: DeviceFacts
     var home: URL
     var now: () -> Date
@@ -335,28 +335,32 @@ final class IOSBackend: ObservableObject {
         return URL(fileURLWithPath: app)
     }
 
-    private func installApp() async throws {
+    /// `backup`: the folder backupPhoneSaves() just wrote, handed to install_ios.sh, which
+    /// verifies it (fresh, sha256.txt, backup.meta = this bundle + device) before skipping its
+    /// own copy; nil (first install, no save on the phone) = the script checks the phone itself.
+    private func installApp(backup: URL?) async throws {
         progress = "Instalando o app no iPhone…"
-        // Only ever called right after backupPhoneSaves(): install_ios.sh then skips its own copy.
-        let r = try await runScript("install_ios.sh", [], log: "ios-install.log", extraEnv: ["GOW2_IOS_SAVES_BACKED_UP": "1"])
+        let extra = backup.map { ["GOW2_IOS_SAVES_BACKUP_DIR": $0.path] } ?? [:]
+        let r = try await runScript("install_ios.sh", [], log: "ios-install.log", extraEnv: extra)
         guard r.status == 0, r.output.contains("GOW2_IOS_INSTALL_OK") else { throw IOSFlowError.install(r) }
     }
 
     /// Never replace the app over the phone's saves without a verified copy of them on the
     /// Mac (INCIDENT: devicectl once wiped the app's Documents). A bundle that is not on the
-    /// phone yet has no container: nothing to copy. Returns the line for the result.
-    private func backupPhoneSaves(_ d: IOSDevice) async throws -> String {
+    /// phone yet has no container: nothing to copy. Returns the line for the result and the
+    /// backup folder (nil when there was nothing to copy).
+    private func backupPhoneSaves(_ d: IOSDevice) async throws -> (line: String, folder: URL?) {
         let t = deps.transport, b = bundle, udid = d.udid
         let onPhone = try await off { try t.apps(udid).contains { $0.bundleID == b } }
-        guard onPhone else { return "" }
+        guard onPhone else { return ("", nil) }
         progress = "Copiando os saves do iPhone para o Mac antes de instalar…"
         let s = makeSyncer(d)
-        let folders: [URL]
-        do { folders = try await off { try s.backupPhone() } } catch {
+        let folder: URL?
+        do { folder = try await off { try s.backupPhone() } } catch {
             throw IOSFlowError.phoneSaveBackup(IOSText.message(for: error))
         }
-        return folders.isEmpty ? "O iPhone não tinha saves."
-                               : "Saves do iPhone copiados para " + folders.map(\.path).joined(separator: ", ") + "."
+        guard let f = folder else { return ("O iPhone não tinha saves.", nil) }
+        return ("Saves do iPhone copiados para " + f.path + ".", f)
     }
 
     private func readExpiry(_ app: URL) throws -> Date {
@@ -404,8 +408,8 @@ final class IOSBackend: ObservableObject {
             let app = try await buildApp(signOnly: false)
             let expiry = try readExpiry(app)
             try await refuseIfGameRunning(d)             // the build takes minutes: re-check right before installing
-            let saved = try await backupPhoneSaves(d)
-            try await installApp()
+            let (saved, backup) = try await backupPhoneSaves(d)
+            try await installApp(backup: backup)
             record = loadRecord(d)                       // the app is on the phone now, whatever happens next
             record.expiry = expiry
             record.installedAt = deps.now()
@@ -464,8 +468,8 @@ final class IOSBackend: ObservableObject {
             }
             let expiry = try readExpiry(app)
             try await refuseIfGameRunning(d)             // re-check right before replacing the app
-            let saved = try await backupPhoneSaves(d)
-            try await installApp()
+            let (saved, backup) = try await backupPhoneSaves(d)
+            try await installApp(backup: backup)
             record = loadRecord(d)
             record.expiry = expiry
             record.installedAt = deps.now()

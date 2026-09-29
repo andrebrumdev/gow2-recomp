@@ -65,8 +65,7 @@ func runBackendChecks() async {
     scripts.results["build_ios.sh --sign-only"] = ScriptResult(status: 0, output: "GOW2_IOS_APP=\(appPath)\n")
     scripts.results["install_ios.sh"] = ScriptResult(status: 0, output: "App installed\nGOW2_IOS_INSTALL_OK\n")
     let now = Date(timeIntervalSince1970: 1790372701)
-    let facts = DeviceFacts(measured: "test", copyFromNestsDirectory: false, removeExistingContentDeletesExtras: true,
-                            lockStateTracksLock: true, retireProfileRenews: true)
+    let facts = DeviceFacts(measured: "test", copyFromNestsDirectory: false, lockStateTracksLock: true, retireProfileRenews: true)
     let deps = IOSDeps(transport: phone, scripts: scripts,
                        readProfile: { _ in profilePlist(expires: "2026-10-01T14:19:03Z") },
                        xcodePrefs: { Data(fxXcodePrefs.utf8) }, macProcesses: { "/bin/zsh\n" },

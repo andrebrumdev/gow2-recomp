@@ -50,7 +50,7 @@ enum SaveSyncError: Error, Equatable {
         case .symlinkInSave(let n):
             return "O save \(n) é ou contém um link simbólico. Nada foi copiado: troque o link pelos arquivos de verdade e tente de novo."
         case .cannotReplaceExactly(let n):
-            return "O save \(n) do iPhone tem arquivos que o do Mac não tem, e o devicectl deste Mac não apaga arquivos a mais numa cópia (fato F6). Nada foi copiado."
+            return "O save \(n) do iPhone tem arquivos que o do Mac não tem, e o launcher nunca apaga arquivos no iPhone numa cópia. Nada foi copiado."
         case .restoreFailed(let n, let backup):
             return "A cópia de \(n) para o iPhone não conferiu e a restauração automática também falhou. O save antigo do iPhone está guardado em \(backup): não apague essa pasta; tente Mac → iPhone de novo ou copie a pasta de volta com Finder → iPhone."
         case .gameRunningMac: return "O GoW2 está aberto no Mac. Feche o jogo e tente de novo."
@@ -211,5 +211,12 @@ enum SaveBackup {
         let old = (try? String(contentsOf: list, encoding: .utf8)) ?? ""
         try (old + src.rows.map { "\($0.sha)  \(name)/\($0.rel)\n" }.joined()).write(to: list, atomically: true, encoding: .utf8)
         return target
+    }
+
+    /// <folder>/backup.meta: which app and phone the backup was taken from. install_ios.sh
+    /// only accepts a caller's backup folder whose meta names its own bundle and device.
+    static func writeMeta(_ folder: URL, bundle: String, device: String) throws {
+        try "bundle=\(bundle)\nudid=\(device)\n".write(to: folder.appendingPathComponent("backup.meta"),
+                                                        atomically: true, encoding: .utf8)
     }
 }

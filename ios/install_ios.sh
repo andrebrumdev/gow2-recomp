@@ -12,45 +12,81 @@
 # verification -- it cannot tell a full copy from a "copy from" that silently stopped
 # half-way and still exited 0); if the listing, the copy, or that verification fails,
 # nothing is installed. A bundle the phone's app list does not have (first install) has
-# nothing to keep and skips it. GOW2_IOS_SAVES_BACKED_UP=1 = the caller already did it
-# (the Mac launcher does).
+# nothing to keep and skips it -- decided here from the phone's own app list, never from
+# the environment.
+# The Mac launcher backs the saves up itself right before calling this script and passes
+# GOW2_IOS_SAVES_BACKUP_DIR=<the folder it just wrote>. That folder replaces this script's
+# own copy only if the script can verify it (Codex review BLOCKER, 2026-09-28: a bare
+# "already backed up" env flag let anyone skip the backup): it exists, was written less
+# than 15 minutes ago, its sha256.txt checks (shasum -c, relative paths only), and its
+# backup.meta names this bundle and this device. Anything else is reported and the script
+# makes its own verified backup (or installs nothing).
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/ios_env.sh"
 [ -n "$DEV" ] || { echo "set GOW2_IOS_DEVICE in local.env" >&2; exit 1; }
 [ -d "$APP" ] || { echo "no app at $APP: run build_ios.sh" >&2; exit 1; }
-if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
-    BK="${GOW2_IOS_SAVE_BACKUP_DIR:-$HOME/Documents/GoW2 Saves}/$(date +%Y-%m-%d_%H%M%S)-iphone-cli"
-    # An independent, phone-side listing to verify the copy against (Codex review MAJOR,
-    # 2026-09-28). Lists the stable Documents/ -- not Documents/savedata directly, which
-    # does not exist on a first install and would make the listing itself fail -- and
-    # filters client-side, exactly like IOSSaveSyncer.swift's phoneListsSavedata()/
-    # fetchPhone(): a listing failure is never read as "the phone has no save".
-    # One private temp dir (BSD mktemp only randomizes TRAILING X's: a ".XXXXXX.json"
-    # template is a fixed name that collides with the next run).
-    LT="$(mktemp -d "${TMPDIR:-/tmp}/gow2_ios_savelist.XXXXXX")"
-    LJ="$LT/list.json"; LP="$LT/list.plist"; LISTING="$LT/rows.tsv"; AJ="$LT/apps.json"
-    # First install of this bundle? Asked of the phone's own app list (Codex review
-    # IMPORTANT, Task 7): only an explicit "not installed" skips the backup; a failed or
-    # unreadable app list refuses, like a failed file listing.
-    if ! xcrun devicectl device info apps --device "$DEV" --bundle-id "$BUNDLE" -t 60 -j "$AJ" -q; then
-        rm -rf "$LT"
-        echo "could not list the apps on the phone: nothing installed." >&2
-        exit 1
+# Why GOW2_IOS_SAVES_BACKUP_DIR cannot stand for this run's backup (empty = it can).
+handshake_problem() {
+    local d="$1" now m age
+    [ -d "$d" ] || { echo "not a folder"; return; }
+    now="$(date +%s)"
+    m="$( { stat -f %m "$d" 2>/dev/null || stat -c %Y "$d" 2>/dev/null; } || true )"
+    case "$m" in ''|*[!0-9]*) echo "unreadable mtime"; return ;; esac
+    age=$((now - m))
+    { [ "$age" -ge -60 ] && [ "$age" -lt 900 ]; } || { echo "written ${age}s ago, not in the last 15 minutes"; return; }
+    [ -s "$d/sha256.txt" ] || { echo "no sha256.txt"; return; }
+    # Only paths inside the folder: "<sha>  <relpath>", no absolute path, no "..".
+    if grep -vqE '^[0-9a-f]{64}  [^/]' "$d/sha256.txt" || grep -qE '(^|/)\.\.(/|$)' "$d/sha256.txt"; then
+        echo "sha256.txt has lines that are not relative paths inside the folder"; return
     fi
-    # devicectl can exit 0 and still write a failed outcome (Codex re-review CRITICAL):
-    # an empty array is only believed under outcome "success".
-    NAPPS=""
-    if [ "$(plutil -extract info.outcome raw -o - "$AJ" 2>/dev/null || true)" = success ]; then
-        NAPPS="$(plutil -extract result.apps raw -o - "$AJ" 2>/dev/null || true)"
-    fi
-    case "$NAPPS" in
-        ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone app list: nothing installed." >&2; exit 1 ;;
-    esac
+    ( cd "$d" && shasum -a 256 -c --status sha256.txt ) 2>/dev/null || { echo "sha256.txt does not check"; return; }
+    [ -f "$d/backup.meta" ] || { echo "no backup.meta"; return; }
+    grep -qxF "bundle=$BUNDLE" "$d/backup.meta" || { echo "backup.meta is for another bundle"; return; }
+    grep -qxF "udid=$DEV" "$d/backup.meta" || { echo "backup.meta is for another device"; return; }
+}
+BK="${GOW2_IOS_SAVE_BACKUP_DIR:-$HOME/Documents/GoW2 Saves}/$(date +%Y-%m-%d_%H%M%S)-iphone-cli"
+# An independent, phone-side listing to verify the copy against (Codex review MAJOR,
+# 2026-09-28). Lists the stable Documents/ -- not Documents/savedata directly, which
+# does not exist on a first install and would make the listing itself fail -- and
+# filters client-side, exactly like IOSSaveSyncer.swift's phoneListsSavedata()/
+# fetchPhone(): a listing failure is never read as "the phone has no save".
+# One private temp dir (BSD mktemp only randomizes TRAILING X's: a ".XXXXXX.json"
+# template is a fixed name that collides with the next run).
+LT="$(mktemp -d "${TMPDIR:-/tmp}/gow2_ios_savelist.XXXXXX")"
+LJ="$LT/list.json"; LP="$LT/list.plist"; LISTING="$LT/rows.tsv"; AJ="$LT/apps.json"
+# First install of this bundle? Asked of the phone's own app list (Codex review
+# IMPORTANT, Task 7): only an explicit "not installed" skips the backup; a failed or
+# unreadable app list refuses, like a failed file listing.
+if ! xcrun devicectl device info apps --device "$DEV" --bundle-id "$BUNDLE" -t 60 -j "$AJ" -q; then
+    rm -rf "$LT"
+    echo "could not list the apps on the phone: nothing installed." >&2
+    exit 1
 fi
-if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ] && [ "$NAPPS" = 0 ]; then
+# devicectl can exit 0 and still write a failed outcome (Codex re-review CRITICAL):
+# an empty array is only believed under outcome "success".
+NAPPS=""
+if [ "$(plutil -extract info.outcome raw -o - "$AJ" 2>/dev/null || true)" = success ]; then
+    NAPPS="$(plutil -extract result.apps raw -o - "$AJ" 2>/dev/null || true)"
+fi
+case "$NAPPS" in
+    ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone app list: nothing installed." >&2; exit 1 ;;
+esac
+HANDSHAKE=""
+if [ "$NAPPS" != 0 ] && [ -n "${GOW2_IOS_SAVES_BACKUP_DIR:-}" ]; then
+    why="$(handshake_problem "$GOW2_IOS_SAVES_BACKUP_DIR")"
+    if [ -z "$why" ]; then
+        HANDSHAKE="$GOW2_IOS_SAVES_BACKUP_DIR"
+    else
+        echo "GOW2_IOS_SAVES_BACKUP_DIR=$GOW2_IOS_SAVES_BACKUP_DIR not accepted ($why): backing up the phone's saves here." >&2
+    fi
+fi
+if [ "$NAPPS" = 0 ]; then
     rm -rf "$LT"
     echo "$BUNDLE is not on the phone yet (first install): no saves to back up."
-elif [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
+elif [ -n "$HANDSHAKE" ]; then
+    rm -rf "$LT"
+    echo "phone saves already backed up by the caller to $HANDSHAKE (verified: fresh, sha256.txt checks, same bundle and device)"
+else
     if ! xcrun devicectl device info files --device "$DEV" --domain-type appDataContainer \
             --domain-identifier "$BUNDLE" --subdirectory Documents -t 120 -j "$LJ" -q; then
         rm -rf "$LT"
@@ -101,7 +137,7 @@ elif [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
                 --domain-identifier "$BUNDLE" --source Documents/savedata --destination "$BK"; then
             rm -rf "$BK" "$LT"
             echo "could not copy Documents/savedata from the phone to $BK: nothing installed." >&2
-            echo "Saves already backed up by hand? Re-run with GOW2_IOS_SAVES_BACKED_UP=1." >&2
+            echo "Unlock the phone, check the cable and run it again (or use the Mac launcher's \"Instalar no iPhone\")." >&2
             exit 1
         fi
         # Verify every phone-listed file landed, same size (Codex review MAJOR): this is
@@ -116,7 +152,9 @@ elif [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
                 exit 1
             fi
         done < "$LISTING"
-        ( cd "$BK" && find . -type f ! -name sha256.txt -exec shasum -a 256 {} + | sed 's|  \./|  |' > sha256.txt )
+        ( cd "$BK" && find . -type f ! -name sha256.txt ! -name backup.meta -exec shasum -a 256 {} + | sed 's|  \./|  |' > sha256.txt )
+        # Which bundle/device this backup belongs to (the launcher writes the same file).
+        printf 'bundle=%s\nudid=%s\n' "$BUNDLE" "$DEV" > "$BK/backup.meta"
         echo "phone saves backed up to $BK (verified against the phone's own listing, $(wc -l < "$LISTING" | tr -d ' ') files)"
     else
         echo "the phone lists no Documents/savedata yet: nothing to back up."
