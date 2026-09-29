@@ -189,6 +189,23 @@ final class SaveSyncer {
         return dir
     }
 
+    /// Before an install or re-sign replaces the app: a verified copy of every phone save
+    /// into <backupRoot>/<stamp>-iphone[-N]/<save> (never deleted). [] only when a
+    /// SUCCESSFUL listing of Documents shows no savedata; any read error throws -- it is
+    /// never read as "the phone has no save" (see fetchPhone).
+    func backupPhone() throws -> [URL] {
+        let phoneDir = try fetchPhone()
+        defer { try? FileManager.default.removeItem(at: phoneDir) }
+        let phone = try SaveSnapshot.take(phoneDir)
+        let folder = SaveBackup.folderName(now(), side: .iphone)
+        var out: [URL] = []
+        for n in phone.keys.sorted() {
+            let f = try SaveBackup.write(dir: phoneDir.appendingPathComponent(n), name: n, into: backupRoot, folder: folder)
+            if !out.contains(f) { out.append(f) }
+        }
+        return out
+    }
+
     /// Right before a push that has no phone backup: is `n` on the phone now? Only a
     /// successful listing says "no"; a 7000 on savedata is confirmed against Documents.
     private func phoneHasSave(_ n: String) throws -> Bool {

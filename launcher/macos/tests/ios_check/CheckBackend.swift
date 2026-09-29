@@ -3,11 +3,13 @@ import Foundation
 final class FakeScripts: ScriptRunning {
     var results: [String: ScriptResult] = [:]
     private(set) var calls: [String] = []
+    private(set) var envs: [String: [String: String]] = [:]
     /// Runs after the script "ran" (the world changing while a long build runs).
     var onRun: ((String) -> Void)?
     func run(_ script: URL, _ args: [String], env: [String: String], log: URL) throws -> ScriptResult {
         let key = ([script.lastPathComponent] + args).joined(separator: " ")
         calls.append(key)
+        envs[key] = env
         onRun?(key)
         return results[key] ?? ScriptResult(status: 127, output: "no fake for \(key)")
     }
@@ -101,11 +103,11 @@ func runBackendChecks() async {
     // Re-sign: --sign-only, no data copied, this app's cached profile retired; a failed build restores it.
     let pdir = Signing.profilesDir(home: home)
     writeFile(pdir.appendingPathComponent("old.mobileprovision"), "old")
-    let opsBefore = phone.ops.count
+    let opsBefore = writeOps(phone)
     await ios.resign()
     check(ios.error == nil && Array(scripts.calls.suffix(3)) == ["print_config.sh", "build_ios.sh --sign-only", "install_ios.sh"],
           "resign \(scripts.calls.suffix(3)) \(ios.error ?? "")")
-    check(phone.ops.count == opsBefore, "resign copies no data")
+    check(writeOps(phone) == opsBefore, "resign copies no data")
     check(!FileManager.default.fileExists(atPath: pdir.appendingPathComponent("old.mobileprovision").path), "cached profile retired")
     writeFile(pdir.appendingPathComponent("old2.mobileprovision"), "old2")
     scripts.results["build_ios.sh --sign-only"] = ScriptResult(status: 1, output: "error: No signing certificate\n")
@@ -163,10 +165,10 @@ func runBackendChecks() async {
     // the flow re-checks right before installing the app and again before copying data.
     let gameOnPhone = [app.url + "GoW2"]
     scripts.onRun = { key in if key == "build_ios.sh" { phone.running = gameOnPhone } }
-    var c0 = scripts.calls.count, o0 = phone.ops.count
+    var c0 = scripts.calls.count, o0 = writeOps(phone)
     await ios.install()
     check(ios.error?.contains("alternador") == true && Array(scripts.calls.dropFirst(c0)) == ["print_config.sh", "build_ios.sh"]
-          && phone.ops.count == o0, "install: phone game opened during the build -> no install, no copy: \(ios.error ?? "") \(scripts.calls.dropFirst(c0))")
+          && writeOps(phone) == o0, "install: phone game opened during the build -> no install, no copy: \(ios.error ?? "") \(scripts.calls.dropFirst(c0))")
     phone.running = []
     scripts.onRun = { key in if key == "build_ios.sh --sign-only" { phone.running = gameOnPhone } }
     c0 = scripts.calls.count
@@ -181,9 +183,9 @@ func runBackendChecks() async {
     let boxed = IOSBackend(repo: repo, game: g, deps: boxDeps)
     scripts.onRun = { key in if key.hasPrefix("build_ios.sh") { psBox.text = "/Users/x/gow2-recomp/g2play\n" } }
     c0 = scripts.calls.count
-    o0 = phone.ops.count
+    o0 = writeOps(phone)
     await boxed.install()
-    check(boxed.error?.contains("Mac") == true && !scripts.calls.dropFirst(c0).contains("install_ios.sh") && phone.ops.count == o0,
+    check(boxed.error?.contains("Mac") == true && !scripts.calls.dropFirst(c0).contains("install_ios.sh") && writeOps(phone) == o0,
           "install: Mac game opened during the build -> no install: \(boxed.error ?? "") \(scripts.calls.dropFirst(c0))")
     psBox.text = "/bin/zsh\n"
     c0 = scripts.calls.count
@@ -197,20 +199,20 @@ func runBackendChecks() async {
     try? FileManager.default.removeItem(at: installJSON)
     scripts.onRun = { key in if key == "install_ios.sh" { phone.running = gameOnPhone } }
     c0 = scripts.calls.count
-    o0 = phone.ops.count
+    o0 = writeOps(phone)
     await ios.install()
     let dec = JSONDecoder()
     dec.dateDecodingStrategy = .iso8601
     let rec = (try? Data(contentsOf: installJSON)).flatMap { try? dec.decode(IOSInstallRecord.self, from: $0) }
-    check(ios.error?.contains("alternador") == true && scripts.calls.dropFirst(c0).contains("install_ios.sh") && phone.ops.count == o0,
-          "install: phone game opened during the app install -> no data copied: \(ios.error ?? "") ops+\(phone.ops.count - o0)")
+    check(ios.error?.contains("alternador") == true && scripts.calls.dropFirst(c0).contains("install_ios.sh") && writeOps(phone) == o0,
+          "install: phone game opened during the app install -> no data copied: \(ios.error ?? "") ops+\(writeOps(phone) - o0)")
     check(rec?.expiry == Date(timeIntervalSince1970: 1790864343) && rec?.installedAt == now && rec?.setID == nil,
           "record saved right after the app install, set id only after a push: \(String(describing: rec))")
     phone.running = []
     scripts.onRun = { key in if key == "install_ios.sh" { psBox.text = "/Users/x/gow2-recomp/boot_gow2\n" } }
-    o0 = phone.ops.count
+    o0 = writeOps(phone)
     await boxed.install()
-    check(boxed.error?.contains("Mac") == true && phone.ops.count == o0, "install: Mac game opened during the app install -> no copy: \(boxed.error ?? "")")
+    check(boxed.error?.contains("Mac") == true && writeOps(phone) == o0, "install: Mac game opened during the app install -> no copy: \(boxed.error ?? "")")
     psBox.text = "/bin/zsh\n"
     scripts.onRun = nil
 

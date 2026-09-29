@@ -36,3 +36,6 @@ func probeState(_ docs: URL) -> Int {
     guard let r = text.range(of: "state=") else { return -1 }
     return Int(String(text[r.upperBound...].prefix(1))) ?? -1
 }
+
+/// Ops that write to the phone: the pre-install backup's `copy from` reads are not data copies.
+func writeOps(_ t: FakeTransport) -> Int { t.ops.filter { !$0.hasPrefix("from ") && !$0.hasPrefix("dir from ") }.count }

@@ -79,7 +79,7 @@ struct IPhoneView: View {
                     }
                 }
                 if !ios.progress.isEmpty { Text(ios.progress).font(Theme.F.caption).foregroundStyle(Theme.C.parchment) }
-                Text("Instalar compila o app, instala e copia o jogo (≈ 7 GB; pelo cabo leva minutos, pelo Wi-Fi bem mais). Se a cópia parar, use Instalar de novo: ela continua de onde parou e o iPhone mostra \"Jogo não instalado\" até terminar. Deixe o iPhone desbloqueado durante a cópia. Reassinar reinstala só o app: o jogo e os saves ficam.")
+                Text("Instalar compila o app, instala e copia o jogo (≈ 7 GB; pelo cabo leva minutos, pelo Wi-Fi bem mais). Se a cópia parar, use Instalar de novo: ela continua de onde parou e o iPhone mostra \"Jogo não instalado\" até terminar. Deixe o iPhone desbloqueado durante a cópia. Reassinar reinstala só o app: o jogo e os saves ficam. Antes de instalar ou reassinar, os saves do iPhone são copiados para \(ios.backupRootPath).")
                     .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
             }
             Section("Saves") {
