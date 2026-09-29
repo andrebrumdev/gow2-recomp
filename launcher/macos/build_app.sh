@@ -5,6 +5,9 @@
 #
 #   launcher/macos/build_app.sh            -> ./GoW2 Recomp.app
 #   APP=/Applications/GoW2\ Recomp.app launcher/macos/build_app.sh
+#   GOW2_REPO_PATH=<checkout with the game data + ios/ scripts> (default: this checkout): the
+#   folder the app drives (validation, local build, iPhone install); lets a build from a
+#   worktree serve the main checkout.
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SRC/../.." && pwd)"
@@ -26,9 +29,13 @@ swiftc -O -parse-as-library -swift-version 5 \
 # Banner: a screenshot of the native renderer already in docs/img.
 cp "$REPO/docs/img/palace-lighting.jpg" "$APP/Contents/Resources/hero.jpg"
 # Icon: the local game app's icon when present (not versioned -- game artwork).
-ICON_SRC="$REPO/God of War II HD.app/Contents/Resources/AppIcon.icns"
+ICON_SRC=""
+for base in "${GOW2_WORK:-}" "${GOW2_REPO_PATH:-}" "$REPO" "$REPO/../gow2-recomp"; do
+    [ -n "$base" ] && [ -f "$base/God of War II HD.app/Contents/Resources/AppIcon.icns" ] \
+        && { ICON_SRC="$base/God of War II HD.app/Contents/Resources/AppIcon.icns"; break; }
+done
 ICON_KEY=""
-if [ -f "$ICON_SRC" ]; then
+if [ -n "$ICON_SRC" ]; then
     cp "$ICON_SRC" "$APP/Contents/Resources/AppIcon.icns"
     ICON_KEY="<key>CFBundleIconFile</key><string>AppIcon</string>"
 fi
@@ -47,7 +54,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
-  <key>GoW2RepoPath</key><string>$REPO</string>
+  <key>GoW2RepoPath</key><string>${GOW2_REPO_PATH:-$REPO}</string>
   $ICON_KEY
 </dict></plist>
 EOF
