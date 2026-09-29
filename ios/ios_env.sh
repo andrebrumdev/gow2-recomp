@@ -20,13 +20,15 @@ BUNDLE="${GOW2_IOS_BUNDLE_ID:-com.$(printf '%s' "$TEAM" | tr 'A-Z' 'a-z').gow2re
 APP="$B/dd/Build/Products/Release-iphoneos/GoW2.app"
 # Kit folder (plan 2026-09-28, Phase 6): the NID step uses the kit's ps3kit and the
 # remaining Python tools the Python kit/setup.sh would pick (PY -> kit-built -> system).
-# KIT_TOOLS=py keeps the Python NID tool, like setup.sh. A dev tree has neither file.
+# KIT_TOOLS=py keeps the Python NID tool, like setup.sh. A dev tree has no .kit_tools.
 if [ "${KIT_TOOLS:-cpp}" = py ]; then
     unset PS3KIT
 elif [ -z "${PS3KIT:-}" ] && [ -x "$G/.kit_tools/ps3kit/ps3kit" ]; then
     export PS3KIT="$G/.kit_tools/ps3kit/ps3kit"
 fi
-if [ -f "$G/kit/lib/pick_python.sh" ]; then
+# Only a kit folder (it has .kit_tools): every checkout ships pick_python.sh, and a dev
+# tree must keep build_macos.sh's own choice (the engine .venv).
+if [ -d "$G/.kit_tools" ] && [ -f "$G/kit/lib/pick_python.sh" ]; then
     . "$G/kit/lib/pick_python.sh"
     if _kit_py="$(kit_pick_python "$G" 2>/dev/null)"; then export PY="$_kit_py"; fi
     unset _kit_py
