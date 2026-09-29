@@ -1,0 +1,26 @@
+ps3kit-xform 1
+xform patch_1856a8_stream_opd.py
+authored-in recomp_mid_v2/patch_1856a8_stream_opd.py@38eba1d
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_1856a8_stream_opd.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2b.9) (2b ledger).
+file ppu_recomp_000.cpp
+# hunk -344376,1 +344376,4
+scope func 001856A8
+at line sha256:3b2fcbfd10cd1981d9e9850a7a0b3cf17ec475d85c788f4f490c5367ee92b83e nth 1 of 1
+op replace-line
+template <<END
+        { static int on=-1; if(on<0){extern char* getenv(const char*); on=getenv("PS3_TRACE_SHADERSRC")||getenv("PS3_TRACE_TYMAP")?1:0;}
+          if(on){ static int n=0; if(n++<24)
+            fprintf(stderr,"[STREAM-OPD] #%d opd=0x%08X code=0x%08X\n",
+              n,(uint32_t)ctx->gpr[9], ctx->gpr[9]?vm_read32(ctx->gpr[9]+0x0):0); fflush(stderr);} }
+END
+# hunk -344378,3 +344381,1
+scope func 001856A8
+at line sha256:91f4da818752a48481862fa7373c25da4c7a83ed8c063356b24f374ac521142d nth 1 of 1
+op edit-line
+regex ^([\s\S]{12})([\s\S]{17})([\s\S]{25})$
+subst \1call_opd(ctx, (uint32_t)ctx->gpr[9]\3
+scope func 001856A8
+at line sha256:cf744ead3b2c9e8e81d77dcf22686917e6e039766bb9e3c2072faa321164fb3c nth 1 of 1
+span 2 sha256:933d53647e108519decc90544d7984a2a94a13e8af67b30e81190da4d39cc3b0
+op delete-lines 2
