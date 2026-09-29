@@ -76,9 +76,9 @@ bash "$CHK" "$T/good.tsv" "$T/absent_status.tsv" > /dev/null 2>&1; t_eq 2 $? "mi
 # The committed golden: hash-only mode is always meaningful (guard removed in Task 5,
 # once the golden carries the per-patch stages); it can never carry ppu_status
 # (Controller ruling 1 -- see the standalone assertion in Task 5 Step 6).
-if grep -q '^ppu_after/' "$R/kit/golden/stages.tsv"; then
-    t_true "committed golden is per-patch consistent (hashes only)" bash "$CHK" "$R/kit/golden/stages.tsv"
-fi
+t_true "committed golden is per-patch consistent (hashes only)" bash "$CHK" "$R/kit/golden/stages.tsv"
+t_eq 255 "$(awk -F'\t' '$1 ~ /^ppu_after\// && $1 != "ppu_after/kit_delta" {print substr($1,11)}' "$R/kit/golden/stages.tsv" | LC_ALL=C sort -u | wc -l | tr -d ' ')" \
+    "committed golden has a ppu_after/<patch> snapshot for all 255 patches"
 t_false "the committed golden never holds a patch status word (Controller ruling 1: hashes only)" \
     grep -qE '(APPLIED|FAILED|NO-MATCH|UNVERIFIED|SKIPPED|ALREADY-APPLIED)' "$R/kit/golden/stages.tsv"
 t_done
