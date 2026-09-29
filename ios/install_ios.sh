@@ -11,8 +11,9 @@
 # MAJOR, 2026-09-28: a sha256.txt of whatever happened to land locally is not a
 # verification -- it cannot tell a full copy from a "copy from" that silently stopped
 # half-way and still exited 0); if the listing, the copy, or that verification fails,
-# nothing is installed. GOW2_IOS_SAVES_BACKED_UP=1 = the caller already did it (the Mac
-# launcher does) or there is nothing to keep (first install of this bundle).
+# nothing is installed. A bundle the phone's app list does not have (first install) has
+# nothing to keep and skips it. GOW2_IOS_SAVES_BACKED_UP=1 = the caller already did it
+# (the Mac launcher does).
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/ios_env.sh"
 [ -n "$DEV" ] || { echo "set GOW2_IOS_DEVICE in local.env" >&2; exit 1; }
@@ -27,12 +28,28 @@ if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
     # One private temp dir (BSD mktemp only randomizes TRAILING X's: a ".XXXXXX.json"
     # template is a fixed name that collides with the next run).
     LT="$(mktemp -d "${TMPDIR:-/tmp}/gow2_ios_savelist.XXXXXX")"
-    LJ="$LT/list.json"; LP="$LT/list.plist"; LISTING="$LT/rows.tsv"
+    LJ="$LT/list.json"; LP="$LT/list.plist"; LISTING="$LT/rows.tsv"; AJ="$LT/apps.json"
+    # First install of this bundle? Asked of the phone's own app list (Codex review
+    # IMPORTANT, Task 7): only an explicit "not installed" skips the backup; a failed or
+    # unreadable app list refuses, like a failed file listing.
+    if ! xcrun devicectl device info apps --device "$DEV" --bundle-id "$BUNDLE" -t 60 -j "$AJ" -q; then
+        rm -rf "$LT"
+        echo "could not list the apps on the phone: nothing installed." >&2
+        exit 1
+    fi
+    NAPPS="$(plutil -extract result.apps raw -o - "$AJ" 2>/dev/null || true)"
+    case "$NAPPS" in
+        ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone app list: nothing installed." >&2; exit 1 ;;
+    esac
+fi
+if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ] && [ "$NAPPS" = 0 ]; then
+    rm -rf "$LT"
+    echo "$BUNDLE is not on the phone yet (first install): no saves to back up."
+elif [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
     if ! xcrun devicectl device info files --device "$DEV" --domain-type appDataContainer \
             --domain-identifier "$BUNDLE" --subdirectory Documents -t 120 -j "$LJ" -q; then
         rm -rf "$LT"
         echo "could not list Documents on the phone: nothing installed." >&2
-        echo "First install of this bundle (not on the phone yet)? Re-run with GOW2_IOS_SAVES_BACKED_UP=1." >&2
         exit 1
     fi
     # A listing with no result.files array (a failed outcome written with rc 0) is not
@@ -44,15 +61,29 @@ if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
         exit 1
     fi
     # <relpath under savedata/>\t<size>, files only (no directory entries).
+    # Every entry the phone listed is read (Codex review CRITICAL, Task 7: stopping at the
+    # first entry without a relativePath skipped the saves listed after it); an entry
+    # that cannot be described -- no path, or a savedata file without isDirectory/size --
+    # refuses the install instead of being read as "nothing to keep".
     : > "$LISTING"
+    NFILES="$(plutil -extract result.files raw -o - "$LJ" 2>/dev/null || true)"
+    case "$NFILES" in
+        ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone file listing: nothing installed." >&2; exit 1 ;;
+    esac
+    pb() { /usr/libexec/PlistBuddy -c "Print :result:files:$1" "$LP" 2>/dev/null; }
     i=0
-    while rel="$(/usr/libexec/PlistBuddy -c "Print :result:files:$i:relativePath" "$LP" 2>/dev/null)"; do
+    while [ "$i" -lt "$NFILES" ]; do
+        rel="$(pb "$i:relativePath")" || { rm -rf "$LT"; echo "unreadable entry $i in the phone file listing (no relativePath): nothing installed." >&2; exit 1; }
         case "$rel" in
             savedata/*)
-                isdir="$(/usr/libexec/PlistBuddy -c "Print :result:files:$i:resources:isDirectory" "$LP" 2>/dev/null)"
+                isdir="$(pb "$i:resources:isDirectory")" \
+                    || { rm -rf "$LT"; echo "unreadable entry $rel in the phone file listing (no isDirectory): nothing installed." >&2; exit 1; }
                 if [ "$isdir" != true ]; then
-                    size="$(/usr/libexec/PlistBuddy -c "Print :result:files:$i:metadata:size" "$LP" 2>/dev/null)"
-                    printf '%s\t%s\n' "${rel#savedata/}" "${size:-0}" >> "$LISTING"
+                    size="$(pb "$i:metadata:size")" || size=""   # set -e: a failed lookup is data here
+                    case "$size" in
+                        ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable entry $rel in the phone file listing (no size): nothing installed." >&2; exit 1 ;;
+                    esac
+                    printf '%s\t%s\n' "${rel#savedata/}" "$size" >> "$LISTING"
                 fi
                 ;;
         esac
@@ -64,8 +95,7 @@ if [ "${GOW2_IOS_SAVES_BACKED_UP:-}" != 1 ]; then
                 --domain-identifier "$BUNDLE" --source Documents/savedata --destination "$BK"; then
             rm -rf "$BK" "$LT"
             echo "could not copy Documents/savedata from the phone to $BK: nothing installed." >&2
-            echo "First install of this bundle (no saves yet), or saves already backed up by hand?" \
-                 "Re-run with GOW2_IOS_SAVES_BACKED_UP=1." >&2
+            echo "Saves already backed up by hand? Re-run with GOW2_IOS_SAVES_BACKED_UP=1." >&2
             exit 1
         fi
         # Verify every phone-listed file landed, same size (Codex review MAJOR): this is

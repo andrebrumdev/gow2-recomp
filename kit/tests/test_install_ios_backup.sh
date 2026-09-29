@@ -12,13 +12,21 @@ cp "$R/ios/install_ios.sh" "$R/ios/ios_env.sh" "$T/g/ios/"
 cat > "$T/bin/xcrun" <<'EOF'
 #!/bin/bash
 echo "$*" >> "$FAKE_LOG"
-j=""; d=""; prev=""
+j=""; d=""; b=""; prev=""
 for a in "$@"; do
     [ "$prev" = -j ] && j="$a"
     [ "$prev" = --destination ] && d="$a"
+    [ "$prev" = --bundle-id ] && b="$a"
     prev="$a"
 done
 case "$*" in
+    *"info apps"*)
+        # Is the bundle on the phone already? Default: yes (a reinstall).
+        [ "${FAKE_APPS_RC:-0}" = 0 ] || exit 1
+        [ -n "$j" ] || exit 1
+        defa="{\"info\":{\"outcome\":\"success\"},\"result\":{\"apps\":[{\"bundleIdentifier\":\"$b\",\"name\":\"GoW2\"}]}}"
+        printf '%s\n' "${FAKE_APPS_JSON:-$defa}" > "$j"
+        ;;
     *"info files"*)
         # The phone-side listing install_ios.sh verifies its copy against (Codex review
         # MAJOR, 2026-09-28); default matches what the "copy from" case below produces.
@@ -69,8 +77,37 @@ t_false "mismatch -> no app install" grep -q 'install app' "$T/mismatch.log"
 t_true "mismatch -> says why" grep -qE "phone's listing|verification" "$T/mismatch.log.out"
 t_eq "" "$(ls -A "$T/bk" 2>/dev/null)" "mismatch -> no half backup folder left"
 
+# Codex review CRITICAL (Task 7): an entry the listing cannot describe (no relativePath,
+# no size) used to end the scan early -- saves listed after it were never backed up and
+# the install went on. Any unreadable entry now refuses the install.
+for c in nopath nosize; do
+    rm -rf "$T/bk"
+    case $c in
+        nopath) bad='{"metadata":{"size":1},"resources":{"isDirectory":false}}' ;;
+        nosize) bad='{"relativePath":"savedata/BCUS98229_GOW2/ICON0.PNG","resources":{"isDirectory":false}}' ;;
+    esac
+    run "$T/$c.log" FAKE_LISTING_JSON="{\"info\":{\"outcome\":\"success\"},\"result\":{\"files\":[$bad,{\"relativePath\":\"savedata/BCUS98229_GOW2/SYS.BIN\",\"metadata\":{\"size\":5},\"resources\":{\"isDirectory\":false}}]}}"
+    t_eq 1 $? "$c entry in the phone listing -> rc 1"
+    t_false "$c entry -> no app install" grep -q 'install app' "$T/$c.log"
+    t_true "$c entry -> says why" grep -q 'unreadable entry' "$T/$c.log.out"
+done
+
+# Codex review IMPORTANT (Task 7): first install of a bundle (the phone's own app list does
+# not have it) needs no backup and no override; a failed app listing is still a refusal.
+rm -rf "$T/bk"
+run "$T/first.log" FAKE_APPS_JSON='{"info":{"outcome":"success"},"result":{"apps":[]}}'; t_eq 0 $? "first install -> installs"
+t_true "first install -> the app list was asked with the bundle id" grep -q 'info apps .*--bundle-id com.abcde12345.gow2recomp' "$T/first.log"
+t_false "first install -> no file listing, no copy from" grep -qE 'info files|copy from' "$T/first.log"
+t_true "first install -> says so" grep -q 'not on the phone yet' "$T/first.log.out"
+t_true "first install -> app installed" grep -q 'install app' "$T/first.log"
+run "$T/appsfail.log" FAKE_APPS_RC=1; t_eq 1 $? "app list fails -> rc 1"
+t_false "app list fails -> no app install" grep -q 'install app' "$T/appsfail.log"
+run "$T/appsbad.log" FAKE_APPS_JSON='{"info":{"outcome":"failed"}}'; t_eq 1 $? "app list without result.apps -> rc 1"
+t_false "app list without result.apps -> no app install" grep -q 'install app' "$T/appsbad.log"
+t_true "reinstall -> apps listed before the files" test "$(line_of 'info apps' "$T/ok.log")" -lt "$(line_of 'info files' "$T/ok.log")"
+
 run "$T/skip.log" GOW2_IOS_SAVES_BACKED_UP=1; t_eq 0 $? "caller already backed up -> install"
-t_false "caller already backed up -> no listing, no copy from" grep -qE 'info files|copy from' "$T/skip.log"
+t_false "caller already backed up -> no listing, no copy from" grep -qE 'info apps|info files|copy from' "$T/skip.log"
 
 t_false "no --remove-existing-content reaches devicectl" grep -q -- '--remove-existing-content' "$T/ok.log" "$T/skip.log"
 t_eq "" "$(grep -l -- '--remove-existing-content' "$R"/ios/*.sh 2>/dev/null)" "no ios script passes --remove-existing-content"
