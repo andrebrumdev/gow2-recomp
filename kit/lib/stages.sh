@@ -22,6 +22,23 @@ stage_capture() {
     done
 }
 
+# stage_record <stage> <key> <value>: a record that is not a file hash (e.g. a
+# patch's order and status, Phase 2a). Written to ppu_status.tsv -- a file SEPARATE
+# from stages.tsv, which stage_capture uses and which record.sh --write copies
+# verbatim into the committed kit/golden/stages.tsv -- so a status word can
+# structurally never reach the committed golden (Codex review BLOCKER, 2026-09-28;
+# Controller ruling 1: hashes only). Same no-op rule as stage_capture.
+stage_record() {
+    [ -n "${KIT_STAGE_DIR:-}" ] || return 0
+    [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] || { echo "stage_record: empty field" >&2; return 1; }
+    case "$1$2$3" in
+        *"	"*|*"
+"*) echo "stage_record: tab or newline in a field" >&2; return 1 ;;
+    esac
+    mkdir -p "$KIT_STAGE_DIR"
+    printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$KIT_STAGE_DIR/ppu_status.tsv"
+}
+
 # stage_compare <golden.tsv> <candidate.tsv> [stage]
 stage_compare() {
     local golden=$1 cand=$2 only=${3:-}

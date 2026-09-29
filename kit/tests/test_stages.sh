@@ -41,4 +41,20 @@ t_false "empty golden with candidates fails (EXTRA)" stage_compare "$T/empty.tsv
 # stop-after
 t_eq "go" "$(KIT_STOP_AFTER=5 bash -c ". '$HERE/../lib/stages.sh'; kit_stop_after 4; echo go")" "stop-after other step continues"
 t_eq "" "$(KIT_STOP_AFTER=5 bash -c ". '$HERE/../lib/stages.sh'; kit_stop_after 5; echo go")" "stop-after its step exits"
+# stage_record (Phase 2a: a patch's status, not a file) writes to ppu_status.tsv, a
+# file SEPARATE from stages.tsv (the one record.sh --write copies into the committed
+# kit/golden/stages.tsv) -- so a status word can never reach the committed golden
+# (Codex review BLOCKER, 2026-09-28: see CLAUDE.md rule 4 / Controller ruling 1).
+unset KIT_STAGE_DIR
+t_true "record without KIT_STAGE_DIR returns 0" stage_record ppu_status patch_x.py 001:APPLIED
+t_true "record without KIT_STAGE_DIR creates nothing" test ! -e "$T/st3"
+KIT_STAGE_DIR="$T/st3" stage_record ppu_status patch_x.py 001:APPLIED
+t_eq "ppu_status	patch_x.py	001:APPLIED" "$(cat "$T/st3/ppu_status.tsv")" "record line"
+t_true "stage_record never writes to stages.tsv" test ! -e "$T/st3/stages.tsv"
+t_false "a tab in a field fails" env KIT_STAGE_DIR="$T/st3" bash -c ". '$HERE/../lib/stages.sh'; stage_record s 'a	b' v"
+t_false "an empty field fails" env KIT_STAGE_DIR="$T/st3" bash -c ". '$HERE/../lib/stages.sh'; stage_record s k ''"
+t_eq 1 "$(wc -l < "$T/st3/ppu_status.tsv" | tr -d ' ')" "failed records wrote nothing"
+printf 'ppu_status\tpatch_x.py\t001:APPLIED\n' > "$T/gs.tsv"
+printf 'ppu_status\tpatch_x.py\t001:FAILED\n' > "$T/cs.tsv"
+t_false "a changed status compares as DIFF" stage_compare "$T/gs.tsv" "$T/cs.tsv"
 t_done
