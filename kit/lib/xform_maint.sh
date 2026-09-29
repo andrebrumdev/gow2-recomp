@@ -28,7 +28,10 @@ kit_scratch_dir() {
     if [ -L "$p/$mark" ] || { [ -e "$p/$mark" ] && [ ! -f "$p/$mark" ]; }; then
         echo "scratch $1: marker $mark is not a regular file (symlink?) -- refused" >&2; return 2
     fi
-    : > "$p/$mark"
+    # (re)create the marker without following a link swapped in after the checks: remove
+    # it, then create it with O_EXCL (noclobber) -- a name that reappears in between fails
+    rm -f "$p/$mark" && ( set -C; : > "$p/$mark" ) 2>/dev/null \
+        || { echo "scratch $1: cannot create marker $mark exclusively -- refused" >&2; return 2; }
     printf '%s\n' "$p"
 }
 
