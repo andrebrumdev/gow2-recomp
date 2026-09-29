@@ -15,8 +15,7 @@
 : "${PS3_VFS_ROOT:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/extracted/USRDIR}"
 export PS3_VFS_ROOT
 
-# Filmes por HLE em vez de decode real. PS3_VDEC_ASYNC=1 e obrigatorio quando
-# se liga decode de video a serio (ver o CLAUDE.md do motor).
+# Filmes por HLE em vez de decode real (o decode assincrono ja' e' o padrao no macOS/iOS).
 # Overlay VT do host DESLIGADO (2026-09-23): com o cellVdec a responder BUSY
 # (ps3recomp c1c1bb7a) e a entregar RGBA (4f803bb3) o jogo recebe todas as
 # imagens e desenha o proprio video; o overlay por cima fazia a intro aparecer
@@ -55,10 +54,6 @@ export PS3_VFS_ROOT
 export PS3_MOVIE_CACHE
 : "${PS3_MOVIE_EOS:=1}";        export PS3_MOVIE_EOS
 
-# Decode de video assincrono. Obrigatorio no caminho da intro (o sync voltou a
-# ser default noutro commit; ver CLAUDE.md do motor). Respeitado se ja definido.
-: "${PS3_VDEC_ASYNC:=1}";       export PS3_VDEC_ASYNC
-
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
 
@@ -75,9 +70,6 @@ export PS3_MOVIE_CACHE
 # real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
 # texturas WAD/UI nao avanca. spu2/3 continuam opt-in (PS3_SPU2/3).
 : "${PS3_SPU1:=1}";             export PS3_SPU1
-
-# FIFO do RSX consumido pelo backend.
-: "${PS3_RSX_FIFO:=1}";         export PS3_RSX_FIFO
 
 # Backend RSX (M10): no Darwin, default Metal com janela. Headless usa
 # PS3_NO_RSX=1 e nao precisa de backend. Respeita valor ja definido.

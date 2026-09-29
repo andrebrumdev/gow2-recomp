@@ -22,7 +22,6 @@
 # Chamar SO depois de "set -a; . env_gow2.sh; set +a" (o mesmo pre-requisito
 # de bisect_regression.sh original).
 arm_menu_fast_recipe() {
-  export PS3_VDEC_ASYNC=1
   export PS3_VDEC_FORCE_SEQDONE_MS=1500
   export PS3_MOVIE_EOS=1 PS3_MOVIE_HLE=1 PS3_MOVIE_IO=1
   export PS3_BOOT_LOGO_MS=300
@@ -31,7 +30,6 @@ arm_menu_fast_recipe() {
   export PS3_TYPE15_UNSTICK=1
   export PS3_SPU1=1 PS3_SPU4=1 PS3_SPU5=1
   export PS3_RSX_BACKEND=metal
-  export PS3_RSX_FIFO=1
   export PS3_FULLSCREEN=0
   export PS3_PERF_FSM=1
 }
