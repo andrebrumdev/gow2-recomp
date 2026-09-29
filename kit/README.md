@@ -10,7 +10,8 @@ your Mac from the files you provide.
 
 - A Mac with Apple Silicon (M1 or newer) running a recent macOS.
 - Xcode Command Line Tools: `xcode-select --install`.
-- [Homebrew](https://brew.sh), then `brew install cmake ninja`.
+- [Homebrew](https://brew.sh), then `brew install cmake ninja pkgconf sdl2`
+  (SDL2 is the game window, input and audio on the Mac; `pkg-config` finds it).
   If no Python 3.11 or newer is installed, `setup.sh` compiles the one whose
   source comes with the kit (`third_party/cpython`, PSF licence) the first
   time, which adds a few minutes. It is only used by the build tools that are

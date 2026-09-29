@@ -12,7 +12,8 @@
 #   Supported: God of War II HD, NPUA80491 v01.00 (SHA-256 of the ELF below).
 #
 # What it does, all locally, nothing is downloaded:
-#   1. checks the tools (Xcode Command Line Tools, CMake, Ninja, Python >= 3.11);
+#   1. checks the tools (Xcode Command Line Tools, CMake, Ninja, pkg-config, SDL2,
+#      Python >= 3.11);
 #   2. decrypts USRDIR/EBOOT.BIN with your license (tools/unself in the engine)
 #      and links the game folder as extracted/;
 #   3. extracts the movies and WADs the host player reads into movie_cache/;
@@ -34,7 +35,7 @@ PPU_LIFTER_REV=5b004fc7
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die()  { printf '\n\033[31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,26p' "$0"; exit 2; }
+usage() { sed -n '2,28p' "$0"; exit 2; }
 GAME_ARG=""; RAP_IN=""; ELF_IN=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -60,6 +61,10 @@ say "1/7 ferramentas"
 command -v clang >/dev/null || die "falta o clang: xcode-select --install"
 command -v cmake >/dev/null || die "falta o CMake: brew install cmake"
 command -v ninja >/dev/null || die "falta o Ninja: brew install ninja"
+# The game's link (build_macos.sh) takes SDL2 from `pkg-config --libs sdl2`: check both
+# here rather than fail at step 6, after the whole lift.
+command -v pkg-config >/dev/null || die "falta o pkg-config: brew install pkgconf"
+pkg-config --exists sdl2 || die "falta o SDL2: brew install sdl2"
 . "$KIT/lib/pick_python.sh"
 . "$KIT/lib/cpython_src.sh"
 KIT_ROOT="$(cd "$HERE/.." && pwd)"
