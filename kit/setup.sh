@@ -186,6 +186,9 @@ else
     stage_capture ppu_patched "$HERE/$W" $PPU_FILES
     echo "   delta do kit (kit/ppu_lift_delta.patch)"
     (cd "$HERE/$W" && patch -p1 -s < "$KIT/ppu_lift_delta.patch") || die "o delta do kit nao aplicou"
+    # Kit sem Python fase 2a: where the delta's compensation of the FAILED patches lands.
+    # shellcheck disable=SC2086
+    stage_capture ppu_after/kit_delta "$HERE/$W" $PPU_FILES
     (cd "$HERE/$W" && shasum -a 256 -c "$KIT/ppu_lift.sha256" >/dev/null) \
         || { (cd "$HERE/$W" && shasum -a 256 -c "$KIT/ppu_lift.sha256" | grep -v ': OK'); die "o PPU recompilado nao confere com kit/ppu_lift.sha256"; }
     rm -rf "$LIFT"; mkdir -p "$LIFT"

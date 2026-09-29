@@ -31,4 +31,9 @@ t_true "make_spu_lifts images via ps3kit"     has "$R/kit/make_spu_lifts.sh" '"$
 t_true "build_macos NIDs via ps3kit"          has "$R/build_macos.sh" '"$PS3KIT" hle-nids'
 t_true "KIT_TOOLS validated"                  has "$R/kit/setup.sh" 'KIT_TOOLS must be py or cpp'
 t_true "setup.sh drops an inherited PS3KIT on the py path" has "$R/kit/setup.sh" 'unset PS3KIT'
+t_true "setup.sh captures the kit delta per-patch stage" has "$R/kit/setup.sh" 'stage_capture ppu_after/kit_delta "$HERE/$W" $PPU_FILES'
+t_true "apply_all_patches captures after each patch"     has "$R/apply_all_patches.sh" 'stage_capture "ppu_after/$1" "$LIFT" $KIT_PPU_FILES'
+t_true "apply_all_patches records order and status"      has "$R/apply_all_patches.sh" 'stage_record ppu_status "$1"'
+t_true "apply_all_patches never keeps per-patch copies"  has "$R/apply_all_patches.sh" 'KIT_STAGE_KEEP=0 stage_capture'
+t_true "apply_all_patches.sh parses"                      bash -n "$R/apply_all_patches.sh"
 t_done
