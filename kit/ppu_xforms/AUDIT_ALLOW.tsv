@@ -1,0 +1,5 @@
+# kit/ppu_xforms/AUDIT_ALLOW.tsv -- reviewed collisions for 'ps3kit xform-audit'.
+# One line per allowed overlap: <sha256 of the overlapping text> TAB <reason> TAB <reviewer + date>.
+# Only for text WE wrote that the lifter happens to emit too (e.g. a call of our own runtime
+# helper), confirmed by the fragment review against the patch script. Never for a line
+# copied from a lift. Every entry is reviewed like code (Ruling 2b Q4).
