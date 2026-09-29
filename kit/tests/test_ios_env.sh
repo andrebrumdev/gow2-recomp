@@ -28,5 +28,5 @@ t_eq "PS3KIT=$K/.kit_tools/ps3kit/ps3kit PY=$T/bin/mypy" "$(probe "$T/kit" PY="$
 t_eq "PS3KIT= PY=" "$(probe "$T/dev")" "dev tree: nothing set"
 t_eq "PS3KIT= PY=/dev/py" "$(probe "$T/dev" PY=/dev/py)" "dev tree: caller PY untouched"
 mkdir -p "$T/dev/gow2-recomp/kit/lib"; cp "$R/kit/lib/pick_python.sh" "$T/dev/gow2-recomp/kit/lib/"
-t_eq "PS3KIT= PY=" "$(probe "$T/dev" KIT_PY_CANDIDATES=/bin/sh)" "dev tree with pick_python.sh but no .kit_tools: PY not chosen"
+t_eq "PS3KIT= PY=" "$(probe "$T/dev" KIT_PY_CANDIDATES=/opt/homebrew/bin/python3)" "dev tree with pick_python.sh but no .kit_tools: PY not chosen"
 t_done
