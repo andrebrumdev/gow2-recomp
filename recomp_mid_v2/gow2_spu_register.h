@@ -13,8 +13,8 @@ typedef struct gow2_spu_config {
 } gow2_spu_config;
 
 /* The historical switches: spu0 on unless PS3_SPU0 starts with '0'; spu1..spu5
- * on when PS3_SPU<n> or PS3_SPU_ALL is PRESENT (any value); spu6 on unless
- * PS3_SPU6 is empty or starts with '0' (PS3_SPU_ALL forces it on). */
+ * on when PS3_SPU<n> or PS3_SPU_ALL is PRESENT (any value); spu6 is always on
+ * (the field stays so callers/tests can inspect the config). */
 void gow2_spu_config_from_env(gow2_spu_config* cfg);
 
 /* Registers the lifted functions of every image and the enabled workload

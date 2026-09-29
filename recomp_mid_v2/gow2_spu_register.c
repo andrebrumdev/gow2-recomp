@@ -38,7 +38,6 @@ extern void spu_begin_image(int image_id);
 void gow2_spu_config_from_env(gow2_spu_config* c)
 {
     const char* e0 = getenv("PS3_SPU0");
-    const char* e6 = getenv("PS3_SPU6");
     const int all = getenv("PS3_SPU_ALL") != NULL;
     c->spu0 = !(e0 && e0[0] == '0');
     c->spu1 = all || getenv("PS3_SPU1") != NULL;
@@ -46,7 +45,7 @@ void gow2_spu_config_from_env(gow2_spu_config* c)
     c->spu3 = all || getenv("PS3_SPU3") != NULL;
     c->spu4 = all || getenv("PS3_SPU4") != NULL;
     c->spu5 = all || getenv("PS3_SPU5") != NULL;
-    c->spu6 = all || !e6 || (e6[0] && e6[0] != '0');
+    c->spu6 = 1;   /* SCREAM mixer PM: always (300 s New Game with sound, 0 SPUCRASH, 2026-09-23) */
 }
 
 void gow2_register_spu_workloads(const gow2_spu_config* cfg)
@@ -116,8 +115,10 @@ void gow2_register_spu_workloads(const gow2_spu_config* cfg)
         spu_workload_register_image(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5", 6);
     /* spu6 = SCREAM mixer PM (fp 0xCEDB9A67A0C3A305, 11520B em 0x4FD980). The SPURS
      * kernel loads a policy module at LS 0xA00 and enters it there.
-     * On for a normal play launch. PS3_SPU6=0 turns it off. A faulting job is
-     * aborted by the setjmp landing pad; it does not have to stay opt-in. */
+     * Always registered (the SCREAM mixer; without it cellAudio has no PCM).
+     * PS3_SPU_INTERP=0 leaves the mixer BROKEN, not off: that switch picks the
+     * lifted image instead of the SPU interpreter for image 7. A faulting job
+     * is aborted by the setjmp landing pad. */
     if (cfg->spu6)
         spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
                                         "gow2_spu6", 0xA00, 7);

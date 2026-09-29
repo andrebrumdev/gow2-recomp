@@ -52,7 +52,7 @@ int main(void)
     CHECK(g_recomp[0] == 1 && g_recomp[1] == 1 && g_recomp[2] == 2 && g_recomp[6] == 1);  /* spu2 also under image 7 */
 
     reset(); clear_env();
-    setenv("PS3_SPU1", "1", 1); setenv("PS3_SPU6", "1", 1);          /* the play recipe */
+    setenv("PS3_SPU1", "1", 1);                                      /* the play recipe */
     gow2_spu_config_from_env(&c);
     gow2_register_spu_workloads(&c);
     CHECK(g_nnames == 3 && has("gow2_spu1"));
@@ -60,12 +60,13 @@ int main(void)
     clear_env(); setenv("PS3_SPU1", "0", 1);                          /* presence semantics kept */
     gow2_spu_config_from_env(&c);
     CHECK(c.spu1 == 1);
+    /* spu6 (SCREAM mixer) is not a switch any more: an exported PS3_SPU6=0 is inert. */
     clear_env(); setenv("PS3_SPU0", "0", 1); setenv("PS3_SPU6", "0", 1);
     gow2_spu_config_from_env(&c);
-    CHECK(c.spu0 == 0 && c.spu6 == 0);
+    CHECK(c.spu0 == 0 && c.spu6 == 1);
     clear_env(); setenv("PS3_SPU6", "", 1);
     gow2_spu_config_from_env(&c);
-    CHECK(c.spu6 == 0);
+    CHECK(c.spu6 == 1);
     clear_env(); setenv("PS3_SPU_ALL", "1", 1); setenv("PS3_SPU6", "0", 1);
     gow2_spu_config_from_env(&c);
     CHECK(c.spu0 && c.spu1 && c.spu2 && c.spu3 && c.spu4 && c.spu5 && c.spu6);
