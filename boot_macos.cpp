@@ -44,6 +44,7 @@ extern "C" void gow2_spu_config_from_env(gow2_spu_config* cfg) __attribute__((we
 
 #include "ppu_recomp.h"
 #include "ppu_coop.h"          /* PS3_PPU_COOP: callback stack slots (OFF by default) */
+#include "ps3emu/ps3_env.h"    /* ps3_env_on: value-aware boolean gates */
 
 extern "C" {
 
@@ -240,7 +241,7 @@ void derive_vfs_root(const char* eboot)
 
 Backend pick_backend()
 {
-    if (getenv("PS3_NO_RSX")) {
+    if (ps3_env_on("PS3_NO_RSX")) {
         fprintf(stderr, "[boot] RSX backend=none (PS3_NO_RSX)\n");
         return Backend::None;
     }
