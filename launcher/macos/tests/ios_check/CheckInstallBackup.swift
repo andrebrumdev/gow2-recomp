@@ -61,6 +61,26 @@ func runInstallBackupChecks() async {
     check(fileText(hs.appendingPathComponent("backup.meta")) == "bundle=com.example.gow2\nudid=00008110-TEST\n",
           "backup.meta names the bundle and the device: \(fileText(hs.appendingPathComponent("backup.meta")) ?? "nil")")
     check(shasumChecks(hs), "the folder's sha256.txt passes shasum -c, as install_ios.sh runs it")
+    // install_ios.sh also checks the folder against the phone's own listing (Codex re-review,
+    // 2026-09-28): sha256.txt must name exactly the save files in the folder (no symlink,
+    // nothing else but sha256.txt/backup.meta), and backup.meta -- whose mtime is the
+    // freshness it judges -- must be written last.
+    let inFolder = ((FileManager.default.enumerator(atPath: hs.path)?.allObjects as? [String]) ?? [])
+        .filter { LauncherCore.isFile(hs.appendingPathComponent($0).path) && $0 != "sha256.txt" && $0 != "backup.meta" }.sorted()
+    let shaPaths = (fileText(hs.appendingPathComponent("sha256.txt")) ?? "").split(separator: "\n")
+        .map { String($0.dropFirst(66)) }.sorted()
+    check(inFolder == ["\(G)/SYS.BIN"] && shaPaths == inFolder,
+          "sha256.txt lists exactly the folder's save files, as the phone lists them: \(shaPaths) vs \(inFolder)")
+    let links = ((FileManager.default.enumerator(atPath: hs.path)?.allObjects as? [String]) ?? []).filter {
+        (try? FileManager.default.destinationOfSymbolicLink(atPath: hs.appendingPathComponent($0).path)) != nil }
+    check(links.isEmpty, "no symlink in the backup folder: \(links)")
+    func mtime(_ rel: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: hs.appendingPathComponent(rel).path))?[.modificationDate] as? Date
+    }
+    let metaT = mtime("backup.meta")
+    let others = (inFolder + ["sha256.txt"]).compactMap(mtime)
+    check(metaT != nil && others.count == inFolder.count + 1 && others.allSatisfy { $0 <= metaT! },
+          "backup.meta is written last (its mtime is the freshness install_ios.sh checks)")
     check(ios.lastResult?.contains("Saves do iPhone copiados") == true, "result names the backup: \(ios.lastResult ?? "")")
 
     // Re-sign backs up again before replacing the app.

@@ -214,7 +214,7 @@ final class SaveSyncer {
             out = f
         }
         guard let target = out else { return nil }
-        try SaveBackup.writeMeta(target, bundle: bundle, device: device)                    // last: the folder's mtime is now
+        try SaveBackup.writeMeta(target, bundle: bundle, device: device)                    // last: install_ios.sh judges freshness by its mtime
         return target
     }
 

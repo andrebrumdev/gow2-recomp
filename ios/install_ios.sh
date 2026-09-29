@@ -17,32 +17,62 @@
 # The Mac launcher backs the saves up itself right before calling this script and passes
 # GOW2_IOS_SAVES_BACKUP_DIR=<the folder it just wrote>. That folder replaces this script's
 # own copy only if the script can verify it (Codex review BLOCKER, 2026-09-28: a bare
-# "already backed up" env flag let anyone skip the backup): it exists, was written less
-# than 15 minutes ago, its sha256.txt checks (shasum -c, relative paths only), and its
-# backup.meta names this bundle and this device. Anything else is reported and the script
-# makes its own verified backup (or installs nothing).
+# "already backed up" env flag let anyone skip the backup) AND verify that it holds the
+# PHONE's saves (Codex re-review, 2026-09-28: a recent folder with any file, a matching
+# checksum and a matching meta used to pass). So the phone is always listed when the app
+# is on it, and the folder must: hold no symlink anywhere; hold every file the phone lists
+# under Documents/savedata at the same relative path and size, and nothing else besides
+# sha256.txt and backup.meta; have a sha256.txt that covers exactly those files and checks
+# (shasum -c, relative paths only); have a backup.meta naming this bundle and device and
+# written in the last 15 minutes (the launcher writes it last; the folder's own mtime
+# proves nothing). Anything else is reported and the script makes its own verified backup
+# (or installs nothing).
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/ios_env.sh"
 [ -n "$DEV" ] || { echo "set GOW2_IOS_DEVICE in local.env" >&2; exit 1; }
 [ -d "$APP" ] || { echo "no app at $APP: run build_ios.sh" >&2; exit 1; }
 # Why GOW2_IOS_SAVES_BACKUP_DIR cannot stand for this run's backup (empty = it can).
+# Checked against $LISTING, the phone's own "<relpath under savedata/>\t<size>" rows.
 handshake_problem() {
-    local d="$1" now m age
-    [ -d "$d" ] || { echo "not a folder"; return; }
+    local d="$1" now m age rel size f got n
+    [ -d "$d" ] && [ ! -L "$d" ] || { echo "not a folder"; return; }
+    # No symlink anywhere inside: a link can point the checked paths outside the folder.
+    [ -z "$(find "$d" -type l 2>/dev/null | head -1)" ] || { echo "it holds a symlink"; return; }
+    [ -f "$d/backup.meta" ] || { echo "no backup.meta"; return; }
+    # Freshness of backup.meta, which the launcher writes last (not the folder's mtime).
     now="$(date +%s)"
-    m="$( { stat -f %m "$d" 2>/dev/null || stat -c %Y "$d" 2>/dev/null; } || true )"
-    case "$m" in ''|*[!0-9]*) echo "unreadable mtime"; return ;; esac
+    m="$( { stat -f %m "$d/backup.meta" 2>/dev/null || stat -c %Y "$d/backup.meta" 2>/dev/null; } || true )"
+    case "$m" in ''|*[!0-9]*) echo "unreadable backup.meta mtime"; return ;; esac
     age=$((now - m))
-    { [ "$age" -ge -60 ] && [ "$age" -lt 900 ]; } || { echo "written ${age}s ago, not in the last 15 minutes"; return; }
+    { [ "$age" -ge -60 ] && [ "$age" -lt 900 ]; } || { echo "backup.meta written ${age}s ago, not in the last 15 minutes"; return; }
+    grep -qxF "bundle=$BUNDLE" "$d/backup.meta" || { echo "backup.meta is for another bundle"; return; }
+    grep -qxF "udid=$DEV" "$d/backup.meta" || { echo "backup.meta is for another device"; return; }
+    # Every file the phone lists, same relative path and size.
+    n=0
+    while IFS="$(printf '\t')" read -r rel size; do
+        f="$d/$rel"
+        got="$( { stat -f %z "$f" 2>/dev/null || stat -c %s "$f" 2>/dev/null; } || true )"
+        if [ ! -f "$f" ] || [ "$got" != "$size" ]; then
+            echo "$rel: phone $size bytes, folder ${got:-missing}"; return
+        fi
+        n=$((n + 1))
+    done < "$LISTING"
+    # Nothing that is not on the phone.
+    if [ "$( (cd "$d" && find . -type f ! -path ./sha256.txt ! -path ./backup.meta) | sed 's|^\./||' | LC_ALL=C sort)" \
+            != "$(cut -f1 "$LISTING" | LC_ALL=C sort)" ]; then
+        echo "its files are not exactly the phone's savedata files"; return
+    fi
+    [ "$n" -gt 0 ] || { echo "the phone lists no save to stand for"; return; }
     [ -s "$d/sha256.txt" ] || { echo "no sha256.txt"; return; }
     # Only paths inside the folder: "<sha>  <relpath>", no absolute path, no "..".
     if grep -vqE '^[0-9a-f]{64}  [^/]' "$d/sha256.txt" || grep -qE '(^|/)\.\.(/|$)' "$d/sha256.txt"; then
         echo "sha256.txt has lines that are not relative paths inside the folder"; return
     fi
+    # sha256.txt covers exactly the phone's files (none left unchecked, none extra).
+    if [ "$(cut -c67- "$d/sha256.txt" | LC_ALL=C sort)" != "$(cut -f1 "$LISTING" | LC_ALL=C sort)" ]; then
+        echo "sha256.txt does not list exactly the phone's savedata files"; return
+    fi
     ( cd "$d" && shasum -a 256 -c --status sha256.txt ) 2>/dev/null || { echo "sha256.txt does not check"; return; }
-    [ -f "$d/backup.meta" ] || { echo "no backup.meta"; return; }
-    grep -qxF "bundle=$BUNDLE" "$d/backup.meta" || { echo "backup.meta is for another bundle"; return; }
-    grep -qxF "udid=$DEV" "$d/backup.meta" || { echo "backup.meta is for another device"; return; }
 }
 BK="${GOW2_IOS_SAVE_BACKUP_DIR:-$HOME/Documents/GoW2 Saves}/$(date +%Y-%m-%d_%H%M%S)-iphone-cli"
 # An independent, phone-side listing to verify the copy against (Codex review MAJOR,
@@ -71,22 +101,12 @@ fi
 case "$NAPPS" in
     ''|*[!0-9]*) rm -rf "$LT"; echo "unreadable phone app list: nothing installed." >&2; exit 1 ;;
 esac
-HANDSHAKE=""
-if [ "$NAPPS" != 0 ] && [ -n "${GOW2_IOS_SAVES_BACKUP_DIR:-}" ]; then
-    why="$(handshake_problem "$GOW2_IOS_SAVES_BACKUP_DIR")"
-    if [ -z "$why" ]; then
-        HANDSHAKE="$GOW2_IOS_SAVES_BACKUP_DIR"
-    else
-        echo "GOW2_IOS_SAVES_BACKUP_DIR=$GOW2_IOS_SAVES_BACKUP_DIR not accepted ($why): backing up the phone's saves here." >&2
-    fi
-fi
 if [ "$NAPPS" = 0 ]; then
     rm -rf "$LT"
     echo "$BUNDLE is not on the phone yet (first install): no saves to back up."
-elif [ -n "$HANDSHAKE" ]; then
-    rm -rf "$LT"
-    echo "phone saves already backed up by the caller to $HANDSHAKE (verified: fresh, sha256.txt checks, same bundle and device)"
 else
+    # The app is on the phone: always its own listing of Documents/savedata, whether or not
+    # the caller handed a backup folder -- that folder is checked against it.
     if ! xcrun devicectl device info files --device "$DEV" --domain-type appDataContainer \
             --domain-identifier "$BUNDLE" --subdirectory Documents -t 120 -j "$LJ" -q; then
         rm -rf "$LT"
@@ -131,7 +151,19 @@ else
         esac
         i=$((i + 1))
     done
-    if [ -s "$LISTING" ]; then
+    HANDSHAKE=""
+    if [ -n "${GOW2_IOS_SAVES_BACKUP_DIR:-}" ]; then
+        why="$(handshake_problem "$GOW2_IOS_SAVES_BACKUP_DIR")"
+        if [ -z "$why" ]; then
+            HANDSHAKE="$GOW2_IOS_SAVES_BACKUP_DIR"
+        else
+            echo "GOW2_IOS_SAVES_BACKUP_DIR=$GOW2_IOS_SAVES_BACKUP_DIR not accepted ($why): backing up the phone's saves here." >&2
+        fi
+    fi
+    if [ -n "$HANDSHAKE" ]; then
+        echo "phone saves already backed up by the caller to $HANDSHAKE (verified against the phone's own listing," \
+             "$(wc -l < "$LISTING" | tr -d ' ') files; sha256.txt checks; fresh; same bundle and device)"
+    elif [ -s "$LISTING" ]; then
         mkdir -p "$BK"
         if ! xcrun devicectl device copy from --device "$DEV" --domain-type appDataContainer \
                 --domain-identifier "$BUNDLE" --source Documents/savedata --destination "$BK"; then

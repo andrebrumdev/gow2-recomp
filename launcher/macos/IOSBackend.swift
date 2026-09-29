@@ -336,7 +336,7 @@ final class IOSBackend: ObservableObject {
     }
 
     /// `backup`: the folder backupPhoneSaves() just wrote, handed to install_ios.sh, which
-    /// verifies it (fresh, sha256.txt, backup.meta = this bundle + device) before skipping its
+    /// verifies it (against its own phone listing, sha256.txt, fresh backup.meta = this bundle + device) before skipping its
     /// own copy; nil (first install, no save on the phone) = the script checks the phone itself.
     private func installApp(backup: URL?) async throws {
         progress = "Instalando o app no iPhone…"
