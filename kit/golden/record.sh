@@ -96,7 +96,7 @@ for rev in $PINNED; do
     mkdir -p "$K/ps3recomp/tools_pinned/$rev"
     git -C "$ENGINE" archive "$rev" tools | tar -x -C "$K/ps3recomp/tools_pinned/$rev"
 done
-STOP=5; [ "$FULL" = 1 ] && STOP=""
+STOP=5; [ "$FULL" = 1 ] && STOP=6   # never step 7 (the launcher app is not a stage)
 echo "== kit run in $K (stop after: ${STOP:-none})"
 KIT_STAGE_DIR="$S/stages" KIT_STAGE_KEEP="$KEEP" KIT_STOP_AFTER="$STOP" PS3_ENGINE_ROOT="$K/ps3recomp" \
     "$K/gow2-recomp/kit/setup.sh" "$GAME" --elf "$ELF" > "$S/setup.log" 2>&1 \

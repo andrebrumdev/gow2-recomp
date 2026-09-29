@@ -20,6 +20,7 @@
 #      checks every generated file against kit/ppu_lift.sha256;
 #   5. recompiles the seven SPU programs, checked against kit/spu_lift.sha256;
 #   6. builds the engine runtime and links ./g2play.
+#   7. builds the launcher app, GoW2 Recomp.app (also "Instalar no iPhone").
 # Re-running skips the steps whose output already verifies.
 #
 # Env: PS3_ENGINE_ROOT (default ../ps3recomp), PY (a Python >= 3.11), JOBS,
@@ -54,7 +55,7 @@ GAME_IN="$(cd "$GAME_ARG" && pwd)" || die "pasta do jogo nao encontrada: $GAME_A
 JOBS="${JOBS:-$(sysctl -n hw.ncpu)}"
 
 # ---- 1. tools ---------------------------------------------------------------
-say "1/6 ferramentas"
+say "1/7 ferramentas"
 [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] || die "o kit e' para macOS em Apple Silicon (arm64)"
 command -v clang >/dev/null || die "falta o clang: xcode-select --install"
 command -v cmake >/dev/null || die "falta o CMake: brew install cmake"
@@ -94,7 +95,7 @@ else
 fi
 
 # ---- 2. game files ----------------------------------------------------------
-say "2/6 arquivos do jogo"
+say "2/7 arquivos do jogo"
 [ -f "$GAME_IN/USRDIR/gow2.psarc" ] || die "nao achei USRDIR/gow2.psarc em $GAME_IN"
 elf_ok() { [ -f "$1" ] && [ "$(shasum -a 256 "$1" | cut -d' ' -f1)" = "$EBOOT_SHA" ]; }
 if [ -n "$ELF_IN" ]; then
@@ -129,7 +130,7 @@ fi
 echo "   extracted -> $GAME_IN"
 
 # ---- 3. movie_cache -----------------------------------------------------------
-say "3/6 filmes e WADs (movie_cache)"
+say "3/7 filmes e WADs (movie_cache)"
 mkdir -p "$HERE/movie_cache"
 if (cd "$HERE/movie_cache" && shasum -a 256 -c "$KIT/movie_cache.sha256" >/dev/null 2>&1); then
     echo "   ja' extraidos e verificados"
@@ -154,7 +155,7 @@ stage_capture movie_cache "$HERE/movie_cache" $(awk '{print $2}' "$KIT/movie_cac
 kit_stop_after 3
 
 # ---- 4. PPU recompilation ---------------------------------------------------------
-say "4/6 recompilacao do PPU"
+say "4/7 recompilacao do PPU"
 LIFT="$HERE/recomp_macos_e435"
 if [ -d "$LIFT" ] && (cd "$LIFT" && shasum -a 256 -c "$KIT/ppu_lift.sha256" >/dev/null 2>&1); then
     echo "   $LIFT ja' confere"
@@ -202,7 +203,7 @@ stage_capture ppu_final "$LIFT" $PPU_FILES
 kit_stop_after 4
 
 # ---- 5. SPU recompilation ---------------------------------------------------------
-say "5/6 recompilacao dos SPU"
+say "5/7 recompilacao dos SPU"
 if (cd "$HERE/spu_lifted" 2>/dev/null && shasum -a 256 -c "$KIT/spu_lift.sha256" >/dev/null 2>&1) \
    && [ -f "$HERE/spu_hit_de6dc3a5ea2be487.bin" ] && [ -f "$HERE/spu_hit_2a5c4e67a14505b8.bin" ] \
    && [ -f "$HERE/spu_miss_cedb9a67a0c3a305.bin" ]; then
@@ -217,7 +218,7 @@ fi
 kit_stop_after 5
 
 # ---- 6. engine + link -------------------------------------------------------------
-say "6/6 motor e binario (alguns minutos)"
+say "6/7 motor e binario (alguns minutos)"
 if [ ! -f "$ENGINE/build-macos/build.ninja" ]; then
     cmake -S "$ENGINE" -B "$ENGINE/build-macos" -G Ninja -DCMAKE_BUILD_TYPE=Release > "$HERE/engine_build.log" 2>&1 \
         || { tail -20 "$HERE/engine_build.log"; die "configuracao do motor falhou"; }
@@ -227,6 +228,18 @@ cmake --build "$ENGINE/build-macos" -j "$JOBS" >> "$HERE/engine_build.log" 2>&1 
 (cd "$HERE" && PS3_ENGINE_ROOT="$ENGINE" OUT=./g2play ./build_macos.sh "$LIFT" > "$HERE/g2play_build.log" 2>&1) \
     || { tail -30 "$HERE/g2play_build.log"; die "o link do jogo falhou (log: g2play_build.log)"; }
 
+kit_stop_after 6
+
+# ---- 7. launcher app ------------------------------------------------------------------
+say "7/7 app do launcher (GoW2 Recomp.app)"
+if "$HERE/launcher/macos/build_app.sh" > "$HERE/launcher_build.log" 2>&1; then
+    echo "   $HERE/GoW2 Recomp.app"
+else
+    tail -10 "$HERE/launcher_build.log"
+    echo "   aviso: o app do launcher nao compilou (log: launcher_build.log). O jogo ja' esta' pronto: ./jogar_g2.sh"
+fi
+
 say "pronto"
-echo "   Jogar:      ./jogar_g2.sh        (ou o app: launcher/macos/build_app.sh)"
+echo "   Jogar:      ./jogar_g2.sh   (ou abra GoW2 Recomp.app)"
+echo "   iPhone:     GoW2 Recomp.app -> iPhone -> Instalar no iPhone (veja o README)"
 echo "   Binario:    $HERE/g2play"

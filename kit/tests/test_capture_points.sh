@@ -36,4 +36,8 @@ t_true "apply_all_patches captures after each patch"     has "$R/apply_all_patch
 t_true "apply_all_patches records order and status"      has "$R/apply_all_patches.sh" 'stage_record ppu_status "$1"'
 t_true "apply_all_patches never keeps per-patch copies"  has "$R/apply_all_patches.sh" 'KIT_STAGE_KEEP=0 stage_capture'
 t_true "apply_all_patches.sh parses"                      bash -n "$R/apply_all_patches.sh"
+t_true "setup.sh builds the launcher app"        has "$R/kit/setup.sh" '"$HERE/launcher/macos/build_app.sh"'
+t_true "setup.sh can stop before the app"        has "$R/kit/setup.sh" 'kit_stop_after 6'
+t_true "record.sh --full stops before the app"   has "$R/kit/golden/record.sh" '[ "$FULL" = 1 ] && STOP=6'
+t_true "README has the iPhone section"           has "$R/kit/README.md" '## Install on iPhone / iPad'
 t_done
