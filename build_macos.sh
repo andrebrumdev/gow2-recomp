@@ -186,7 +186,10 @@ if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; t
     case "$SRC_LIFT" in *_dv) echo "ICALL_DEVIRT: $SRC_LIFT is already a derived lift; pass the source lift" >&2; exit 1 ;; esac
     DV_LIFT="${SRC_LIFT}_dv"
     mkdir -p "$DV_LIFT"
-    _stamp="$( { stat -f '%m %z %N' "$SRC_LIFT"/ppu_recomp*.cpp "$SRC_LIFT"/ppu_recomp.h "$SRC_LIFT"/ppu_stubs.cpp 2>/dev/null
+    # Content hash, not mtimes: a tool that preserves timestamps must still
+    # invalidate the derived lift (Codex review of the release).
+    _stamp="$( { ls "$SRC_LIFT" | grep -E '^(ppu_recomp[^.]*\.cpp|ppu_recomp\.h|ppu_stubs\.cpp)$' | sort
+                 cat "$SRC_LIFT"/ppu_recomp*.cpp "$SRC_LIFT"/ppu_recomp.h "$SRC_LIFT"/ppu_stubs.cpp 2>/dev/null | shasum -a 256
                  cat "$ICALL_PROFILE" "$ICALL_TOOL" | shasum -a 256   # content only: ios/android pass another engine path
                  echo "${ICALL_MIN_SHARE:-0.90} ${ICALL_MIN_CALLS:-1000}"; } | shasum -a 256 | cut -d' ' -f1 )"
     if [ "$(cat "$DV_LIFT/.devirt_stamp" 2>/dev/null)" != "$_stamp" ]; then
@@ -198,8 +201,11 @@ if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; t
         "$PYBIN" "$ICALL_TOOL" devirt "$_stage" --profile "$ICALL_PROFILE" \
             --min-share "${ICALL_MIN_SHARE:-0.90}" --min-calls "${ICALL_MIN_CALLS:-1000}" \
             --report "$DV_LIFT/icall_devirt_report.tsv"
-        # Content-only sync (no -t): identical chunks keep their mtime and objects.
-        rsync -rl --checksum "$_stage/" "$DV_LIFT/"
+        # Content-only sync (no -t): identical chunks keep their mtime and objects;
+        # --delete limited to the chunk files drops a chunk a new lift no longer
+        # has (objects and gen/ are excluded, so they are kept).
+        rsync -rl --checksum --delete --include='ppu_recomp*.cpp' --include='ppu_recomp.h' \
+              --include='ppu_stubs.cpp' --exclude='*' "$_stage/" "$DV_LIFT/"
         rm -rf "$_stage"
         echo "$_stamp" > "$DV_LIFT/.devirt_stamp"
     else
