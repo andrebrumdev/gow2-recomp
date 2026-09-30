@@ -52,7 +52,7 @@ FW="Metal MetalFX MetalPerformanceShaders QuartzCore CoreGraphics Foundation UIK
         "$B/ffmpeg-ios/lib/libavcodec.a" "$B/ffmpeg-ios/lib/libavutil.a" \
         "$B/sdl-root/sdl/lib/libSDL2main.a" "$B/sdl-root/sdl/lib/libSDL2.a"
     for f in $FW; do printf ' -framework %s' "$f"; done
-    printf ' -lc++ -lm\n'
+    printf ' -lc++ -lm -lz\n'
 } > "$IOS_HERE/Generated/Gow2.xcconfig"
 xcodegen generate --spec "$IOS_HERE/project.yml" --project "$B/xcode" --quiet
 EXTRA=(-allowProvisioningUpdates)
