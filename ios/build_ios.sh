@@ -17,7 +17,9 @@ case "${1:-}" in
     --sign-only) SIGN_ONLY=1 ;;
 esac
 [ "$SIGN" = 0 ] || [ -n "$TEAM" ] || { echo "set GOW2_IOS_TEAM in local.env" >&2; exit 1; }
-[ -f "$LIFT/.spu_build_flags" ] || { echo "run '$G/build_macos.sh $(basename "$LIFT")' once first (it patches and verifies the SPU lifts)" >&2; exit 1; }
+# build_macos.sh compiles "<lift>_dv" (profile-guided devirtualization, ICALL_DEVIRT=1
+# default), so the flags stamp of a macOS build lands there.
+[ -f "$LIFT/.spu_build_flags" ] || [ -f "${LIFT%/}_dv/.spu_build_flags" ] || { echo "run '$G/build_macos.sh $(basename "$LIFT")' once first (it patches and verifies the SPU lifts)" >&2; exit 1; }
 for f in boot_macos.cpp gow2_boot.h recomp_mid_v2/gow2_spu_register.c; do
     cmp -s "$IOS_HERE/../$f" "$G/$f" || { echo "$f differs between $IOS_HERE/.. and $G: resync games/gow2 from gow2-recomp (g2sync)" >&2; exit 1; }
 done

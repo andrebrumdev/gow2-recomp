@@ -164,6 +164,52 @@ if [ ! -f "$LIFT/ppu_recomp.h" ]; then
     exit 1
 fi
 
+# Profile-guided devirtualization of the lift's bctrl sites (ps3recomp
+# tools/lift_patches/icall_sites.py; measured 2026-09-30 in GoW2 gameplay: CPU
+# per frame -9% on top of the runtime, fps 44 -> 47). ON by default: the build
+# compiles a derived lift "<lift>_dv" instead of <lift> itself, so the source
+# lift (recomp_macos_e435, v2, a fresh RELIFT dir) is never modified.
+#   ICALL_DEVIRT=0          build the plain lift (old behaviour)
+#   ICALL_PROFILE=<tsv>     profile(s) to use [config/gow2_icall_profile.tsv]
+#   ICALL_MIN_SHARE / ICALL_MIN_CALLS   site selection [0.90 / 1000]
+# The derived dir is regenerated only when the source lift, the profile or the
+# tool changes (stamp), and a chunk is rewritten only when its patched text
+# differs, so unchanged chunks keep their objects. Sites the profile does not
+# know stay generic; a devirtualized site re-checks its target on every call,
+# so a stale profile only loses speed, never correctness. Re-profile with
+# ps3recomp/tools/lift_patches/icall_devirt.sh --profile-build.
+ICALL_DEVIRT="${ICALL_DEVIRT:-1}"
+ICALL_PROFILE="${ICALL_PROFILE:-$HERE/config/gow2_icall_profile.tsv}"
+ICALL_TOOL="$PS3/tools/lift_patches/icall_sites.py"
+if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; then
+    SRC_LIFT="$(cd "$LIFT" && pwd)"
+    case "$SRC_LIFT" in *_dv) echo "ICALL_DEVIRT: $SRC_LIFT is already a derived lift; pass the source lift" >&2; exit 1 ;; esac
+    DV_LIFT="${SRC_LIFT}_dv"
+    mkdir -p "$DV_LIFT"
+    _stamp="$( { stat -f '%m %z %N' "$SRC_LIFT"/ppu_recomp*.cpp "$SRC_LIFT"/ppu_recomp.h "$SRC_LIFT"/ppu_stubs.cpp 2>/dev/null
+                 cat "$ICALL_PROFILE" "$ICALL_TOOL" | shasum -a 256   # content only: ios/android pass another engine path
+                 echo "${ICALL_MIN_SHARE:-0.90} ${ICALL_MIN_CALLS:-1000}"; } | shasum -a 256 | cut -d' ' -f1 )"
+    if [ "$(cat "$DV_LIFT/.devirt_stamp" 2>/dev/null)" != "$_stamp" ]; then
+        echo "=== 0b. devirtualized lift: $SRC_LIFT -> $DV_LIFT (profile $(basename "$ICALL_PROFILE")) ==="
+        _stage="$DV_LIFT.stage"
+        rm -rf "$_stage"; mkdir -p "$_stage"
+        rsync -a --include='ppu_recomp*.cpp' --include='ppu_recomp.h' --include='ppu_stubs.cpp' \
+              --exclude='*' "$SRC_LIFT/" "$_stage/"
+        "$PYBIN" "$ICALL_TOOL" devirt "$_stage" --profile "$ICALL_PROFILE" \
+            --min-share "${ICALL_MIN_SHARE:-0.90}" --min-calls "${ICALL_MIN_CALLS:-1000}" \
+            --report "$DV_LIFT/icall_devirt_report.tsv"
+        # Content-only sync (no -t): identical chunks keep their mtime and objects.
+        rsync -rl --checksum "$_stage/" "$DV_LIFT/"
+        rm -rf "$_stage"
+        echo "$_stamp" > "$DV_LIFT/.devirt_stamp"
+    else
+        echo "=== 0b. devirtualized lift up to date: $DV_LIFT ==="
+    fi
+    LIFT="$DV_LIFT"
+elif [ "$ICALL_DEVIRT" = 1 ]; then
+    echo "  ICALL_DEVIRT: no profile ($ICALL_PROFILE) or tool ($ICALL_TOOL) -- plain lift"
+fi
+
 if [ "$GOW2_TARGET" = ios ]; then OBJ="${OBJ:-$LIFT/ios-arm64}"; else OBJ="${OBJ:-$LIFT}"; fi
 mkdir -p "$OBJ"
 # Resolve to an absolute path now: section 1 below does `cd "$LIFT"` (itself
