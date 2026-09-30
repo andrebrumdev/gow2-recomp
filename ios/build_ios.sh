@@ -41,6 +41,11 @@ rm -rf "$IOS_HERE/Generated/licenses"           # FFmpeg's license and notes tra
 mkdir -p "$IOS_HERE/Generated/licenses"
 cp "$B/ffmpeg-ios/share/licenses/"* "$IOS_HERE/Generated/licenses/"
 "$IOS_HERE/bake_env.sh" "$G/env_gow2.sh" > "$IOS_HERE/Generated/gow2.env"
+# App icon: generated from the user's own local game icon when present (git-ignored build output),
+# else the original fallback (tools/icons/make_icons.sh); the asset catalog is a project resource.
+"$PS3/tools/icons/make_icons.sh" "$B/icons" | tail -1
+rm -rf "$IOS_HERE/Generated/Assets.xcassets"
+cp -R "$B/icons/ios/Assets.xcassets" "$IOS_HERE/Generated/Assets.xcassets"
 FW="Metal MetalFX MetalPerformanceShaders QuartzCore CoreGraphics Foundation UIKit AVFoundation CoreMedia CoreVideo VideoToolbox AudioToolbox CoreAudio GameController CoreHaptics CoreText CoreMotion OpenGLES ImageIO MobileCoreServices CoreBluetooth"
 {
     echo "GOW2_IOS_TEAM = $TEAM"
