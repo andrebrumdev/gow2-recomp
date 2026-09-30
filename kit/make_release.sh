@@ -12,7 +12,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE="$(cd "${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}" && pwd)"
 OUT="$(mkdir -p "${1:-$HERE/dist}" && cd "${1:-$HERE/dist}" && pwd)"
-PINNED="5b004fc7 5f36a40e 11a1c3c5"   # PPU lifter; SPU lifters (spu0-3, spu4-5)
+PINNED="5b004fc7 5f36a40e 11a1c3c5 305dd109"   # PPU lifter; SPU lifters (spu0-3, spu4-5, the spu0/2/6 steps)
 
 for r in "$HERE" "$ENGINE"; do
     [ -z "$(git -C "$r" status --porcelain --untracked-files=no)" ] \

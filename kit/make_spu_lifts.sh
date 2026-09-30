@@ -45,12 +45,17 @@ done
 
 REV_OLD=5f36a40e   # spu0..3 base lifts (July lift; == edfad917 output)
 REV_45=11a1c3c5    # spu4/5 (heqi/hgti decoded as .word TODO in this window)
+# The "HEAD" steps (spu0 observed import, spu2 re-lift, spu6) are pinned too: the engine
+# revision of the validated 2026-09-23 kit. Later lifters emit `ctx->pc = ...` before channel
+# reads (mixed native/interpreter SPURS tasks), which changes spu1/spu2/spu6 against
+# spu_lift.sha256 -- code that was never validated in game.
+REV_HEAD=305dd109
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 W=$(mktemp -d "${TMPDIR:-/tmp}/gow2_spu_lifts.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 
-echo "== lifter revisions $REV_OLD $REV_45"
-for r in $REV_OLD $REV_45; do
+echo "== lifter revisions $REV_OLD $REV_45 $REV_HEAD"
+for r in $REV_OLD $REV_45 $REV_HEAD; do
     mkdir -p "$W/rev_$r"
     if [ -d "$PS3/tools_pinned/$r/tools" ]; then
         # release kit: the engine snapshot ships the pinned revisions (no git history)
@@ -59,7 +64,7 @@ for r in $REV_OLD $REV_45; do
         git -C "$PS3" archive "$r" tools | tar -x -C "$W/rev_$r"
     fi
 done
-T_OLD="$W/rev_$REV_OLD/tools"; T_45="$W/rev_$REV_45/tools"; T_HEAD="$PS3/tools"
+T_OLD="$W/rev_$REV_OLD/tools"; T_45="$W/rev_$REV_45/tools"; T_HEAD="$W/rev_$REV_HEAD/tools"
 
 cat > "$W/helper.py" <<'PYEOF'
 import json, os, re, struct, subprocess, sys, pathlib, importlib.util
@@ -238,7 +243,7 @@ for n in 4 5; do
     L "$T_45" "$B/spu${n}_v2" --auto-functions "$W/img$n.bin" --symbol-prefix spu${n}_
 done
 echo "== spu6"
-mkdir -p "$B/spu6_v2"; "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+mkdir -p "$B/spu6_v2"; PS3_SPU_LIFTER="$T_HEAD/spu_lifter.py" "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
 # brsl/bih* halfword conditions of the lifts made by 2026-07-21..09-23 lifters.
 "$PY" "$GOW2/recomp_mid_v2/patch_spu_halfword_cond.py" "$B"/spu?_v2 > /dev/null
 

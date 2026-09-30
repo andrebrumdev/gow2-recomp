@@ -22,6 +22,7 @@ dump spu_miss_cedb9a67a0c3a305.bin -> spu_lifted/spu6_v2). Game bytes stay local
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -30,7 +31,9 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INPUT = ROOT / "spu_miss_cedb9a67a0c3a305.bin"
 OUTPUT = ROOT / "spu_lifted" / "spu6_v2"
-LIFTER = ROOT.parent / "ps3recomp" / "tools" / "spu_lifter.py"
+# PS3_SPU_LIFTER: kit/make_spu_lifts.sh pins the lifter revision that produced the
+# validated spu6 (the sibling checkout's HEAD lifter has moved on since).
+LIFTER = pathlib.Path(os.environ.get("PS3_SPU_LIFTER") or ROOT.parent / "ps3recomp" / "tools" / "spu_lifter.py")
 BASE = 0xA00
 END = BASE + 0x2D00
 
