@@ -90,6 +90,7 @@ int main(int argc, char** argv)   /* SDL_main.h renames this to SDL_main */
     }
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");   /* landscape only, even with the tablet held upright */
     gow2_android_perf_start();
     if (gow2_boot_prepare_display() != 0) {
         fprintf(stderr, "[android] FATAL: display preparation failed\n");
