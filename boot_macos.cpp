@@ -43,6 +43,8 @@ extern "C" void gow2_spu_config_from_env(gow2_spu_config* cfg) __attribute__((we
 #endif
 
 #include "ppu_recomp.h"
+#include "ppu_coop.h"          /* PS3_PPU_COOP: callback stack slots (OFF by default) */
+#include "ps3emu/ps3_env.h"    /* ps3_env_on: value-aware boolean gates */
 
 extern "C" {
 
@@ -164,12 +166,20 @@ void boot_guest_caller(uint32_t opd_addr, uint64_t a0, uint64_t a1,
         return;
     }
 
+    /* PS3_PPU_COOP: a slot held until this call returns (a callback can park on one fiber
+     * while another fiber enters its own); gate off: the depth counter, as before. */
     static uint32_t cb_depth = 0;
-    ++cb_depth;
+    const int cb_coop = ppu_coop_enabled();
+    const uint32_t cb_slot = cb_coop ? ppu_coop_cb_slot_acquire() : ++cb_depth;
+    /* PS3_PPU_COOP: the callback is guest code, not part of the HLE import that raised it
+     * (ps3_hle_call's no-preempt region): a busy loop in it must still let other fibers run.
+     * Audited: no caller (cellSysutil, cellGcmSys, cellSaveData, cellVdec, sys_ppu_thread_once,
+     * the callback fiber) holds a host mutex across this call. */
+    const int cb_np = cb_coop ? ppu_coop_nopreempt_suspend() : 0;
 
     ppu_context ctx;
     memset(&ctx, 0, sizeof(ctx));
-    ctx.gpr[1] = CB_STACK_TOP - 0x10000u * cb_depth;
+    ctx.gpr[1] = CB_STACK_TOP - 0x10000u * cb_slot;
     ctx.gpr[2] = toc;
     ctx.gpr[3] = a0;
     ctx.gpr[4] = a1;
@@ -180,7 +190,8 @@ void boot_guest_caller(uint32_t opd_addr, uint64_t a0, uint64_t a1,
     ps3_indirect_call(&ctx);
     while (g_trampoline_fn) { void (*tf)(void*) = g_trampoline_fn; g_trampoline_fn = 0; tf(&ctx); }
 
-    --cb_depth;
+    if (cb_coop) ppu_coop_nopreempt_resume(cb_np);
+    if (cb_coop) ppu_coop_cb_slot_release(cb_slot); else --cb_depth;
 }
 
 /* Entry thunk for guest-spawned PPU threads: resolve the OPD the guest handed
@@ -230,7 +241,7 @@ void derive_vfs_root(const char* eboot)
 
 Backend pick_backend()
 {
-    if (getenv("PS3_NO_RSX")) {
+    if (ps3_env_on("PS3_NO_RSX")) {
         fprintf(stderr, "[boot] RSX backend=none (PS3_NO_RSX)\n");
         return Backend::None;
     }

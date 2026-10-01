@@ -293,7 +293,7 @@ diagnóstico, que hoje só existe para o `boot_macos.cpp`).
   de decodificação) **não** entram nessa mesma contagem.
 - **Draws do guest:** número de draw calls do próprio jogo, replays contados
   pelo backend — nunca inclui os draws do próprio menu do overlay. No Metal
-  com `PS3_METAL_PER_DRAW_RT=1` (padrão do `env_gow2.sh`) os registros de
+  com os render targets por draw (padrão do runtime) os registros de
   clear e blit da mesma lista não entram na conta. No D3D12
   esse número é limitado a `MAX_DRAWS=256` por frame (registros reproduzidos,
   não o total real de draws se passar disso).
@@ -302,9 +302,9 @@ diagnóstico, que hoje só existe para o `boot_macos.cpp`).
   fragment) compilados; no D3D12 é o número de compilações de fragment
   program bem-sucedidas. "Failures" conta decodificações/compilações que
   caíram para um caminho alternativo.
-- **Estado do WAD / filme:** vem do caminho `movie_io` (o que o jogo abre via
-  `PS3_MOVIE_IO=1`, ligado por padrão em `env_gow2.sh`); WADs lidos por outro
-  caminho (psarc/FIOS direto) não aparecem aqui.
+- **Estado do WAD / filme:** vem do caminho `movie_io` (ligado quando o
+  diretório movie_cache existe); WADs lidos por outro caminho (psarc/FIOS
+  direto) não aparecem aqui.
 - **"Indisponível" nunca é "zero":** qualquer campo que o backend/provedor
   ainda não mediu aparece como "indisponível" (unavailable), nunca como `0`
   — um `0` no painel é sempre uma medição real de zero.

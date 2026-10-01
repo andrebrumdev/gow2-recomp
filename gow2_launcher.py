@@ -337,8 +337,6 @@ export PS3_MODS_ENABLED={','.join(enabled)!r}
 export PS3_MUTE="${{G2_MUTE:-0}}"
 export PS3_MOVIE_DONE_MS="${{G2_DONE:-auto}}"
 export PS3_METALFX="${{PS3_METALFX:-1}}"
-export PS3_METAL_PASS_MERGE="${{PS3_METAL_PASS_MERGE:-1}}"
-export PS3_METAL_GPU_DESWIZZLE="${{PS3_METAL_GPU_DESWIZZLE:-1}}"
 export PS3_METAL_HDR="${{PS3_METAL_HDR:-0}}"
 {overlay_line}
 # Fullscreen and VSync come from the overlay settings file (defaults: window,

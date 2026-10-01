@@ -15,8 +15,7 @@
 : "${PS3_VFS_ROOT:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/extracted/USRDIR}"
 export PS3_VFS_ROOT
 
-# Filmes por HLE em vez de decode real. PS3_VDEC_ASYNC=1 e obrigatorio quando
-# se liga decode de video a serio (ver o CLAUDE.md do motor).
+# Filmes por HLE em vez de decode real (o decode assincrono ja' e' o padrao no macOS/iOS).
 # Overlay VT do host DESLIGADO (2026-09-23): com o cellVdec a responder BUSY
 # (ps3recomp c1c1bb7a) e a entregar RGBA (4f803bb3) o jogo recebe todas as
 # imagens e desenha o proprio video; o overlay por cima fazia a intro aparecer
@@ -47,17 +46,10 @@ export PS3_VFS_ROOT
 # Task 3 diz isto por palavras). Quem quiser saltar a intro poe =1 a mao.
 : "${PS3_NOMOVIES:=0}";         export PS3_NOMOVIES
 
-# Caminho de I/O dos membros do psarc ja extraidos (R_PermA, R_LglScA e a
-# intro). Sem MOVIE_IO=1 o movie_io_open nem e' consultado e o jogo cai no
-# cellFs normal, que nao acha estes nomes.
-: "${PS3_MOVIE_IO:=1}";         export PS3_MOVIE_IO
+# Membros do psarc ja' extraidos (R_PermA, R_LglScA e a intro): o runtime usa a cache sempre que PS3_MOVIE_CACHE aponta para um diretorio que existe.
 : "${PS3_MOVIE_CACHE:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/movie_cache}"
 export PS3_MOVIE_CACHE
 : "${PS3_MOVIE_EOS:=1}";        export PS3_MOVIE_EOS
-
-# Decode de video assincrono. Obrigatorio no caminho da intro (o sync voltou a
-# ser default noutro commit; ver CLAUDE.md do motor). Respeitado se ja definido.
-: "${PS3_VDEC_ASYNC:=1}";       export PS3_VDEC_ASYNC
 
 # Pad ligado a arranque, senao o jogo espera input que nunca chega.
 : "${PS3_PAD_AUTOSTART:=1}";    export PS3_PAD_AUTOSTART
@@ -69,18 +61,6 @@ export PS3_MOVIE_CACHE
 #   PS3_MUTE= ./rodar_gow2_menu_fast.sh
 : "${PS3_MUTE:=1}";            export PS3_MUTE
 [ -n "${PS3_MUTE:-}" ] || unset PS3_MUTE
-
-# SPU1 = dearch / EDGE-zlib (fp 0x2A5C4E67A14505B8). Hit limpo in-boot
-# (2026-07-22: HIT>=1, MISS=0, SPUJOB clean). Necessario para consumo
-# real de WAD apos R_Perm; sem isto o dispatch fica MISS e o path de
-# texturas WAD/UI nao avanca. spu2/3 continuam opt-in (PS3_SPU2/3).
-: "${PS3_SPU1:=1}";             export PS3_SPU1
-# Policy module do SCREAM (fala e efeitos). Sem isto o dispatcher descarta
-# a imagem 0xCEDB9A67 e a porta cellAudio fica sem PCM. PS3_SPU6=0 desliga.
-: "${PS3_SPU6:=1}";             export PS3_SPU6
-
-# FIFO do RSX consumido pelo backend.
-: "${PS3_RSX_FIFO:=1}";         export PS3_RSX_FIFO
 
 # Backend RSX (M10): no Darwin, default Metal com janela. Headless usa
 # PS3_NO_RSX=1 e nao precisa de backend. Respeita valor ja definido.
@@ -95,25 +75,17 @@ fi
 # Reordenacao do cellSysutil exigida pela ordem de init do titulo.
 : "${PS3_CELLSYS_REORDER:=1}";  export PS3_CELLSYS_REORDER
 
-# Pos-intro sem FREELIST-TAG-GUARD (E466 vis / 240 s medido): callback GCM,
-# lwmutex real, sticky FIOS, produtor de EOS. PS3_GCM_CB=0 / LWMUTEX_STUB=1
-# restauram o legado que aborta no open do WAD.
-: "${PS3_GCM_CB:=1}";              export PS3_GCM_CB
+# Pos-intro sem FREELIST-TAG-GUARD: lwmutex real, sticky FIOS, produtor de EOS (o callback GCM ja' e' padrao do runtime).
 : "${PS3_LWMUTEX_REAL:=1}";        export PS3_LWMUTEX_REAL
 : "${PS3_FIOS_STICKY_OWNER:=1}";   export PS3_FIOS_STICKY_OWNER
 : "${PS3_MOVIE_DONE_MS:=3000}";    export PS3_MOVIE_DONE_MS
 
-# E466: sem isto os draws caem num só RT (texturas amassadas, sem 3D).
-: "${PS3_METAL_PER_DRAW_RT:=1}";   export PS3_METAL_PER_DRAW_RT
 # Host present: MetalFX spatial 720p→Retina, in-encoder clears, GPU Morton,
 # vsync/ProMotion. HDR EDR off: estourava o manto do Colosso em ciano.
-# PS3_METAL_HDR=1 religa. PS3_METALFX=0 / PASS_MERGE=0 / GPU_DESWIZZLE=0
-# desligam cada um. VSync NAO e' forcado aqui: sem PS3_METAL_VSYNC do chamador
+# PS3_METAL_HDR=1 religa. PS3_METALFX=0 desliga o MetalFX. VSync NAO e' forcado aqui: sem PS3_METAL_VSYNC do chamador
 # vale o arquivo de configuracoes do overlay (default ligado); PS3_METAL_VSYNC=0
 # ou =1 exportado por quem chama continua a mandar.
 : "${PS3_METALFX:=1}";                 export PS3_METALFX
-: "${PS3_METAL_PASS_MERGE:=1}";        export PS3_METAL_PASS_MERGE
-: "${PS3_METAL_GPU_DESWIZZLE:=1}";     export PS3_METAL_GPU_DESWIZZLE
 if [ -n "${PS3_METAL_VSYNC:-}" ]; then export PS3_METAL_VSYNC; fi
 : "${PS3_METAL_HDR:=0}";               export PS3_METAL_HDR
 # Diagnostic: Always/no-write. After BEGIN-coalesce the 3D is stable; this

@@ -65,7 +65,11 @@ static void old_register(void)
     spu_begin_image(0);
     if (!(getenv("PS3_SPU0") && getenv("PS3_SPU0")[0] == '0'))
         spu_workload_register_image(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0", 1);
+#if defined(__APPLE__)
+    if (1)   /* spu1 always registered on macOS/iOS */
+#else
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU1"))
+#endif
         spu_workload_register_image(0x2A5C4E67A14505B8ull, spu1_spu_func_00003050, "gow2_spu1", 2);
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU2"))
         spu_workload_register_image(0xABCD0BA4D18DED49ull, spu2_spu_func_00004080, "gow2_spu2", 3);
@@ -75,13 +79,8 @@ static void old_register(void)
         spu_workload_register_image(0x9527C889B1945669ull, spu4_spu_func_00003050, "gow2_spu4", 5);
     if (getenv("PS3_SPU_ALL") || getenv("PS3_SPU5"))
         spu_workload_register_image(0x3512A7E99D34E0FFull, spu5_spu_func_00003070, "gow2_spu5", 6);
-    {
-        const char* e = getenv("PS3_SPU6");
-        int on = getenv("PS3_SPU_ALL") || !e || (e[0] && e[0] != '0');
-        if (on)
-            spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
-                                            "gow2_spu6", 0xA00, 7);
-    }
+    spu_workload_register_raw_image(0xCEDB9A67A0C3A305ull, spu6_spu_func_00000A00,
+                                    "gow2_spu6", 0xA00, 7);
 }
 
 int main(void)
@@ -117,8 +116,17 @@ int main(void)
         for (int i = 0; i < told.n; i++) if (!strncmp(told.ev[i], "img", 3) || !strncmp(told.ev[i], "raw", 3)) nw++;
         workloads_seen[nw]++;
     }
-    /* The matrix must actually exercise every count of enabled workloads 0..7. */
-    for (int i = 0; i < 8; i++) if (!workloads_seen[i]) { printf("FAIL: no combo with %d workloads\n", i); bad++; }
+    /* The matrix must actually exercise every count of enabled workloads
+     * min..7: the mixer image is always registered (min 1), and on macOS/iOS
+     * spu1 is too (min 2). */
+#if defined(__APPLE__)
+    const int min_w = 2;
+#else
+    const int min_w = 1;
+#endif
+    for (int i = 0; i < min_w; i++)
+        if (workloads_seen[i]) { printf("FAIL: a combo registered %d workloads\n", i); bad++; }
+    for (int i = min_w; i < 8; i++) if (!workloads_seen[i]) { printf("FAIL: no combo with %d workloads\n", i); bad++; }
     printf("test_gow2_spu_register_equiv: %ld env combos, %ld mismatches -> %s\n",
            combos, bad, bad ? "FAIL" : "PASS");
     return bad ? 1 : 0;

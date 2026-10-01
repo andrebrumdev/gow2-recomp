@@ -51,12 +51,14 @@ grep -qE '5[0-9]{4} lifted functions'   "$LOG" || fail "tabela de funcoes nao re
 grep -q  '151 imports'                  "$LOG" || fail "imports PRX nao resolvidos"
 grep -q  'cellSpursInitializeWithAttribute' "$LOG" || fail "boot nao chega ao SPURS init"
 grep -q  '\[spurs kernel\] started'     "$LOG" || fail "o kernel SPURS HLE nao arrancou"
-# Task 3.3: as imagens SPU liftadas tem de estar ligadas E registadas. spu0 entra
-# sempre; spu1/2/3 sao opt-in (PS3_SPU1/2/3, PS3_SPU_ALL). Se o constructor de
+# Task 3.3: as imagens SPU liftadas tem de estar ligadas E registadas. spu0, spu1 e
+# spu6 entram sempre no macOS; spu2/3 sao opt-in. Se o constructor de
 # gow2_spu_register.c deixar de correr, ou um simbolo spuN_* sumir do link, e aqui
 # que se ve -- caso contrario uma imagem ausente e indistinguivel de uma que
 # simplesmente nunca e despachada (o boot regista AddWorkload=0).
 grep -q "\[spu_workload\] registered 'gow2_spu0'" "$LOG" || fail "imagem SPU spu0 nao registada"
+grep -q "\[spu_workload\] registered 'gow2_spu1'" "$LOG" || fail "imagem SPU spu1 nao registada"
+grep -q "\[spu_workload\] registered 'gow2_spu6'" "$LOG" || fail "imagem SPU spu6 (mixer SCREAM) nao registada"
 
 # --- PASSOU O WALL M2 (2026-07-20) --------------------------------------
 # O boot deixou de parar no spin de func_0030600C. A causa era um lift

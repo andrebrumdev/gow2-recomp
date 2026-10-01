@@ -40,7 +40,7 @@ fi
 run_one() {
     local log=$1; shift
     ( set -a; . "$HERE/env_gow2.sh"; set +a
-      export PS3_NO_RSX=1 PS3_VDEC_ASYNC=1
+      export PS3_NO_RSX=1
       unset PS3_TRACE_MOVIEOBJ    # sem spam [MOVIEOBJ]; [MOVIEFSM] sai na mesma sob PS3_MOVIE_EOS
       for kv in "$@"; do export "$kv"; done
       exec "$BOOT" EBOOT.ELF ) > "$log" 2>&1 &

@@ -46,26 +46,44 @@ int main(void)
 
     clear_env();
     gow2_spu_config_from_env(&c);
+#if defined(__APPLE__)
+    /* spu1 (dearch / EDGE-zlib) is always registered on macOS/iOS. */
+    CHECK(c.spu0 == 1 && c.spu1 == 1 && c.spu2 == 0 && c.spu3 == 0 && c.spu4 == 0 && c.spu5 == 0 && c.spu6 == 1);
+    gow2_register_spu_workloads(&c);
+    CHECK(g_nnames == 3 && has("gow2_spu0") && has("gow2_spu1") && has("gow2_spu6"));
+#else
     CHECK(c.spu0 == 1 && c.spu1 == 0 && c.spu2 == 0 && c.spu3 == 0 && c.spu4 == 0 && c.spu5 == 0 && c.spu6 == 1);
     gow2_register_spu_workloads(&c);
     CHECK(g_nnames == 2 && has("gow2_spu0") && has("gow2_spu6"));
+#endif
     CHECK(g_recomp[0] == 1 && g_recomp[1] == 1 && g_recomp[2] == 2 && g_recomp[6] == 1);  /* spu2 also under image 7 */
 
     reset(); clear_env();
-    setenv("PS3_SPU1", "1", 1); setenv("PS3_SPU6", "1", 1);          /* the play recipe */
+#if defined(__APPLE__)
+    /* the play recipe needs no switch: spu1 is registered by default */
+#else
+    setenv("PS3_SPU1", "1", 1);                                      /* the play recipe */
+#endif
     gow2_spu_config_from_env(&c);
     gow2_register_spu_workloads(&c);
     CHECK(g_nnames == 3 && has("gow2_spu1"));
 
+#if defined(__APPLE__)
+    clear_env(); setenv("PS3_SPU1", "0", 1);                          /* Apple: not a switch */
+    gow2_spu_config_from_env(&c);
+    CHECK(c.spu1 == 1);
+#else
     clear_env(); setenv("PS3_SPU1", "0", 1);                          /* presence semantics kept */
     gow2_spu_config_from_env(&c);
     CHECK(c.spu1 == 1);
+#endif
+    /* spu6 (SCREAM mixer) is not a switch any more: an exported PS3_SPU6=0 is inert. */
     clear_env(); setenv("PS3_SPU0", "0", 1); setenv("PS3_SPU6", "0", 1);
     gow2_spu_config_from_env(&c);
-    CHECK(c.spu0 == 0 && c.spu6 == 0);
+    CHECK(c.spu0 == 0 && c.spu6 == 1);
     clear_env(); setenv("PS3_SPU6", "", 1);
     gow2_spu_config_from_env(&c);
-    CHECK(c.spu6 == 0);
+    CHECK(c.spu6 == 1);
     clear_env(); setenv("PS3_SPU_ALL", "1", 1); setenv("PS3_SPU6", "0", 1);
     gow2_spu_config_from_env(&c);
     CHECK(c.spu0 && c.spu1 && c.spu2 && c.spu3 && c.spu4 && c.spu5 && c.spu6);

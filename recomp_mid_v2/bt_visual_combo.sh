@@ -20,6 +20,7 @@ export PS3_VDEC_ASYNC=1
 export PS3_MOVIE_HLE=1 PS3_RSX_BACKEND=d3d12 PS3_RSX_FIFO=1 PS3_PAD_AUTOSTART=1
 # SEM PS3_TRACE_MOVIEOBJ (prova que MOVIEFSM/arm rodam sem trace)
 unset PS3_TRACE_MOVIEOBJ
+# NOTA 2026-09-29: no macOS/iOS o spu1 e' sempre registado; este A/B so' vale no Windows.
 unset PS3_SPU1 PS3_SPU_ALL PS3_NOMOVIES
 
 timeout -k 5 120 "$EXE" ../EBOOT.ELF >"$LOG" 2>&1

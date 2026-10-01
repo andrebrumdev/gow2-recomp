@@ -86,7 +86,7 @@ if [ "${stmax:-0}" -ge 3 ]; then pass "M0 st620_max=$stmax >=3"; else fail "M0 s
 echo "== M_force: EOS+auto+FORCE=4000 (70s) — Task 4 primary =="
 L=$(run_boot m_force 70 \
     PS3_MOVIE_EOS=1 PS3_MOVIE_DONE_MS=auto \
-    PS3_VDEC_ASYNC=1 PS3_VDEC_FORCE_SEQDONE_MS=4000)
+    PS3_VDEC_FORCE_SEQDONE_MS=4000)
 metrics "$L"
 o=$(grep -c '\[cellVdec\] Open' "$L" || true)
 s=$(grep -c 'StartSeq' "$L" || true)

@@ -514,8 +514,8 @@ clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
 # logo os quatro coexistem no mesmo binario. gow2_spu_register.c regista-os no
-# dispatcher por fingerprint; spu0 entra sempre, spu1/2/3 sao opt-in por env
-# (PS3_SPU1/2/3, PS3_SPU_ALL).
+# dispatcher por fingerprint; spu0 entra sempre, spu2/3 sao opt-in por env
+# (PS3_SPU2/3, PS3_SPU_ALL; spu1 e spu6 sempre no macOS/iOS).
 #
 # Cuidado herdado do Windows: o comentario do gow2_spu_register.c diz que um job
 # que rebenta mata so a thread "gracas a SEH isolation" -- isso e Windows. Aqui a

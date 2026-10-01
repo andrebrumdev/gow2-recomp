@@ -18,11 +18,9 @@ cd "$HERE"
 . "$HERE/env_gow2.sh"
 
 # --- skip intro / logos ---
-export PS3_VDEC_ASYNC=1
 export PS3_VDEC_FORCE_SEQDONE_MS="${PS3_VDEC_FORCE_SEQDONE_MS:-1500}"
 export PS3_MOVIE_EOS=1
 export PS3_MOVIE_HLE=1
-export PS3_MOVIE_IO=1
 export PS3_BOOT_LOGO_MS="${PS3_BOOT_LOGO_MS:-300}"
 # Keep movie path for WAD/R_Perm (do NOT set PS3_NOMOVIES=1)
 
@@ -30,7 +28,6 @@ export PS3_BOOT_LOGO_MS="${PS3_BOOT_LOGO_MS:-300}"
 export PS3_AUTO_LOAD_RUN=1
 export PS3_PAD_AUTOSTART=1
 export PS3_TYPE15_UNSTICK="${PS3_TYPE15_UNSTICK:-1}"
-export PS3_SPU1=1
 # Frontend schedul workloads (optional; can fault — isolated)
 export PS3_SPU4="${PS3_SPU4:-1}"
 export PS3_SPU5="${PS3_SPU5:-1}"
@@ -39,7 +36,6 @@ export PS3_SPU5="${PS3_SPU5:-1}"
 export PS3_FULLSCREEN="${PS3_FULLSCREEN:-0}"
 if [ -z "${PS3_NO_RSX:-}" ]; then
   export PS3_RSX_BACKEND="${PS3_RSX_BACKEND:-metal}"
-  export PS3_RSX_FIFO=1
 fi
 
 # Observability

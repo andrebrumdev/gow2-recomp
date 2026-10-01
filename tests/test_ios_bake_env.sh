@@ -11,9 +11,7 @@ fail=0
 must() { grep -qx "$1" <<< "$OUT" || { echo "FAIL: missing $1"; fail=1; }; }
 mustnot() { grep -qE "$1" <<< "$OUT" && { echo "FAIL: must not contain $1"; fail=1; }; }
 must 'PS3_RSX_BACKEND=metal'
-must 'PS3_SPU1=1'
-must 'PS3_SPU6=1'
-must 'PS3_VDEC_ASYNC=1'
+mustnot '^PS3_SPU1='
 must 'PS3_MOVIE_DONE_MS=auto'
 must 'PS3_MUTE=0'
 mustnot '^PS3_PAD_AUTOSTART='
@@ -22,6 +20,14 @@ mustnot '^PS3_MOVIE_CACHE='
 mustnot '^PS3_TRACE_'
 mustnot '^PS3_FULLSCREEN='
 mustnot '^PS3_METAL_VSYNC='
+mustnot '^PS3_SPU6='
+mustnot '^PS3_GCM_CB='
+mustnot '^PS3_METAL_PASS_MERGE='
+mustnot '^PS3_METAL_GPU_DESWIZZLE='
+mustnot '^PS3_VDEC_ASYNC='
+mustnot '^PS3_RSX_FIFO='
+mustnot '^PS3_MOVIE_IO='
+mustnot '^PS3_METAL_PER_DRAW_RT='
 # unset == baked value in libs/video/rsx_depth_debug.c and rsx_metal_backend.m
 # for all three (verified 2026-09-24 fix round 1) -- baking them is pure noise.
 mustnot '^PS3_METAL_DEBUG_'
