@@ -72,8 +72,6 @@ if [ -z "${PS3_NO_RSX:-}" ]; then
     export PS3_RSX_BACKEND
 fi
 
-# Reordenacao do cellSysutil exigida pela ordem de init do titulo.
-: "${PS3_CELLSYS_REORDER:=1}";  export PS3_CELLSYS_REORDER
 
 # Pos-intro sem FREELIST-TAG-GUARD: lwmutex real, sticky FIOS, produtor de EOS (o callback GCM ja' e' padrao do runtime).
 : "${PS3_LWMUTEX_REAL:=1}";        export PS3_LWMUTEX_REAL

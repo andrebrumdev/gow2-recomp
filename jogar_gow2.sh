@@ -6,15 +6,12 @@
 # Left/right mouse buttons = Square/Triangle. Controllers work when plugged in.
 # The first real key/button turns off the bring-up virtual pad.
 #
-# The log goes to claude_runs/jogar.log. PS3_TRACE_PROMPT_SHAPES=1 records each
-# on-screen button prompt shape once, so new prompts (Circle/Square/L1...) can
-# be mapped later; it only logs, it changes nothing on screen.
+# The log goes to claude_runs/jogar.log. Button-prompt shape trace (costs ~2 fps): PS3_TRACE_PROMPT_SHAPES=1 ./jogar_gow2.sh
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE" || exit 1
 set -a
 . "$HERE/env_gow2.sh"
 set +a
-export PS3_TRACE_PROMPT_SHAPES="${PS3_TRACE_PROMPT_SHAPES:-1}"
 mkdir -p "$HERE/claude_runs"
 GOW2_BIN="${GOW2_BIN:-boot_gow2}"
 case "$GOW2_BIN" in

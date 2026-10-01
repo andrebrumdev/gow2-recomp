@@ -12,7 +12,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run PS3_TRACE_HEAP+ALLOC, timeout 22s ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_HEAP=1 PS3_TRACE_ALLOC=1 \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_HEAP=1 PS3_TRACE_ALLOC=1 \
   timeout -k 5 22 ./boot_hle.exe ../EBOOT.ELF > hp.out 2> hp.err
 echo "exit=$?"
 echo "  [HEAP] writes=$(grep -ac '\[HEAP\]' hp.err) | [ALLOC] calls=$(grep -ac '\[ALLOC' hp.err)"

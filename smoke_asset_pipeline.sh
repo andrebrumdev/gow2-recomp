@@ -77,7 +77,6 @@ echo "=== smoke_asset_pipeline.sh: timeout=${TIMEOUT_S}s ==="
 # (novo: liga o dump periodico de slots abertos no movie_io, ~5s).
 export PS3_VFS_ROOT="$SCRIPT_DIR/extracted/USRDIR"
 export PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64
-export PS3_CELLSYS_REORDER=1 PS3_FIX_TBLSIZE=1
 export PS3_MOVIE_IO=1 PS3_MOVIE_CACHE="../movie_cache" PS3_MOVIE_EOS=1
 export PS3_VDEC_FORCE_SEQDONE_MS=8000
 export PS3_VDEC_ASYNC=1

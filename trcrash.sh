@@ -12,7 +12,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run reorder (crasha no trophy) + captura RIP ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_SPURS=all \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_SPURS=all \
   timeout -k 3 25 ./boot_hle.exe ../EBOOT.ELF > cr.out 2> cr.err
 echo "exit=$?"
 echo "=== [CRASH] capturado? ==="

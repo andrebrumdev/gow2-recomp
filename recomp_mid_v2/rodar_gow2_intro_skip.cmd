@@ -11,7 +11,6 @@ set PS3_PAD_AUTOSTART=1
 set PS3_RSX_BACKEND=d3d12
 set PS3_RSX_FIFO=1
 set PS3_VFS_ROOT=../extracted/USRDIR
-set PS3_CELLSYS_REORDER=1
 
 rem --- Intro FSM bring-up (recipe validado em bt_intro_wads.sh) ---
 set PS3_MOVIE_IO=1
@@ -21,7 +20,6 @@ set PS3_VDEC_FORCE_SEQDONE_MS=8000
 set PS3_VDEC_ASYNC=1
 set PS3_VM_LOW_MB=512
 set PS3_VM_STACK_MB=64
-set PS3_FIX_TBLSIZE=1
 
 boot_v2_new.exe ../EBOOT.ELF
 pause

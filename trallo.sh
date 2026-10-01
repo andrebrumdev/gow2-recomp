@@ -10,7 +10,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run PS3_TRACE_ALLOC=1, watchdog@20s, timeout 30s ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_ALLOC=1 PS3_WATCHDOG_SEC=20 \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_ALLOC=1 PS3_WATCHDOG_SEC=20 \
   timeout -k 5 30 ./boot_hle.exe ../EBOOT.ELF > al.out 2> al.err
 echo "exit=$?"
 echo "  total ALLOC calls=$(grep -ac '\[ALLOC' al.err)"

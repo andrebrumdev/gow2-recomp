@@ -21,7 +21,7 @@ echo "=== 4. relink ==="
 taskkill //F //IM boot_hle.exe >/dev/null 2>&1; sleep 1; rm -f boot_hle.exe
 g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va *.cpp.o ppu_loader.o ppu_imports.o ppu_hle.o ppu_sysprx.o ppu_fs.o ppu_hle_nids.o boot_main.o lib_*.o -lm -lbcrypt -lole32 -luser32 -lgdi32 -ld3d12 -ldxgi -ld3dcompiler -ldxguid -luuid -lntdll -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo "LINK FAIL"; grep -i 'undefined\|error' lk.log | head; exit 1; }
 echo "=== 5. run watchdog@20s timeout 30s (regressao? boot ainda passa func_0014852C?) ==="
-PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_SPURS=all PS3_WATCHDOG_SEC=20 timeout -k 5 30 ./boot_hle.exe ../EBOOT.ELF > cas.out 2> cas.err
+PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_SPURS=all PS3_WATCHDOG_SEC=20 timeout -k 5 30 ./boot_hle.exe ../EBOOT.ELF > cas.out 2> cas.err
 echo "exit=$? | HLE=$(grep -ac '^\[TRACE\]' cas.err) (era 994) | CRASH=$(grep -ac '\[CRASH\]' cas.err)"
 nm -n boot_hle.exe 2>/dev/null | awk '$2~/^[tT]$/{print $1,$3}' > fn.nm
 for R in $(grep -a 'rip=0x' cas.err | grep -oE 'rip=0x[0-9A-Fa-f]+' | sed 's/rip=//' | sort -u); do

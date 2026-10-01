@@ -18,7 +18,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== 4. run watchdog@12s + trace, timeout 28s ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_SPURS=all PS3_WATCHDOG_SEC=12 \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_SPURS=all PS3_WATCHDOG_SEC=12 \
   timeout -k 5 28 ./boot_hle.exe ../EBOOT.ELF > ra.out 2> ra.err
 echo "exit=$? (139=crash 124=timeout 0=saiu)"
 echo "  total HLE=$(grep -ac '^\[TRACE\]' ra.err) (era 993) | CRASH=$(grep -ac '\[CRASH\]' ra.err)"

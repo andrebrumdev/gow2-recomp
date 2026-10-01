@@ -20,7 +20,6 @@ rm -f "$LOG"
 
 export PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted/USRDIR"
 export PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64
-export PS3_CELLSYS_REORDER=1 PS3_FIX_TBLSIZE=1
 export PS3_MOVIE_IO=1 PS3_MOVIE_CACHE="../movie_cache" PS3_MOVIE_EOS=1
 export PS3_VDEC_FORCE_SEQDONE_MS=8000
 # PS3_VDEC_ASYNC=1: NECESSARIO hoje (nao estava no run_long_skip.sh original).

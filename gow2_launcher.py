@@ -318,12 +318,16 @@ def build_launch_script(cfg: dict, resume_autosave: bool = False,
     else:
         autosave_env = (
             "unset PS3_AUTOSAVE_RESUME\n"
-            "export PS3_PAD_AUTOSTART=\"${PS3_PAD_AUTOSTART:-1}\"\n"
+            # Play, not bench (as jogar_g2.sh): the automatic pad skipped the
+            # opening movie and drove the menu. Only a caller's value survives.
+            "if [ -n \"$G2_AUTOSTART\" ]; then export PS3_PAD_AUTOSTART=\"$G2_AUTOSTART\"; "
+            "else unset PS3_PAD_AUTOSTART; fi\n"
         )
     return f"""
 set -euo pipefail
 cd {HERE.as_posix()!r}
 G2_MUTE="${{PS3_MUTE-}}"
+G2_AUTOSTART="${{PS3_PAD_AUTOSTART-}}"
 G2_DONE="${{PS3_MOVIE_DONE_MS-}}"
 G2_FULLSCREEN="${{PS3_FULLSCREEN-}}"
 G2_VSYNC="${{PS3_METAL_VSYNC-}}"

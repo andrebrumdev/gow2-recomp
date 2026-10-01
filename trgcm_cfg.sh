@@ -12,7 +12,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run reorder: passou do cellGcmGetConfiguration? ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_SPURS=all \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_SPURS=all \
   timeout -k 3 25 ./boot_hle.exe ../EBOOT.ELF > gc.out 2> gc.err
 echo "exit=$? (139=crash, 124=avançou/timeout, 1=vm-commit)"
 echo "  GetConfig=$(grep -ac cellGcmGetConfiguration gc.err) | CRASH=$(grep -ac '\[CRASH\]' gc.err) | GetCtrl=$(grep -ac cellGcmGetControlRegister gc.err) | SetFlip=$(grep -ac SetFlipCommand gc.err) | MapLocal=$(grep -ac cellGcmMapLocalMemory gc.err)"

@@ -124,6 +124,23 @@ class OverlayConfigHandoff(unittest.TestCase):
                              capture_output=True, text=True, check=True).stdout.strip()
         self.assertEqual(out, "1|0|" + self.default_path())
 
+    def test_play_launch_leaves_autostart_off_unless_caller_set_it(self):
+        """Normal play: the pad autostart (bench aid) is unset, like jogar_g2.sh."""
+        script = self.script_for(self.launcher.default_config())
+        exec_at = script.index("\nexec ")
+        probe = script[:exec_at] + "\nprintf '%s\\n' \"${PS3_PAD_AUTOSTART-unset}\"\n"
+        env_sh = str(self.launcher.HERE / "env_gow2.sh")
+        probe = probe.replace(repr(env_sh), shlex.quote(str(self.root / "env_stub.sh")))
+        (self.root / "env_stub.sh").write_text("PS3_PAD_AUTOSTART=1\n")
+        probe = probe.replace(repr(self.launcher.HERE.as_posix()), shlex.quote(str(self.root)))
+        base_env = {k: v for k, v in os.environ.items() if k != "PS3_PAD_AUTOSTART"}
+        out = subprocess.run(["/bin/bash", "-c", probe], env=base_env,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(out, "unset")
+        out = subprocess.run(["/bin/bash", "-c", probe], env=dict(base_env, PS3_PAD_AUTOSTART="1"),
+                             capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(out, "1")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -12,7 +12,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run com watchdog @12s (acha o spin PPU-only) ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_WATCHDOG_SEC=12 \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_WATCHDOG_SEC=12 \
   timeout -k 5 20 ./boot_hle.exe ../EBOOT.ELF > wd.out 2> wd.err
 echo "exit=$?"
 echo "=== [watchdog] RIPs capturados ==="

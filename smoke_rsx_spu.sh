@@ -34,14 +34,14 @@ rm -f "$LOG"
 echo "=== smoke_rsx_spu.sh: timeout=${TIMEOUT_S}s ==="
 
 # Env vars reais confirmadas nas Fases A-D (Tasks 1-4):
-#  - PS3_VFS_ROOT/PS3_VM_*/PS3_CELLSYS_REORDER/PS3_FIX_TBLSIZE: minimo pra o boot sair do
+#  - PS3_VFS_ROOT/PS3_VM_*: minimo pra o boot sair do
 #    "vm commit (RSX local) failed" cedo (ver task-1-report.md).
 #  - PS3_SHADER_DEMO+PS3_RSX_FIFO+PS3_RSX_BACKEND=d3d12+PS3_TRACE_RSX_SHADERS+PS3_DUMP_SHADERS:
 #    liga o backend D3D12 real e os contadores [RSX-SH] (Fase A/B). Sem PS3_RSX_BACKEND=d3d12
 #    o bridge fica em modo sync-only e nada do D3D12/RSX-SH aparece (ver RSX_GRAPHICS.md).
 #  - PS3_SPU_ALL: registra spu1/2/3 (Fase D); spu1 e default, spu2/3 sao gate-only.
 PS3_VFS_ROOT="$SCRIPT_DIR/extracted/USRDIR" \
-PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_FIX_TBLSIZE=1 \
+PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 \
 PS3_SHADER_DEMO=1 PS3_RSX_FIFO=1 PS3_RSX_BACKEND=d3d12 PS3_TRACE_RSX_SHADERS=1 PS3_DUMP_SHADERS=1 \
 PS3_SPU_ALL=1 \
 timeout "$TIMEOUT_S" ./boot_v2_new.exe ../EBOOT.ELF > "$LOG" 2>&1

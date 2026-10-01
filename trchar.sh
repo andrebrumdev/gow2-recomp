@@ -12,7 +12,7 @@ g++ -std=c++20 -O0 -Wl,--disable-dynamicbase,--disable-high-entropy-va \
   -o boot_hle.exe 2>lk.log && echo "LINK OK" || { echo LINKFAIL; tail -6 lk.log; exit 1; }
 echo "=== run LONGO (50s) pra caracterizar o loop pós-config ==="
 PS3_VFS_ROOT="/c/Users/softlive/Documents/self-projects/gow2_work/extracted" \
-  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_CELLSYS_REORDER=1 PS3_TRACE_SPURS=all \
+  PS3_VM_LOW_MB=512 PS3_VM_STACK_MB=64 PS3_TRACE_SPURS=all \
   timeout -k 5 50 ./boot_hle.exe ../EBOOT.ELF > ch.out 2> ch.err
 echo "exit=$? (139=crash, 124=timeout, 1=vm-commit, 0=saiu)"
 echo "  total HLE=$(grep -ac '^\[TRACE\]' ch.err) | CRASH=$(grep -ac '\[CRASH\]' ch.err) | lwmutex=$(grep -ac sys_lwmutex ch.err)"
