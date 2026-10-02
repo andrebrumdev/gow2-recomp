@@ -37,14 +37,13 @@ struct RemoteFile: Equatable {
 
 /// Device behaviours measured once in P3 Task 1 (F1-F10) and recorded in
 /// launcher/macos/ios_device_facts.json. nil = not measured: the dependent
-/// feature stays blocked (F5) or takes the conservative path (F6, F7, F8).
+/// feature stays blocked (F5) or takes the conservative path (F7, F8). F6 (a copy that
+/// deletes destination files) is no longer read: the launcher never asks for it.
 struct DeviceFacts: Codable, Equatable {
     static let fileName = "ios_device_facts.json"
     var measured: String? = nil
     /// F5: `copy from` of a directory lands in <destination>/<name> (true) or in <destination> (false).
     var copyFromNestsDirectory: Bool? = nil
-    /// F6: `copy to --remove-existing-content true` deletes destination files the source lacks.
-    var removeExistingContentDeletesExtras: Bool? = nil
     /// F7: `lockState.passcodeRequired` is true exactly while the screen is locked.
     var lockStateTracksLock: Bool? = nil
     /// F8: moving Xcode's cached team profile away makes the next signed build get a fresh 7-day one.
@@ -103,7 +102,8 @@ protocol DeviceTransport: AnyObject {
     func files(_ device: String, bundle: String, under dir: String) throws -> [RemoteFile]
     func copyFileTo(_ device: String, bundle: String, local: URL, remote: String) throws
     /// `remote` ends up holding `local`'s contents (not local's name inside it).
-    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String, removeExisting: Bool) throws
+    /// Adds/overwrites only: files already under `remote` that `local` lacks stay there.
+    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String) throws
     func copyFileFrom(_ device: String, bundle: String, remote: String, local: URL) throws
     /// `local` (a directory) receives `remote`'s contents.
     func copyDirectoryFrom(_ device: String, bundle: String, remote: String, local: URL) throws

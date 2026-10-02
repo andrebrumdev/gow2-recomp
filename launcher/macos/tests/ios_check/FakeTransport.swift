@@ -97,11 +97,10 @@ final class FakeTransport: DeviceTransport {
         try FileManager.default.setAttributes([.modificationDate: m], ofItemAtPath: dst.path)
     }
 
-    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String, removeExisting: Bool) throws {
-        try op("dir to \(remote)" + (removeExisting ? " -r" : ""))
+    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String) throws {
+        try op("dir to \(remote)")
         if dropped(remote) { return }
         let dst = url(remote)
-        if removeExisting { try? FileManager.default.removeItem(at: dst) }
         try FakeTransport.mirror(local, into: dst)
         try corrupt(dst, remote: remote)
     }

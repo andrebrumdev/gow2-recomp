@@ -20,11 +20,13 @@ struct IOSDeps {
     /// `ps -axo comm=`; throws when the list cannot be read (the flows then refuse:
     /// an unreadable process list is never "the game is closed").
     var macProcesses: () throws -> String
-    /// Recorded device behaviours (Task 1): F5 gates the save sync, F6 the phone
-    /// replace, F7 the lock reading, F8 the profile rotation on re-sign.
+    /// Recorded device behaviours (Task 1): F5 gates the save sync, F7 the lock
+    /// reading, F8 the profile rotation on re-sign.
     var facts: DeviceFacts
     var home: URL
     var now: () -> Date
+    /// The iPhone build's prerequisites for (repo, the ios scripts' environment).
+    var prereqs: (URL, [String: String]) -> [Prereq] = { IOSPrereqs.check(repo: $0, env: $1) }
 
     static func live(repo: URL) -> IOSDeps {
         let facts = DeviceFacts.bundled(repo: repo)
@@ -60,7 +62,7 @@ struct IOSInstallRecord: Codable, Equatable {
 
 enum IOSFlowError: Error {
     case build(ScriptResult), install(ScriptResult), noProfile(String), notReady(String)
-    case phoneAppRunning, notInstalled, missingSigning, configMismatch(String), processListFailed
+    case phoneAppRunning, notInstalled, missingSigning, configMismatch(String), processListFailed, phoneSaveBackup(String)
 
     static func lastError(_ out: String) -> String {
         out.split(separator: "\n").last { $0.contains("error") || $0.contains("ERROR") }.map(String.init) ?? ""
@@ -90,6 +92,8 @@ enum IOSFlowError: Error {
             return "Não deu para ler a lista de processos do Mac para conferir se o GoW2 está aberto. Feche o jogo no Mac e tente de novo."
         case .configMismatch(let out):
             return "Os scripts do iOS leram outra configuração (ios/local.env ou variáveis GOW2_IOS_* no ambiente). Confira:\n\(out)"
+        case .phoneSaveBackup(let detail):
+            return "Não deu para copiar os saves do iPhone para o Mac antes de instalar, então nada foi instalado. Conecte o iPhone pelo cabo USB, desbloqueie-o e tente de novo. Detalhe: \(detail)"
         }
     }
 }
@@ -185,6 +189,8 @@ final class IOSBackend: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var lastResult: String?
     @Published private(set) var conflicts: [SaveConflict] = []
+    @Published private(set) var prereqs: [Prereq] = []
+    var prereqsMissing: Bool { prereqs.contains { !$0.ok } }
 
     let repo: URL
     let deps: IOSDeps
@@ -230,6 +236,7 @@ final class IOSBackend: ObservableObject {
     }
 
     private func refreshDevice() async {
+        refreshPrereqs()
         let env = LocalEnvFile.at(repo: repo).read()
         if team.isEmpty { team = env["GOW2_IOS_TEAM"] ?? "" }
         if bundle.isEmpty { bundle = env["GOW2_IOS_BUNDLE_ID"] ?? "" }
@@ -286,11 +293,23 @@ final class IOSBackend: ObservableObject {
         if running { throw IOSFlowError.phoneAppRunning }
     }
 
+    // MARK: prerequisites
+
+    private func refreshPrereqs() {
+        prereqs = deps.prereqs(repo, IOSScripts.environment(ProcessInfo.processInfo.environment, repo: repo))
+    }
+
+    /// Instalar and Reassinar need Xcode, xcodegen, a Python and the Mac build.
+    private func requirePrereqs() throws {
+        refreshPrereqs()
+        if let p = prereqs.first(where: { !$0.ok }) { throw IOSFlowError.notReady(p.message) }
+    }
+
     // MARK: scripts
 
-    private func runScript(_ name: String, _ args: [String], log: String) async throws -> ScriptResult {
+    private func runScript(_ name: String, _ args: [String], log: String, extraEnv: [String: String] = [:]) async throws -> ScriptResult {
         let script = IOSScripts.dir(repo: repo).appendingPathComponent(name)
-        let env = IOSScripts.environment(ProcessInfo.processInfo.environment)
+        let env = IOSScripts.environment(ProcessInfo.processInfo.environment, repo: repo).merging(extraEnv) { _, new in new }
         let logURL = logsDir.appendingPathComponent(log)
         let s = deps.scripts
         return try await off { try s.run(script, args, env: env, log: logURL) }
@@ -316,10 +335,32 @@ final class IOSBackend: ObservableObject {
         return URL(fileURLWithPath: app)
     }
 
-    private func installApp() async throws {
+    /// `backup`: the folder backupPhoneSaves() just wrote, handed to install_ios.sh, which
+    /// verifies it (against its own phone listing, sha256.txt, fresh backup.meta = this bundle + device) before skipping its
+    /// own copy; nil (first install, no save on the phone) = the script checks the phone itself.
+    private func installApp(backup: URL?) async throws {
         progress = "Instalando o app no iPhone…"
-        let r = try await runScript("install_ios.sh", [], log: "ios-install.log")
+        let extra = backup.map { ["GOW2_IOS_SAVES_BACKUP_DIR": $0.path] } ?? [:]
+        let r = try await runScript("install_ios.sh", [], log: "ios-install.log", extraEnv: extra)
         guard r.status == 0, r.output.contains("GOW2_IOS_INSTALL_OK") else { throw IOSFlowError.install(r) }
+    }
+
+    /// Never replace the app over the phone's saves without a verified copy of them on the
+    /// Mac (INCIDENT: devicectl once wiped the app's Documents). A bundle that is not on the
+    /// phone yet has no container: nothing to copy. Returns the line for the result and the
+    /// backup folder (nil when there was nothing to copy).
+    private func backupPhoneSaves(_ d: IOSDevice) async throws -> (line: String, folder: URL?) {
+        let t = deps.transport, b = bundle, udid = d.udid
+        let onPhone = try await off { try t.apps(udid).contains { $0.bundleID == b } }
+        guard onPhone else { return ("", nil) }
+        progress = "Copiando os saves do iPhone para o Mac antes de instalar…"
+        let s = makeSyncer(d)
+        let folder: URL?
+        do { folder = try await off { try s.backupPhone() } } catch {
+            throw IOSFlowError.phoneSaveBackup(IOSText.message(for: error))
+        }
+        guard let f = folder else { return ("O iPhone não tinha saves.", nil) }
+        return ("Saves do iPhone copiados para " + f.path + ".", f)
     }
 
     private func readExpiry(_ app: URL) throws -> Date {
@@ -356,6 +397,7 @@ final class IOSBackend: ObservableObject {
         lastResult = nil
         defer { busy = nil; progress = ""; canCancel = false }
         do {
+            try requirePrereqs()
             let d = try await readyDevice()
             try await refuseIfGameRunning(d)
             try writeLocalEnv(d)
@@ -366,7 +408,8 @@ final class IOSBackend: ObservableObject {
             let app = try await buildApp(signOnly: false)
             let expiry = try readExpiry(app)
             try await refuseIfGameRunning(d)             // the build takes minutes: re-check right before installing
-            try await installApp()
+            let (saved, backup) = try await backupPhoneSaves(d)
+            try await installApp(backup: backup)
             record = loadRecord(d)                       // the app is on the phone now, whatever happens next
             record.expiry = expiry
             record.installedAt = deps.now()
@@ -391,7 +434,7 @@ final class IOSBackend: ObservableObject {
             canCancel = false
             record.setID = manifest.setID                // only once the phone holds this set
             try saveRecord(d)
-            lastResult = IOSText.installed(outcome, badge: badge)
+            lastResult = [IOSText.installed(outcome, badge: badge), saved].filter { !$0.isEmpty }.joined(separator: " ")
         } catch {
             self.error = IOSText.message(for: error)
         }
@@ -405,6 +448,7 @@ final class IOSBackend: ObservableObject {
         lastResult = nil
         defer { busy = nil; progress = "" }
         do {
+            try requirePrereqs()
             let d = try await readyDevice()
             guard installedBundle != nil, installedBundle == bundle else { throw IOSFlowError.notInstalled }
             try await refuseIfGameRunning(d)
@@ -424,12 +468,13 @@ final class IOSBackend: ObservableObject {
             }
             let expiry = try readExpiry(app)
             try await refuseIfGameRunning(d)             // re-check right before replacing the app
-            try await installApp()
+            let (saved, backup) = try await backupPhoneSaves(d)
+            try await installApp(backup: backup)
             record = loadRecord(d)
             record.expiry = expiry
             record.installedAt = deps.now()
             try saveRecord(d)
-            lastResult = "Reassinado. \(badge.text). O jogo e os saves no iPhone não foram tocados."
+            lastResult = ["Reassinado. \(badge.text). O jogo e os saves no iPhone não foram tocados.", saved].filter { !$0.isEmpty }.joined(separator: " ")
         } catch {
             self.error = IOSText.message(for: error)
         }

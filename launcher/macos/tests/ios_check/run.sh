@@ -7,7 +7,7 @@ PORT="$(cd "$SRC/../.." && pwd)"                    # port root (ios/Sources liv
 OUT="${1:-${TMPDIR:-/tmp}/ios_check}"
 mkdir -p "$OUT"
 cc -std=c11 -Wall -I"$PORT/ios/Sources" "$SRC/tests/ios_check/manifest_probe.c" \
-    "$PORT/ios/Sources/gow2_ios_install_manifest.c" -o "$OUT/manifest_probe"
+    "$PORT/ios/Sources/gow2_ios_install_manifest.c" "$PORT/ios/Sources/gow2_sha256.c" -o "$OUT/manifest_probe"
 swiftc -swift-version 5 -target arm64-apple-macos14.0 \
     "$SRC"/Backend.swift "$SRC"/Settings.swift "$SRC"/OverlaySettingsFile.swift "$SRC"/IOS*.swift \
     "$SRC"/tests/ios_check/*.swift -o "$OUT/ios_check"

@@ -76,7 +76,7 @@ func runModelChecks() {
     check(DeviceFacts.load(fdir.appendingPathComponent("none.json")) == DeviceFacts(), "no facts file")
     writeFile(fdir.appendingPathComponent("f.json"), #"{"measured":"2026-09-26","copyFromNestsDirectory":false}"#)
     let facts = DeviceFacts.load(fdir.appendingPathComponent("f.json"))
-    check(facts.copyFromNestsDirectory == false && facts.removeExistingContentDeletesExtras == nil
+    check(facts.copyFromNestsDirectory == false && facts.lockStateTracksLock == nil
           && facts.measured == "2026-09-26", "partial facts \(facts)")
     check(DeviceError(code: DeviceError.factMissing, domain: "facts", message: "F5").userMessage.contains("ios_device_facts.json"),
           "fact-missing message")

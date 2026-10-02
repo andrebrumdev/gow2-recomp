@@ -18,6 +18,18 @@ struct IPhoneView: View {
         Form {
             ScreenHeader(title: "iPhone",
                          subtitle: "Instale o GoW2 no seu iPhone, reassine a cada 7 dias e leve os saves entre o Mac e o celular.")
+            if ios.prereqsMissing {
+                Section("Antes de instalar") {
+                    ForEach(ios.prereqs.filter { !$0.ok }) { p in
+                        Label(p.message, systemImage: "xmark.circle.fill")
+                            .font(Theme.F.body).foregroundStyle(Theme.C.amber)
+                            .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    }
+                    Button("Conferir de novo") { Task { await ios.refresh() } }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(ios.busy != nil)
+                }
+            }
             Section("Aparelho") {
                 HStack {
                     Image(systemName: ios.deviceReady ? "checkmark.circle.fill" : "iphone.slash")
@@ -53,10 +65,10 @@ struct IPhoneView: View {
                 HStack(spacing: Theme.S.md) {
                     Button { Task { await ios.install() } } label: { Label("Instalar no iPhone", systemImage: "iphone.and.arrow.forward") }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(ios.busy != nil)
+                        .disabled(ios.busy != nil || ios.prereqsMissing)
                     Button { Task { await ios.resign() } } label: { Label("Reassinar", systemImage: "signature") }
                         .buttonStyle(SecondaryButtonStyle())
-                        .disabled(ios.busy != nil || ios.installedBundle == nil)
+                        .disabled(ios.busy != nil || ios.installedBundle == nil || ios.prereqsMissing)
                     Spacer()
                     if let op = ios.busy {
                         ProgressView().controlSize(.small)
@@ -67,7 +79,7 @@ struct IPhoneView: View {
                     }
                 }
                 if !ios.progress.isEmpty { Text(ios.progress).font(Theme.F.caption).foregroundStyle(Theme.C.parchment) }
-                Text("Instalar compila o app, instala e copia o jogo (≈ 7 GB; pelo cabo leva minutos, pelo Wi-Fi bem mais). Se a cópia parar, use Instalar de novo: ela continua de onde parou e o iPhone mostra \"Jogo não instalado\" até terminar. Deixe o iPhone desbloqueado durante a cópia. Reassinar reinstala só o app: o jogo e os saves ficam.")
+                Text("Instalar compila o app, instala e copia o jogo (≈ 7 GB; pelo cabo leva minutos, pelo Wi-Fi bem mais). Se a cópia parar, use Instalar de novo: ela continua de onde parou e o iPhone mostra \"Jogo não instalado\" até terminar. Deixe o iPhone desbloqueado durante a cópia. Reassinar reinstala só o app: o jogo e os saves ficam. Antes de instalar ou reassinar, os saves do iPhone são copiados para \(ios.backupRootPath).")
                     .font(Theme.F.caption).foregroundStyle(Theme.C.ash)
             }
             Section("Saves") {

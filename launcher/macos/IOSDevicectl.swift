@@ -7,7 +7,7 @@ enum Devicectl {
         case apps(String)
         case processes(String)
         case files(String, bundle: String, dir: String)
-        case copyTo(String, bundle: String, local: String, remote: String, removeExisting: Bool)
+        case copyTo(String, bundle: String, local: String, remote: String)
         case copyFrom(String, bundle: String, remote: String, local: String)
     }
 
@@ -37,9 +37,10 @@ enum Devicectl {
             return ["devicectl", "device", "info", "processes", "--device", d, "-t", "60"] + tail
         case .files(let d, let b, let dir):
             return ["devicectl", "device", "info", "files"] + container(d, b) + ["--subdirectory", dir, "-t", "120"] + tail
-        case .copyTo(let d, let b, let local, let remote, let r):
-            return ["devicectl", "device", "copy", "to"] + container(d, b) + ["--source", local, "--destination", remote]
-                + (r ? ["--remove-existing-content", "true"] : []) + tail
+        case .copyTo(let d, let b, let local, let remote):
+            // A plain copy only: devicectl's delete-destination option once wiped the app's
+            // whole Documents (game data + save) on the user's iPhone; no op can ask for it.
+            return ["devicectl", "device", "copy", "to"] + container(d, b) + ["--source", local, "--destination", remote] + tail
         case .copyFrom(let d, let b, let remote, let local):
             return ["devicectl", "device", "copy", "from"] + container(d, b) + ["--source", remote, "--destination", local] + tail
         }
@@ -130,16 +131,11 @@ final class DevicectlTransport: DeviceTransport {
     }
 
     func copyFileTo(_ device: String, bundle: String, local: URL, remote: String) throws {
-        try run(.copyTo(device, bundle: bundle, local: local.path, remote: remote, removeExisting: false))
+        try run(.copyTo(device, bundle: bundle, local: local.path, remote: remote))
     }
 
-    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String, removeExisting: Bool) throws {
-        // `--remove-existing-content` once wiped the app's whole Documents (INCIDENT, F6
-        // anulled): never passed unless F6 is measured true, whatever the caller asked.
-        if removeExisting, facts.removeExistingContentDeletesExtras != true {
-            throw DeviceError(code: DeviceError.factMissing, domain: "facts", message: "F6: --remove-existing-content")
-        }
-        try run(.copyTo(device, bundle: bundle, local: local.path, remote: remote, removeExisting: removeExisting))
+    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String) throws {
+        try run(.copyTo(device, bundle: bundle, local: local.path, remote: remote))
     }
 
     func copyFileFrom(_ device: String, bundle: String, remote: String, local: URL) throws {

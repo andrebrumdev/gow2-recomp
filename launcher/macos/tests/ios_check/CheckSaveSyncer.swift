@@ -5,9 +5,8 @@ func runSaveSyncerChecks() {
     let app = IOSApp(bundleID: "com.example.gow2", name: "God of War II",
                      url: "file:///private/var/containers/Bundle/Application/A/GoW2.app/", builtByDeveloper: true)
     var macRunning = false
-    var exactFacts = DeviceFacts()
-    exactFacts.copyFromNestsDirectory = false
-    exactFacts.removeExistingContentDeletesExtras = true
+    var facts5 = DeviceFacts()
+    facts5.copyFromNestsDirectory = false
     final class Env {
         let root: URL, mac: URL, phone: FakeTransport, phoneSaves: URL, backups: URL, state: URL
         init(_ root: URL) {
@@ -32,7 +31,7 @@ func runSaveSyncerChecks() {
     func syncer(_ e: Env, facts: DeviceFacts? = nil, running: (() -> Bool)? = nil) -> SaveSyncer {
         SaveSyncer(transport: e.phone, device: "00008110-TEST", bundle: "com.example.gow2", macRoot: e.mac,
                    backupRoot: e.backups, stateURL: e.state, staging: e.root.appendingPathComponent("staging"),
-                   facts: facts ?? exactFacts, macGameRunning: running ?? { macRunning },
+                   facts: facts ?? facts5, macGameRunning: running ?? { macRunning },
                    now: { Date(timeIntervalSince1970: 1790372701) })
     }
     func hash(_ dir: URL) -> String? { (try? SaveSnapshot.take(dir))?[G]?.hash }
@@ -56,19 +55,24 @@ func runSaveSyncerChecks() {
     check(!fm.fileExists(atPath: e.mac.appendingPathComponent(".\(G).sync-new").path)
           && !fm.fileExists(atPath: e.mac.appendingPathComponent(".\(G).sync-old").path), "no staging left on the Mac")
 
-    // 3. Only the Mac changed -> pushed with -r (F6 true), the phone's old save backed up first.
+    // 3. Only the Mac changed -> pushed (a plain copy), the phone's old save backed up first.
     writeFile(e.mac.appendingPathComponent("\(G)/DATA00.BIN"), "d3-mac")
     r = try! syncer(e).run(.both)
     check(r.pushed == [G] && hash(e.phoneSaves) == hash(e.mac), "pushed \(r)")
     check(r.backups.first?.lastPathComponent.hasSuffix("-iphone") == true
           && fileText(r.backups[0].appendingPathComponent("\(G)/DATA00.BIN")) == "d2-phone", "old phone save kept")
-    check(e.phone.ops.contains("dir to Documents/savedata/\(G) -r"), "the phone copy replaces the directory")
+    check(e.phone.ops.contains("dir to Documents/savedata/\(G)"), "the phone copy writes the directory")
 
-    // 4. Mac → iPhone removes stale files on the phone (F6 true; the backup keeps them).
+    // 4. Codex review MAJOR (2026-09-28): the launcher never asks the phone to delete
+    //    destination files. A phone save with files the Mac's lacks cannot be replaced
+    //    exactly by a plain copy: Mac → iPhone refuses before any write, both sides intact.
     writeFile(e.phoneSaves.appendingPathComponent("\(G)/STALE.BIN"), "old")
-    r = try! syncer(e).run(.macToPhone)
-    check(r.pushed == [G] && !fm.fileExists(atPath: e.phoneSaves.appendingPathComponent("\(G)/STALE.BIN").path)
-          && fileText(r.backups[0].appendingPathComponent("\(G)/STALE.BIN")) == "old", "exact replica + backup")
+    let ops4 = e.phone.ops.count
+    do { _ = try syncer(e).run(.macToPhone); check(false, "stale phone files must refuse") }
+    catch let x as SaveSyncError { check(x == .cannotReplaceExactly(G) && !e.phone.ops.dropFirst(ops4).contains { $0.hasPrefix("dir to") }, "\(x)") }
+    catch { check(false, "\(error)") }
+    check(fileText(e.phoneSaves.appendingPathComponent("\(G)/STALE.BIN")) == "old", "stale phone file untouched")
+    try! fm.removeItem(at: e.phoneSaves.appendingPathComponent("\(G)/STALE.BIN"))
 
     // 5. Both changed -> conflict, nothing touched; resolve keeps the phone's with a Mac backup.
     writeFile(e.mac.appendingPathComponent("\(G)/MASTER.BIN"), "m4-mac")
@@ -158,17 +162,16 @@ func runSaveSyncerChecks() {
     catch { check(false, "\(error)") }
     v.phone.corruptNext = 0
 
-    // 11. F6 not measured (or false): no -r; a phone save with extra files is refused before any write.
+    // 11. A push with the same file set is a plain copy; a phone save with extra files is
+    //     refused before any write (the copy never deletes anything on the phone).
     let f6 = env("f6")
-    var noF6 = exactFacts
-    noF6.removeExistingContentDeletesExtras = nil
     writeFile(f6.mac.appendingPathComponent("\(G)/DATA00.BIN"), "f6-mac")
-    _ = try! syncer(f6, facts: noF6).run(.macToPhone)
-    check(f6.phone.ops.contains("dir to Documents/savedata/\(G)") && !f6.phone.ops.contains { $0.hasSuffix(" -r") },
-          "without F6 the copy never asks devicectl to remove anything")
+    _ = try! syncer(f6).run(.macToPhone)
+    check(f6.phone.ops.contains("dir to Documents/savedata/\(G)") && hash(f6.phoneSaves) == hash(f6.mac),
+          "same file set: pushed with a plain copy")
     writeFile(f6.phoneSaves.appendingPathComponent("\(G)/EXTRA.BIN"), "x")
     let opsF6 = f6.phone.ops.count
-    do { _ = try syncer(f6, facts: noF6).run(.macToPhone); check(false, "extras without F6 must refuse") }
+    do { _ = try syncer(f6).run(.macToPhone); check(false, "extras must refuse") }
     catch let x as SaveSyncError { check(x == .cannotReplaceExactly(G) && f6.phone.ops.count == opsF6 + 1, "\(x) \(f6.phone.ops.suffix(2))") }
     catch { check(false, "\(error)") }
 
@@ -233,7 +236,7 @@ func runSaveSyncerChecks() {
     let partial = PartialCopyTransport(tf.phone)
     let ps = SaveSyncer(transport: partial, device: "00008110-TEST", bundle: "com.example.gow2", macRoot: tf.mac,
                         backupRoot: tf.backups, stateURL: tf.state, staging: tf.root.appendingPathComponent("staging"),
-                        facts: exactFacts, macGameRunning: { false }, now: { Date(timeIntervalSince1970: 1790372701) })
+                        facts: facts5, macGameRunning: { false }, now: { Date(timeIntervalSince1970: 1790372701) })
     do { _ = try ps.run(.both); check(false, "partial copy must throw") }
     catch let x as DeviceError { check(x.code == DeviceError.noDevice, "\(x)") }
     catch { check(false, "expected the transport error, got \(error)") }
@@ -263,7 +266,7 @@ func runSaveSyncerChecks() {
     func partialSyncer(_ e: Env, _ t: DeviceTransport) -> SaveSyncer {
         SaveSyncer(transport: t, device: "00008110-TEST", bundle: "com.example.gow2", macRoot: e.mac,
                    backupRoot: e.backups, stateURL: e.state, staging: e.root.appendingPathComponent("staging"),
-                   facts: exactFacts, macGameRunning: { false }, now: { Date(timeIntervalSince1970: 1790372701) })
+                   facts: facts5, macGameRunning: { false }, now: { Date(timeIntervalSince1970: 1790372701) })
     }
     //  a) the push throws (phone had lost its save: no backup, nothing to restore).
     let sb = env("stalebase")
@@ -363,15 +366,15 @@ final class PartialCopyTransport: DeviceTransport {
     func copyFileTo(_ device: String, bundle: String, local: URL, remote: String) throws {
         try inner.copyFileTo(device, bundle: bundle, local: local, remote: remote)
     }
-    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String, removeExisting: Bool) throws {
-        if failed { return try inner.copyDirectoryTo(device, bundle: bundle, local: local, remote: remote, removeExisting: removeExisting) }
+    func copyDirectoryTo(_ device: String, bundle: String, local: URL, remote: String) throws {
+        if failed { return try inner.copyDirectoryTo(device, bundle: bundle, local: local, remote: remote) }
         failed = true
         let one = FileManager.default.temporaryDirectory.appendingPathComponent("partial-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: one) }
         let first = try FileManager.default.contentsOfDirectory(atPath: local.path).sorted()[0]
         try FileManager.default.createDirectory(at: one, withIntermediateDirectories: true)
         try FakeTransport.place(local.appendingPathComponent(first), at: one.appendingPathComponent(first))
-        try inner.copyDirectoryTo(device, bundle: bundle, local: one, remote: remote, removeExisting: removeExisting)
+        try inner.copyDirectoryTo(device, bundle: bundle, local: one, remote: remote)
         onPartial?()
         throw DeviceError(code: DeviceError.noDevice, domain: "fake", message: "device went away")
     }

@@ -6,11 +6,13 @@ struct GoW2RecompApp: App {
     @StateObject private var settings = GameSettings()
     @StateObject private var patches = PatchStore()
     @StateObject private var ios: IOSBackend
+    @StateObject private var android: AndroidBackend
 
     init() {
         let b = Backend()
         _backend = StateObject(wrappedValue: b)
         _ios = StateObject(wrappedValue: IOSBackend(repo: b.repo, game: b, deps: .live(repo: b.repo)))
+        _android = StateObject(wrappedValue: AndroidBackend(repo: b.repo))
     }
 
     var body: some Scene {
@@ -20,6 +22,7 @@ struct GoW2RecompApp: App {
                 .environmentObject(settings)
                 .environmentObject(patches)
                 .environmentObject(ios)
+                .environmentObject(android)
                 .frame(minWidth: 900, minHeight: 600)
                 .tint(Theme.C.gold)          // text-bearing controls: 8.1:1 on stone
                 .toggleStyle(BloodSwitch())    // switches stay blood (MASTER)
