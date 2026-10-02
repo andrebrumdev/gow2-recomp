@@ -82,6 +82,11 @@ gow2_lifecycle_state gow2_lifecycle_get(void);
  * qos_class_t); NULL, "", "inherit" or an unknown name -> 0 (inherit). */
 int gow2_ios_qos_from_string(const char* s, int* qos_out);
 
+/* qos_class_t value -> "interactive" | "initiated" | "default" | "utility" |
+ * "background" | "unspecified" | "other": the names the [ios] guest thread log
+ * uses, so a requested name and the effective class compare as strings. */
+const char* gow2_ios_qos_name(int qos);
+
 #ifdef __cplusplus
 }
 #endif

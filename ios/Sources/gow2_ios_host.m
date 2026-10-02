@@ -354,6 +354,9 @@ static void* guest_main(void* arg)
 {
     (void)arg;
     pthread_setname_np("guest-main");
+    /* What the scheduler class of this thread really is (the start line only
+     * says what was requested and whether the attribute took it). */
+    fprintf(stderr, "[ios] guest thread qos effective=%s\n", gow2_ios_qos_name((int)qos_class_self()));
     /* SPU registration, guest memory, ELF, HLE: here, on the guest's 64 MB
      * stack, so the home screen keeps animating ("Carregando…") meanwhile. */
     if (gow2_boot_prepare_guest(getenv("GOW2_EBOOT")) != 0) {
@@ -383,14 +386,19 @@ int gow2_ios_start_game(void)
         return ss;
     }
     const char* qn = getenv("PS3_IOS_GUEST_QOS");
-    int q = 0;
-    if (gow2_ios_qos_from_string(qn, &q)) pthread_attr_set_qos_class_np(&a, (qos_class_t)q, 0);
+    const int requested = qn && *qn && strcmp(qn, "inherit") != 0;
+    int q = 0, qrc = 0;
+    const int known = gow2_ios_qos_from_string(qn, &q);
+    if (known) qrc = pthread_attr_set_qos_class_np(&a, (qos_class_t)q, 0);
     pthread_t t;
     const int rc = pthread_create(&t, &a, guest_main, NULL);
     pthread_attr_destroy(&a);
     if (rc == 0) pthread_detach(t);
-    fprintf(stderr, "[ios] guest thread %s (qos=%s)\n", rc == 0 ? "started" : "FAILED",
-            (qn && *qn) ? qn : "inherit");
+    /* requested = the env; attr = what pthread_attr_set_qos_class_np did with it
+     * (set / refused / unknown-name / inherit). guest_main logs the effective class. */
+    fprintf(stderr, "[ios] guest thread %s (qos requested=%s attr=%s)\n", rc == 0 ? "started" : "FAILED",
+            requested ? qn : "inherit",
+            !requested ? "inherit" : !known ? "unknown-name" : qrc == 0 ? "set" : "refused");
     return rc;
 }
 

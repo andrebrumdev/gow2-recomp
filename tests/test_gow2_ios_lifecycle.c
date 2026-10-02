@@ -160,6 +160,23 @@ static void test_qos_names(void)
 #endif
 }
 
+static void test_qos_display_names(void)
+{
+#if defined(__APPLE__)
+    CHECK(strcmp(gow2_ios_qos_name((int)QOS_CLASS_USER_INTERACTIVE), "interactive") == 0);
+    CHECK(strcmp(gow2_ios_qos_name((int)QOS_CLASS_BACKGROUND), "background") == 0);
+    CHECK(strcmp(gow2_ios_qos_name((int)QOS_CLASS_UNSPECIFIED), "unspecified") == 0);
+    CHECK(strcmp(gow2_ios_qos_name(0x7), "other") == 0);
+    static const char* k[] = { "interactive", "initiated", "default", "utility" };
+    for (size_t i = 0; i < sizeof k / sizeof k[0]; i++) {
+        int q = -1;
+        CHECK(gow2_ios_qos_from_string(k[i], &q) == 1 && strcmp(gow2_ios_qos_name(q), k[i]) == 0);
+    }
+#else
+    CHECK(strcmp(gow2_ios_qos_name(0), "other") == 0);
+#endif
+}
+
 int main(void)
 {
     test_resign_and_resume();
@@ -173,6 +190,7 @@ int main(void)
     test_should_resume_releases_hold();
     test_memory_warning_while_inactive();
     test_qos_names();
+    test_qos_display_names();
     printf(g_fail ? "test_gow2_ios_lifecycle: FAIL %d\n" : "test_gow2_ios_lifecycle: PASS\n", g_fail);
     return g_fail ? 1 : 0;
 }
