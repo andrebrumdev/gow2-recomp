@@ -57,16 +57,6 @@ lib_boot_chain_metrics.sh
 
 # Files still waiting for their move batch (temporary; emptied by the last batch).
 ROOT_PENDING="
-SPURS_M2_FINDINGS.md
-SPURS_TRACE_M1.md
-elf_loader_design.json
-items123_design.json
-override_test.json
-research_result.json
-spu_interp_design.json
-tasks_design.json
-boot_fixed.stdout
-_stopn_test.c
 smoke_bctr_tail.sh
 smoke_boot_mac.sh
 smoke_fios_open_probe.sh

@@ -21,6 +21,7 @@ file that something outside its batch still cites by its old path keeps a thin w
 | [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
 | [`scripts/archive/windows/diag/`](archive/windows/diag/README.md) | Windows gdb attach / sample / watch / dump scripts and gdb command files |
 | [`scripts/archive/windows/build/`](archive/windows/build/README.md) | legacy MinGW lift-and-link scripts (`boot_hle.exe`) |
+| [`notes/artifacts/`](../notes/artifacts/README.md) | stray design JSONs, a captured stdout and a scratch C file from early sessions |
 | `claude_runs/`, `tests/`, `kit/`, `ios/`, `android/`, `launcher/`, `lift_baseline/`, `recomp_mid_v2/`, `hooks/`, `config/`, `docs/`, `notes/`, `mods/` | unchanged by this reorganisation (see `README.md`, "Repository layout") |
 
 ## What stays at the root, and why
@@ -116,10 +117,23 @@ current cites the old path (or the file is archive-only: it was bound to the old
 | 1 | `patch_build_test.sh` | [`scripts/archive/windows/build/patch_build_test.sh`](archive/windows/build/patch_build_test.sh) | none |
 | 1 | `rebuild_and_test.sh` | [`scripts/archive/windows/build/rebuild_and_test.sh`](archive/windows/build/rebuild_and_test.sh) | none |
 | 1 | `recomp_ra0.sh` | [`scripts/archive/windows/build/recomp_ra0.sh`](archive/windows/build/recomp_ra0.sh) | none |
+| 2 | `SPURS_M2_FINDINGS.md` | [`notes/SPURS_M2_FINDINGS.md`](../notes/SPURS_M2_FINDINGS.md) | stub |
+| 2 | `SPURS_TRACE_M1.md` | [`notes/SPURS_TRACE_M1.md`](../notes/SPURS_TRACE_M1.md) | stub |
+| 2 | `elf_loader_design.json` | [`notes/artifacts/elf_loader_design.json`](../notes/artifacts/elf_loader_design.json) | none |
+| 2 | `items123_design.json` | [`notes/artifacts/items123_design.json`](../notes/artifacts/items123_design.json) | none |
+| 2 | `override_test.json` | [`notes/artifacts/override_test.json`](../notes/artifacts/override_test.json) | none |
+| 2 | `research_result.json` | [`notes/artifacts/research_result.json`](../notes/artifacts/research_result.json) | none |
+| 2 | `spu_interp_design.json` | [`notes/artifacts/spu_interp_design.json`](../notes/artifacts/spu_interp_design.json) | none |
+| 2 | `tasks_design.json` | [`notes/artifacts/tasks_design.json`](../notes/artifacts/tasks_design.json) | none |
+| 2 | `boot_fixed.stdout` | [`notes/artifacts/boot_fixed.stdout`](../notes/artifacts/boot_fixed.stdout) | none |
+| 2 | `_stopn_test.c` | [`notes/artifacts/_stopn_test.c`](../notes/artifacts/_stopn_test.c) | none |
 
-## Compatibility wrappers (0, deprecated, remove after 2026-12-31)
+## Compatibility wrappers (2, deprecated, remove after 2026-12-31)
 
-None yet.
+Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_layout.sh` checks.
+
+- `SPURS_M2_FINDINGS.md` -> `notes/SPURS_M2_FINDINGS.md`
+- `SPURS_TRACE_M1.md` -> `notes/SPURS_TRACE_M1.md`
 
 ## Checking the layout
 
