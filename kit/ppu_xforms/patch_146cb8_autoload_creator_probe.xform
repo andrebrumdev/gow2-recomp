@@ -1,0 +1,25 @@
+ps3kit-xform 1
+xform patch_146cb8_autoload_creator_probe.py
+authored-in recomp_mid_v2/patch_146cb8_autoload_creator_probe.py@2d6d891
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_146cb8_autoload_creator_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -280181,0 +280182,13
+scope func 00146CB8
+at line sha256:a1d59843037b57e562a0e282fcc64d24e83d1d38a1119b9d6f7793e118075a5c nth 1 of 1
+op insert-after
+template <<END
+        /* ALCREATE-PROBE: o criador da AUTO_LOAD chegou a correr? */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_ALCREATE"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-2; if(_cap==-2){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_ALCREATE_CAP"); _cap=(_c&&*_c)?atoi(_c):40; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _opd=(uint32_t)ctx->gpr[4];
+            fprintf(stderr,"[ALCREATE] #%d chamado-de lr=0x%08X this=0x%08X "
+              "opd=0x%08X fn=0x%08X nome_ea=0x%08X\n",
+              _n,(uint32_t)ctx->lr,(uint32_t)ctx->gpr[11],_opd,
+              (_opd>=0x10000u&&_opd<0x4F000000u)?vm_read32(_opd):0u,
+              (uint32_t)vm_read32(ctx->gpr[2] + -0x4080));
+            fflush(stderr); } } }
+END

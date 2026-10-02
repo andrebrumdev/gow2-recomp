@@ -34,22 +34,22 @@ EBOOT=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 OUT=$2
 PS3=$(cd "$3" && pwd)
 GOW2=$(cd "${4:-$PS3/../gow2-recomp}" && pwd)
+. "$GOW2/kit/lib/stages.sh"
 PY=${PY:-$PS3/.venv/bin/python}
 [ -x "$PY" ] || PY=python3
 RE_PROBES=${RE_PROBES:-1}
 E427="$GOW2/recomp_mid_v2/patch_e427_spu_il_double_sext.py"
 SPU6P="$GOW2/recomp_mid_v2/patch_spu6_extra_funcs.py"
-for f in "$EBOOT" "$E427" "$SPU6P" "$PS3/tools/spu_lifter.py" "$PS3/tools/patch_spu_add_entries.py"; do
+for f in "$EBOOT" "$E427" "$SPU6P"; do
     [ -f "$f" ] || { echo "missing: $f" >&2; exit 2; }
 done
 
 REV_OLD=5f36a40e   # spu0..3 base lifts (July lift; == edfad917 output)
 REV_45=11a1c3c5    # spu4/5 (heqi/hgti decoded as .word TODO in this window)
-# The "HEAD" steps (spu0 observed import, spu2 re-lift, spu6) are pinned too: the engine
-# revision of the validated 2026-09-23 kit. Later lifters emit `ctx->pc = ...` before channel
-# reads (mixed native/interpreter SPURS tasks), which changes spu1/spu2/spu6 against
-# spu_lift.sha256 -- code that was never validated in game.
-REV_HEAD=305dd109
+# spu2, spu6 and every promotion step: the lifter of the engine the kit was cut
+# from (release kit-macos-20260923 = ps3recomp 305dd109). Pinned so a newer
+# engine cannot silently change the kit's SPU output.
+REV_HEAD=${SPU_LIFTER_HEAD_REV:-305dd109}
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 W=$(mktemp -d "${TMPDIR:-/tmp}/gow2_spu_lifts.XXXXXX")
 trap 'rm -rf "$W"' EXIT
@@ -65,6 +65,9 @@ for r in $REV_OLD $REV_45 $REV_HEAD; do
     fi
 done
 T_OLD="$W/rev_$REV_OLD/tools"; T_45="$W/rev_$REV_45/tools"; T_HEAD="$W/rev_$REV_HEAD/tools"
+for f in "$T_HEAD/spu_lifter.py" "$T_HEAD/patch_spu_add_entries.py" "$T_HEAD/extract_spu_images.py"; do
+    [ -f "$f" ] || { echo "missing in pinned $REV_HEAD: $f" >&2; exit 2; }
+done
 
 cat > "$W/helper.py" <<'PYEOF'
 import json, os, re, struct, subprocess, sys, pathlib, importlib.util
@@ -178,18 +181,14 @@ def promote(n, d, steps):
              "--extra-funcs", extra, "--symbol-prefix", "spu%d_" % n)
         add_entries(d, f / "spu_recomp.c", "spu%d_" % n, ",".join(cum))
 
-def spu6(out):
+def spu6(img, out):
+    # patch_spu6_extra_funcs.py carries its own LIFTER constant (the engine's moving tools/);
+    # override it so spu6 is lifted by the pinned T_HEAD like every other HEAD-lifter step.
     spec = importlib.util.spec_from_file_location("p6", os.environ["SPU6P"])
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-    starts = [0x3000, 0x3090, 0x3C00, 0x3CE0, 0x4178, 0x4920, 0x4930, 0x4960, 0x4A18, 0x4BD0,
-              0x4C60, 0x4C64, 0x4C68, 0x4C98, 0x4CC8, 0x4D20, 0x4E08, 0x4EC4, 0x4EF0, 0x4F30,
-              0x4F98, 0x5028, 0x5120, 0x51F0, 0x5258, 0x5260, 0x5368, 0x53B8, 0x53F8, 0x5478,
-              0x54E0, 0x5530, 0x5638, 0x57C8, 0x5868, 0x5920, 0x5B68, 0x5B78, 0x5B88, 0x5BA0,
-              0x5BE0, 0x5C70]
-    m.INPUT = W / "img6.bin"; m.OUTPUT = pathlib.Path(out)
     m.LIFTER = pathlib.Path(os.environ["T_HEAD"]) / "spu_lifter.py"
-    m.existing_starts = lambda _p: starts   # the script bootstraps from its own previous output
     m.sys.executable = PY
+    sys.argv = [os.environ["SPU6P"], img, out]
     if m.main():
         raise SystemExit("spu6 relift failed")
 
@@ -198,15 +197,21 @@ if __name__ == "__main__":
     if cmd == "prep": prep(sys.argv[2], sys.argv[3])
     elif cmd == "probes": probes(int(sys.argv[2]), sys.argv[3])
     elif cmd == "promote": promote(int(sys.argv[2]), sys.argv[3], sys.argv[4:])
-    elif cmd == "spu6": spu6(sys.argv[2])
+    elif cmd == "spu6": spu6(sys.argv[2], sys.argv[3])
 PYEOF
 export W PY T_HEAD SPU6P
 H() { "$PY" "$W/helper.py" "$@"; }
-L() { local t=$1 o=$2; shift 2; "$PY" "$t/spu_lifter.py" "$@" -o "$o" > "$o.log" 2>&1 || { cat "$o.log" >&2; exit 1; }; }
+L() { local t=$1 o=$2; shift 2; "$PY" "$t/spu_lifter.py" "$@" -o "$o" > "$o.log" 2>&1 || { cat "$o.log" >&2; exit 1; }
+      stage_capture spu_raw "$(dirname "$o")" "$(basename "$o")/spu_recomp.c" "$(basename "$o")/spu_recomp.h"; }
 
 echo "== SPU images from $EBOOT"
-"$PY" "$T_HEAD/extract_spu_images.py" "$EBOOT" -o "$W/extracted" > /dev/null
-H prep "$EBOOT" "$W/extracted"
+if [ -n "${PS3KIT:-}" ]; then
+    "$PS3KIT" spu-images "$EBOOT" "$W"
+else
+    "$PY" "$T_HEAD/extract_spu_images.py" "$EBOOT" -o "$W/extracted" > /dev/null
+    H prep "$EBOOT" "$W/extracted"
+fi
+stage_capture spu_images "$W" img0.bin img1.bin img2.bin img3.bin img4.bin img5.bin img6.bin
 
 # Manual function-pointer-only boundaries (gow2-recomp recomp_mid_v2/spu{0,1}_funcs.json: these are
 # the only entries of those files that the 5f36a40e detector does not already find).
@@ -243,7 +248,8 @@ for n in 4 5; do
     L "$T_45" "$B/spu${n}_v2" --auto-functions "$W/img$n.bin" --symbol-prefix spu${n}_
 done
 echo "== spu6"
-mkdir -p "$B/spu6_v2"; PS3_SPU_LIFTER="$T_HEAD/spu_lifter.py" "$PY" "$SPU6P" "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+mkdir -p "$B/spu6_v2"; H spu6 "$W/img6.bin" "$B/spu6_v2" > "$B/spu6_v2.log"
+stage_capture spu_raw "$B" spu6_v2/spu_recomp.c spu6_v2/spu_recomp.h
 # brsl/bih* halfword conditions of the lifts made by 2026-07-21..09-23 lifters.
 "$PY" "$GOW2/recomp_mid_v2/patch_spu_halfword_cond.py" "$B"/spu?_v2 > /dev/null
 
@@ -251,6 +257,7 @@ for n in 0 1 2 3 4 5 6; do
     rm -rf "$OUT/spu${n}_v2"; mkdir -p "$OUT/spu${n}_v2"
     cp "$B/spu${n}_v2/spu_recomp.c" "$B/spu${n}_v2/spu_recomp.h" "$OUT/spu${n}_v2/"
 done
+for n in 0 1 2 3 4 5 6; do stage_capture spu_final "$OUT" "spu${n}_v2/spu_recomp.c" "spu${n}_v2/spu_recomp.h"; done
 echo "== wrote $OUT/spu{0..6}_v2"
 
 # build_macos.sh step 3b re-verifies spu0/spu1/spu6 against the runtime's image

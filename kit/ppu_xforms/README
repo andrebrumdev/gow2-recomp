@@ -1,0 +1,25 @@
+kit/ppu_xforms -- the kit's PPU patch layer as AUTHORED transformations (Kit sem Python, Phase 2;
+plan docs/superpowers/plans/2026-09-26-gow2-kit-sem-python.md, format in ps3recomp tools/kit/xform.h).
+
+ORDER             every recomp_mid_v2/patch_*.py, in ./apply_all_patches.sh --print-order order;
+                  'noop <name>' = no effect on the pinned lift per the golden hash chain
+                  (regenerate with kit/golden/xform_order.sh <scratch>; never edit the marks by hand).
+RESIDUAL          effective ORDER names that still run as Python: '<name> TAB <reason>'.
+                  'pending: ...' = not converted yet; any other reason = stays Python until the
+                  lifter port (Phase 4). apply-xforms refuses an effective name that has neither
+                  a .xform nor a RESIDUAL line.
+<stem>.xform      patch <stem>.py as hash locators + text we wrote ('ps3kit-xform 1').
+AUDIT_ALLOW.tsv   reviewed collisions for the template audit.
+
+Controller ruling 1: nothing here may contain text taken from a lift. Locators are SHA-256 of
+trimmed anchor lines; {{line}} and \1..\9 are the only ways lifted text reaches the output, at
+apply time, from the user's own lift. Every .xform must pass
+    ps3kit xform-audit kit/ppu_xforms <the user's raw lift>
+(detection, not proof) AND the fragment review: every authored fragment, of any length, checked
+against the patch script (text the script writes -- never its needle, never text only in the
+lift), recorded per xform in the phase ledger, before it is committed.
+
+Adding one (maintainer, scratch only -- never commit what the tools write):
+    kit/golden/xform_convert.sh <ppu_raw> <scratch> <patch>.py     # draft + audit + fragments.tsv
+    (review every fragments.tsv row against the patch script; copy the draft here)
+    kit/golden/xform_check.sh   <ppu_raw> <scratch>                 # every ppu_after/* IDENTICAL

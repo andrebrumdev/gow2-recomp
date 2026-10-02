@@ -1,0 +1,261 @@
+# kit/ppu_xforms/ORDER -- the kit's PPU patch layer in application order (Kit sem Python, Phase 2).
+# One recomp_mid_v2 patch file name per line, in the order ./apply_all_patches.sh --print-order
+# computes from lift_baseline/PATCH_DEPS.tsv. 'noop <name>': the per-patch golden hash chain
+# shows the patch leaves the pinned lift unchanged -- apply-xforms runs nothing for it (Ruling 2b Q3).
+# A name with <stem>.xform here is applied by 'ps3kit apply-xforms'; any other runs as residual Python.
+# Names and the noop marker only: no status, no lifted text (Controller ruling 1).
+patch_146cb8_autoload_creator_probe.py
+patch_14a01c_opd.py
+patch_14b1f0_opd.py
+patch_17acc_enter_probe.py
+patch_1856a8_stream_opd.py
+patch_210878_alloc_probe.py
+patch_212ed0_lazyinit_probe.py
+patch_212ed0_mgrlookup_probe.py
+patch_212ed0_pop_probe.py
+patch_2182a4_anchor_live_probe.py
+patch_2182a4_caller_probe.py
+patch_2182a4_tocchain_probe.py
+patch_218340_pool_index_probe.py
+patch_218364_pool_null_gate.py
+patch_220284_copyloop_probe.py
+patch_227788_allocsrc_probes.py
+patch_227788_sizeclass_probe.py
+patch_22851c_poolstore_probe.py
+patch_242c94_state_dispatch_probe.py
+patch_24d5bc_walker_probe.py
+patch_24e198_r21_origin_probe.py
+patch_24e1e8_wall1_subtag_skip.py
+patch_24e22c_arg_chain_probe.py
+patch_24e2d4_typetag_probe.py
+patch_24e2d4_typetag_w0_probe.py
+noop patch_24e3d0_null_product_gate.py
+patch_24e3d0_victim_probe.py
+patch_2545b0_entry_probe.py
+patch_254610_empty_list_gate.py
+patch_254628_list_probe.py
+patch_2547f8_empty_list_gate.py
+patch_2547f8_walk_list_probe.py
+patch_256b64_insert_probe.py
+patch_25c680_loop_probe.py
+patch_263040_freelist_tag_guard.py
+patch_263178_store_probe.py
+patch_263554_freelist_head_probe.py
+patch_263680_alloc_null_guard.py
+patch_29af0_switch_probe.py
+patch_2a4fe4_trace.py
+patch_2a98e8_tick_breadcrumbs.py
+patch_2a98e8_tick_breadcrumbs2.py
+noop patch_2b0db0_pushh_probe.py
+patch_2b0fb4_opd.py
+patch_2b0fb4_trace.py
+patch_2b2e04_flag_probe.py
+patch_2b3d1c_probe.py
+patch_2b9c80_destroy_probe.py
+patch_32e200_opd.py
+patch_39da78_scope_probe.py
+patch_39e5a8_empty_factory_probe.py
+patch_39e5a8_product_probe.py
+patch_39e5d8_opd.py
+patch_39e6b4_null_entry_probe.py
+patch_41494_e86_keep_scope.py
+patch_41f774_sibling_cycle_probe.py
+patch_41f78c_prune_probe.py
+patch_41f7a4_descent_cycle_probe.py
+patch_41fff0_outer_walk_probe.py
+patch_4244c0_listwalk.py
+patch_457e44_fprwrap_probe.py
+patch_a1_chain_probe.py
+noop patch_b71_2f3f0_guard.py
+patch_b71_cb56c_reuse_block.py
+patch_autoload_chain_probes.py
+patch_b71_callsite_trace.py
+noop patch_b71_skip_icallb_reuse.py
+patch_ba808_wadld_eof.py
+patch_bbd74_autoload_gate_probe.py
+patch_bctr_tail.py
+patch_c992c_tab4_probe.py
+patch_cb56c_type_probe.py
+patch_cbb2c_reentry_disc.py
+noop patch_cc9d0_live_yield.py
+patch_cd498_enter_probe.py
+noop patch_ce03c_introseq_block.py
+noop patch_ce03c_movie_done_reset.py
+noop patch_ce03c_pre_play_stop.py
+noop patch_ce03c_wait_idle_f2b_movie.py
+patch_clsidx_probe_gate.py
+patch_comboprop_168350.py
+patch_crc_lookup_probe.py
+patch_ctx_restrict.py
+noop patch_e100_daccc_probe.py
+noop patch_e101_dae20_probe.py
+noop patch_e102_9ec0c_probe.py
+patch_e103_e6_prune_gate.py
+noop patch_e104_283328_probe.py
+noop patch_e105_slotidx_probe.py
+patch_e107_pre283328_probe.py
+patch_e108_alloc9f050_probe.py
+noop patch_e109_t22_at9ec0c.py
+noop patch_e111_attach_probe.py
+noop patch_e112_badnode_dump.py
+noop patch_e114_r25_diff.py
+noop patch_e115_t2tick_probe.py
+noop patch_e116_effectpath_probe.py
+noop patch_e117_wadslots_probe.py
+patch_e118_abortsite_probe.py
+noop patch_e125_matlist_probe.py
+noop patch_e126_9ec0c_entry_probe.py
+patch_e127_entity_alloc_probe.py
+noop patch_e128_csave_check.py
+noop patch_e129_fragment_fallthrough.py
+patch_e130_loader_states.py
+patch_e132_stream_fh_probe.py
+noop patch_e134_close_alloc_probe.py
+noop patch_e135_opalloc_probe.py
+noop patch_e136_freelist_pop_probe.py
+noop patch_e137_sched_words_probe.py
+patch_e143_player_getpic_probe.py
+noop patch_e145_player_clock_probe.py
+noop patch_e146_vdec_cb_snd_probe.py
+noop patch_e149_voice_probe.py
+noop patch_e150_fios_ops_probe.py
+noop patch_e151_fios_done_probe.py
+noop patch_e153_stream_update_probe.py
+patch_e162_43e118_jt.py
+patch_e239_sched_classify.py
+noop patch_e275_wad_host_read.py
+noop patch_e316_f2b_rearm.py
+noop patch_e324_arena_root2bp.py
+noop patch_e403_bad10_lr_probe.py
+patch_e404_ce0a0_r31_reload.py
+patch_e405_441c_op4_cs31.py
+noop patch_e406_441c_call_no_badf4.py
+noop patch_e407_441c_poll_then_epilogue.py
+noop patch_e408_42ec_size_on_poll.py
+noop patch_e410_42ec_keep_op.py
+noop patch_e411_ba76c_crumbs.py
+noop patch_e412_ba990_skip_poll.py
+patch_e412_fosize_probe.py
+patch_e413_skip_aread_if_avail.py
+noop patch_e413_sticky_restore_gate.py
+patch_e414_smallwad_eof.py
+noop patch_e414_sticky_owner.py
+noop patch_e415_aread_hle_wad_fo.py
+noop patch_e416_aread_rebind_perma.py
+noop patch_e418_stream_eof_probe.py
+noop patch_e418b_stream_poll_dedup.py
+patch_e418c_state2_stream_probe.py
+noop patch_e418d_state2_rem0_probe.py
+patch_e418e_tick_done_flow_probe.py
+noop patch_e418f_menu_loop_bounds_probe.py
+noop patch_e419_cs_multi_offset_286d44.py
+noop patch_e419b_cs_multi_offset_290d44.py
+noop patch_e425_spu0_3828_r82_probe.py
+noop patch_e426_spu0_sp_balance_probe.py
+noop patch_e427_spu_il_double_sext.py
+noop patch_e435_driver_queue_probe.py
+noop patch_e87_wad_lifecycle_probes.py
+noop patch_e88_pushall_children_probe.py
+noop patch_e89_lglsca_attached_gate.py
+noop patch_e95_reg_probe.py
+noop patch_e95b_deflist_probe.py
+noop patch_e95c_pool_probe.py
+patch_e95d_defloop_probe.py
+noop patch_e96_b71_natural_icall.py
+noop patch_e97_list236a1c_probe.py
+noop patch_e98_list70_probe.py
+patch_e99_b71_full_393e0.py
+noop patch_f2b_multimb_install.py
+noop patch_2b3d1c_movie_io.py
+noop patch_e131_movieio_release_on_close.py
+noop patch_f2b_multimb_stream.py
+noop patch_f2ba9bc_stream_align_install.py
+noop patch_factory_block_ty15_install.py
+patch_factory_opd_gate.py
+noop patch_factory_snap_ty15_pin.py
+noop patch_fallthrough_2550c8.py
+patch_fios_16c_selfheal.py
+noop patch_fios_42a1d4_empty.py
+patch_fios_42b4_cancel_yield.py
+patch_fios_cancel_yield.py
+patch_fios_done_cancel_yield.py
+noop patch_fios_f2a_f2b_wad.py
+noop patch_fios_f2b_fo_block.py
+noop patch_fios_f2b_fo_ctor.py
+noop patch_fios_f2b_open_block_install.py
+noop patch_e90_f2b_natural_gate.py
+noop patch_fios_f2b_open_success.py
+noop patch_fios_f2b_pump_ring_bounds.py
+noop patch_fios_f2b_pump_ring_bounds2.py
+patch_fios_freelist_rebuild.py
+noop patch_fios_open_probe.py
+noop patch_fios_host_pop.py
+noop patch_fios_play_already_active.py
+noop patch_fios_sched_probe.py
+noop patch_fios_sticky.py
+noop patch_fios_done_yield.py
+patch_fios_stop_yield.py
+noop patch_fios_stream_guards_install.py
+noop patch_fios_stream_pump.py
+noop patch_freelist_guard_262610.py
+patch_groupend_opd.py
+noop patch_host_res_inflate.py
+patch_icg_ctor_opd.py
+noop patch_introseq_probe.py
+noop patch_jumptable_2a209c.py
+patch_jumptable_2b11b8.py
+noop patch_ldrsh_shadersrc_entry.py
+noop patch_mc_schedule_probe.py
+noop patch_metal_frame_fence_default.py
+noop patch_metal_varace_underflow.py
+noop patch_oob_ra_probe.py
+noop patch_opdisp_entry.py
+patch_outer_subtag_prune.py
+patch_postthr_pc_probe.py
+patch_postthr_spin_r12.py
+patch_ppu_fences.py
+patch_present_loop_probe.py
+noop patch_r31src_probe.py
+patch_sched_arm_probe.py
+noop patch_shadersrc_loop.py
+noop patch_smpd_probe.py
+patch_menu_present_schedule_probe.py
+noop patch_flip_path_enter_probe.py
+noop patch_snd_open_probe.py
+patch_sndstream_probe.py
+noop patch_spu_halfword_cond.py
+noop patch_spu0_observed_entries.py
+noop patch_spu1_9540_align_probe.py
+noop patch_spu1_observed_entries.py
+noop patch_spu6_extra_funcs.py
+patch_st3_audio_done_force.py
+patch_st3_audio_gate.py
+patch_st3_probe.py
+noop patch_stdlib_getenv.py
+patch_tydisp_lr.py
+noop patch_tymap_18e814.py
+noop patch_tymap_probes2.py
+noop patch_type1_name.py
+patch_type1_result.py
+patch_type15_cb56c_highbit.py
+noop patch_type15_cb56c_prefer_product_install.py
+noop patch_type15_cb56c_product.py
+noop patch_type15_cc9d0_base_blocks.py
+noop patch_type15_cc9d0_disc.py
+noop patch_type15_fl_rehome_fixup.py
+noop patch_type15_fl_shell_rehome.py
+noop patch_type15_fl_slot_probe.py
+noop patch_type15_list_close_preserve_install.py
+noop patch_type15_list_preserve.py
+noop patch_type15_rehome_gate.py
+noop patch_type15_shell_probe.py
+noop patch_type15_unstick_skip.py
+patch_typeslot_null_probe.py
+patch_typeslot_null_probe2.py
+patch_vm_hot_all.py
+patch_vt64_dispatch_probe.py
+noop patch_wad_state_machine.py
+patch_wad_tex_capture.py
+noop patch_wadld_alloc_probe.py
+noop patch_wavdrv_probe.py
+patch_zz_host_api_decls.py

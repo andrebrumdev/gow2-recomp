@@ -12,7 +12,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE="$(cd "${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}" && pwd)"
 OUT="$(mkdir -p "${1:-$HERE/dist}" && cd "${1:-$HERE/dist}" && pwd)"
-PINNED="5b004fc7 5f36a40e 11a1c3c5 305dd109"   # PPU lifter; SPU lifters (spu0-3, spu4-5, the spu0/2/6 steps)
+PINNED="5b004fc7 5f36a40e 11a1c3c5 305dd109"   # PPU lifter; SPU lifters (spu0-3, spu4-5, spu2/6/promotions)
 
 for r in "$HERE" "$ENGINE"; do
     [ -z "$(git -C "$r" status --porcelain --untracked-files=no)" ] \
@@ -36,18 +36,34 @@ for rev in $PINNED; do
     mkdir -p "$R/ps3recomp/tools_pinned/$rev"
     git -C "$ENGINE" archive "$rev" tools | tar -x -C "$R/ps3recomp/tools_pinned/$rev"
 done
+. "$HERE/kit/lib/cpython_src.sh"
+PYLINE="$(vendor_cpython_source "$HERE/kit/python.lock" "$R" "${KIT_CPYTHON_TARBALL:-}")" \
+    || { echo "codigo do CPython falhou" >&2; exit 1; }
+# The iPhone build's two libraries, as pinned source (kit/lib/vendor_src.sh): SDL2 (zlib)
+# and FFmpeg (LGPL-2.1). KIT_SDL_TARBALL / KIT_FFMPEG_TARBALL skip the download.
+. "$HERE/kit/lib/vendor_src.sh"
+SDLLINE="$(vendor_source_tarball "$ENGINE/third_party/sdl2/sdl2.lock" "$R" "${KIT_SDL_TARBALL:-}")" \
+    || { echo "codigo do SDL2 falhou" >&2; exit 1; }
+FFLINE="$(vendor_source_tarball "$ENGINE/third_party/ffmpeg/ffmpeg.lock" "$R" "${KIT_FFMPEG_TARBALL:-}")" \
+    || { echo "codigo do FFmpeg falhou" >&2; exit 1; }
 {
     echo "gow2-recomp $(git -C "$HERE" rev-parse HEAD)"
     echo "ps3recomp   $(git -C "$ENGINE" rev-parse HEAD)"
     for rev in $PINNED; do echo "pinned      $(git -C "$ENGINE" rev-parse "$rev")"; done
+    echo "$PYLINE"
+    echo "$SDLLINE"
+    echo "$FFLINE"
 } > "$R/VERSIONS.txt"
 cp "$HERE/kit/README.md" "$R/README.md"
 
-# Nothing from the game may ride along: refuse the usual suspects.
-if find "$R" \( -iname 'EBOOT.*' -o -iname '*.psarc' -o -iname '*.self' -o -iname '*.m2v' \
-        -o -iname '*.wad_ps3' -o -iname '*.wav' -o -iname 'spu_hit_*' -o -iname 'spu_miss_*' \) \
-        -print | grep -q .; then
+# Nothing from the game may ride along, and the kit ships source only (a
+# prebuilt executable would meet Gatekeeper's quarantine).
+. "$HERE/kit/lib/release_guards.sh"
+if kit_find_game_files "$R" >&2; then
     echo "arquivo de jogo no pacote -- abortado" >&2; exit 1
+fi
+if kit_find_macho "$R" >&2; then
+    echo "binario Mach-O no pacote -- abortado" >&2; exit 1
 fi
 (cd "$T" && zip -qr -X "$OUT/$NAME.zip" "$NAME")
 echo "$OUT/$NAME.zip ($(du -h "$OUT/$NAME.zip" | cut -f1))"

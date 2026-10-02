@@ -1,0 +1,34 @@
+ps3kit-xform 1
+xform patch_210878_alloc_probe.py
+authored-in recomp_mid_v2/patch_210878_alloc_probe.py@4e42b74
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_210878_alloc_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -481848,0 +481849,5
+scope func 00210878
+at line sha256:f57bc1e486146163ee044c8fa53218958b99dc7c752264c63d4cc800447f8c3b nth 1 of 1
+op insert-after
+template <<END
+        /* ALLOC878-PROBE: alvo e resultado do alocador virtual.
+         * Ver docs/re_sessions/2026-08-05-E24-o-caminho-de-alocacao.md */
+        uint32_t _a878_tgt = (uint32_t)ctx->ctr;
+        uint32_t _a878_obj = (uint32_t)ctx->gpr[9];
+        uint32_t _a878_slot = (uint32_t)ctx->gpr[11];
+END
+# hunk -481849,0 +481855,11
+scope func 00210878
+at line sha256:91f4da818752a48481862fa7373c25da4c7a83ed8c063356b24f374ac521142d nth 1 of 1
+op insert-after
+template <<END
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_ALLOC878"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_ALLOC878_CAP"); _cap=(_c&&*_c)?atoi(_c):200; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _r=(uint32_t)ctx->gpr[3];
+            char _asc[5]; for(int _b=0;_b<4;_b++){ unsigned _c2=(_r>>(8*(3-_b)))&0xFFu;
+              _asc[_b]=(_c2>=32&&_c2<127)?(char)_c2:'.'; } _asc[4]='\0';
+            fprintf(stderr,"[ALLOC878] #%d alvo=0x%08X obj=0x%08X slot=0x%08X -> r3=0x%08X \"%s\"\n",
+              _n, _a878_tgt, _a878_obj, _a878_slot, _r, _asc);
+            fflush(stderr); } } }
+END

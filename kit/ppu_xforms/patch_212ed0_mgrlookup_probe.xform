@@ -1,0 +1,33 @@
+ps3kit-xform 1
+xform patch_212ed0_mgrlookup_probe.py
+authored-in recomp_mid_v2/patch_212ed0_mgrlookup_probe.py@58889e3
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_212ed0_mgrlookup_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -484637,0 +484638,5
+scope func 00212ED0
+at line sha256:1ee494c6858385ceed26c6da61607c601bb28ef26e8275507e84a672348d5cdc nth 1 of 1
+op insert-after
+template <<END
+        /* MGRLOOKUP-212ED0-PROBE: a chave e o gestor devolvido, dois lados
+         * da MESMA vcall. Ver docs/re_sessions/2026-08-06-E34-*.md */
+        uint32_t _ml_key = (uint32_t)ctx->gpr[4];
+        uint32_t _ml_tab = (uint32_t)ctx->gpr[3];
+        uint32_t _ml_tgt = (uint32_t)ctx->ctr;
+END
+# hunk -484638,0 +484644,10
+scope func 00212ED0
+at line sha256:91f4da818752a48481862fa7373c25da4c7a83ed8c063356b24f374ac521142d nth 1 of 1
+op insert-after
+template <<END
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_MGRLOOKUP"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_MGRLOOKUP_CAP"); _cap=(_c&&*_c)?atoi(_c):100000; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _mgr=(uint32_t)ctx->gpr[3];
+            fprintf(stderr,"[MGRLOOKUP] #%d key=0x%08X tab=0x%08X alvo=0x%08X -> mgr=0x%08X%s\n",
+              _n, _ml_key, _ml_tab, _ml_tgt, _mgr,
+              (_mgr==0x400C6B50u)?" <MGR-MAU>":"");
+            fflush(stderr); } } }
+END

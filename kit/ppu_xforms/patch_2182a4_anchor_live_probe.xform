@@ -1,0 +1,26 @@
+ps3kit-xform 1
+xform patch_2182a4_anchor_live_probe.py
+authored-in recomp_mid_v2/patch_2182a4_anchor_live_probe.py@386b850
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_2182a4_anchor_live_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -490130,0 +490131,14
+scope func 002182A4
+at line sha256:36a279032155932aaafc9209d729294adf5c88ea7e45aa7f89602fa40c90010a nth 1 of 1
+op insert-after
+template <<END
+        /* ANCHOR-LIVE-2182A4-PROBE: A, B e this VIVOS, antes de gpr[10] e gpr[3]
+         * serem sobrescritos (492870 e 492868). Ver E22. */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_ANCHOR"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_ANCHOR_CAP"); _cap=(_c&&*_c)?atoi(_c):200; }
+          if(_on){ static int _n=0; if(_cap<0 || _n++<_cap){
+            uint32_t _A=(uint32_t)ctx->gpr[10];
+            uint32_t _B=(uint32_t)ctx->gpr[11];
+            uint32_t _T=(uint32_t)ctx->gpr[3];
+            fprintf(stderr,"[ANCHOR] #%d A=0x%08X celula=0x%08X B=0x%08X this=0x%08X%s\n",
+              _n, _A, _A+0xCu, _B, _T,
+              (_B==0x400C6B50u)?" <B-MAU>":"");
+            fflush(stderr); } } }
+END

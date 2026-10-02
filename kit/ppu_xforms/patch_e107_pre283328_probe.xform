@@ -1,0 +1,17 @@
+ps3kit-xform 1
+xform patch_e107_pre283328_probe.py
+authored-in recomp_mid_v2/patch_e107_pre283328_probe.py@8775b45
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_e107_pre283328_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2b.9) (2b ledger).
+file ppu_recomp_000.cpp
+# hunk -131217,0 +131218,5
+scope func 0009EC0C
+at line sha256:c54860d59b9d6596b00b820db54ae5fc2bfd45084882833019fc00bb9297e447 nth 1 of 1
+op insert-after
+template <<END
+        /* E107-PRE283328 */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          if(_on){ static int _n=0; if(_n++<6){ uint32_t _p1=(uint32_t)ctx->gpr[20]; uint32_t _par=(_p1>=0x10000u&&_p1<0x4F000000u)?vm_read32(_p1+4u):0u; uint32_t _g=vm_read32(0x0053AAD4u); uint32_t _idx=(_g>=0x10000u&&_g<0x4F000000u)?vm_read32(_g+0x3Cu):0xFFFFu;
+            uint32_t _node=(_par>=0x10000u&&_par<0x4F000000u&&_idx<64u)?vm_read32(_par+0xB8u+_idx*4u):0u;
+            fprintf(stderr,"[PRE283328] r20=0x%08X parent=0x%08X parent_w0=0x%08X idx=%u node=0x%08X r29=0x%08X r3=0x%08X r9=0x%08X r11=0x%08X\n",_p1,_par,(_par>=0x10000u&&_par<0x4F000000u)?vm_read32(_par):0u,_idx,_node,(uint32_t)ctx->gpr[29],(uint32_t)ctx->gpr[3],(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[11]); fflush(stderr); } } }
+END

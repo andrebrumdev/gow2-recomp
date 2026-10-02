@@ -1,0 +1,60 @@
+ps3kit-xform 1
+xform patch_227788_allocsrc_probes.py
+authored-in recomp_mid_v2/patch_227788_allocsrc_probes.py@4f26b54
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_227788_allocsrc_probes.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2c.6) (2c ledger).
+file ppu_recomp_000.cpp
+# hunk -503875,0 +503876,12
+scope func 00227788
+at line sha256:3b2fcbfd10cd1981d9e9850a7a0b3cf17ec475d85c788f4f490c5367ee92b83e nth 1 of 1
+op insert-after
+template <<END
+        /* SINGLETON50-PROBE: quem pede o alocador (singleton, metodo, chave) */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_SING50"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_SING50_CAP"); _cap=(_c&&*_c)?atoi(_c):5000; }
+          if(_on){ static uint32_t _pc=0xFFFFFFFFu, _pr=0xFFFFFFFFu; static int _n=0;
+            uint32_t _code=(uint32_t)ctx->gpr[0], _r4=(uint32_t)ctx->gpr[4];
+            if((_code!=_pc || _r4!=_pr) && (_cap<0 || _n++<_cap)){ _pc=_code; _pr=_r4;
+              fprintf(stderr,"[SING50] #%d sing=0x%08X vt=0x%08X opd=0x%08X code=0x%08X key=0x%08X obj24=0x%08X\n",
+                _n, (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11],
+                (uint32_t)ctx->gpr[9], _code, _r4, (uint32_t)ctx->gpr[10]);
+              fflush(stderr); } } }
+END
+# hunk -503880,0 +503893,12
+scope func 00227788
+at line sha256:e494c12e00246c92dc8468e971851402d14a4aedf5025de2fb984ab6c875587b nth 1 of 2
+op insert-after
+template <<END
+        /* ALLOCSRC-PROBE: qual alocador veio, e se tem tabela de pools */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_ALLOCSRC"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_ALLOCSRC_CAP"); _cap=(_c&&*_c)?atoi(_c):5000; }
+          if(_on){ uint32_t _a=(uint32_t)ctx->gpr[3];
+            static uint32_t _prev=0xFFFFFFFFu; static int _n=0;
+            if(_a!=_prev && (_cap<0 || _n++<_cap)){ _prev=_a;
+              fprintf(stderr,"[ALLOCSRC] #%d alloc=0x%08X vt=0x%08X tab8C[0]=0x%08X\n",
+                _n, _a, (_a>=0x10000u&&_a<0x50000000u)?vm_read32(_a):0u,
+                (_a>=0x10000u&&_a<0x50000000u)?vm_read32(_a+0x8Cu):0u);
+              fflush(stderr); } } }
+END
+# hunk -504085,0 +504110,12
+scope func 00227A58
+at line sha256:3b2fcbfd10cd1981d9e9850a7a0b3cf17ec475d85c788f4f490c5367ee92b83e nth 1 of 1
+op insert-after
+template <<END
+        /* SINGLETON50-PROBE: quem pede o alocador (singleton, metodo, chave) */
+        { static int _on=-1; if(_on<0){ extern char* getenv(const char*);
+            const char* _e=getenv("PS3_TRACE_SING50"); _on=(_e&&*_e&&*_e!='0')?1:0; }
+          static int _cap=-1; if(_cap<0){ extern char* getenv(const char*);
+            const char* _c=getenv("PS3_TRACE_SING50_CAP"); _cap=(_c&&*_c)?atoi(_c):5000; }
+          if(_on){ static uint32_t _pc=0xFFFFFFFFu, _pr=0xFFFFFFFFu; static int _n=0;
+            uint32_t _code=(uint32_t)ctx->gpr[0], _r4=(uint32_t)ctx->gpr[4];
+            if((_code!=_pc || _r4!=_pr) && (_cap<0 || _n++<_cap)){ _pc=_code; _pr=_r4;
+              fprintf(stderr,"[SING50] #%d sing=0x%08X vt=0x%08X opd=0x%08X code=0x%08X key=0x%08X obj24=0x%08X\n",
+                _n, (uint32_t)ctx->gpr[3], (uint32_t)ctx->gpr[11],
+                (uint32_t)ctx->gpr[9], _code, _r4, (uint32_t)ctx->gpr[10]);
+              fflush(stderr); } } }
+END

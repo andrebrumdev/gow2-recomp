@@ -1,0 +1,66 @@
+ps3kit-xform 1
+xform patch_e118_abortsite_probe.py
+authored-in recomp_mid_v2/patch_e118_abortsite_probe.py@bcb487f
+# Converted 2026-09-29 by kit/golden/xform_convert.sh from recomp_mid_v2/patch_e118_abortsite_probe.py.
+# Fragment review: every authored fragment checked against the patch script by claude-opus (implementer, Task 2b.9) (2b ledger).
+file ppu_recomp_000.cpp
+# hunk -49317,1 +49317,1
+scope func 000423B8
+at line sha256:b88c8e7b0a84c32f5d29059d2fe71a597b3bc20ef1103e40b6938f5caaba78e9 nth 1 of 2
+op edit-line
+regex ^([\s\S]{34})([\s\S]{18})([\s\S]{0})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #1 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -49320,1 +49320,1
+scope func 000423B8
+at line sha256:b88c8e7b0a84c32f5d29059d2fe71a597b3bc20ef1103e40b6938f5caaba78e9 nth 2 of 2
+op edit-line
+regex ^([\s\S]{34})([\s\S]{18})([\s\S]{0})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #2 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -49713,1 +49713,1
+scope func 00042AC0
+at line sha256:ba5df7c1c04da3c22616814e13ca2a32da5b5d649987f413450d0b130a36ef8c nth 1 of 1
+op edit-line
+regex ^([\s\S]{10})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #3 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -50352,1 +50352,1
+scope func 0004335C
+at line sha256:aa79b4d00334e26cc026f600d05142a917fdff52bd24e1037c8a25087eb0d814 nth 1 of 1
+op edit-line
+regex ^([\s\S]{36})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #4 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51119,1 +51119,1
+scope func 00043A60
+at line sha256:aa79b4d00334e26cc026f600d05142a917fdff52bd24e1037c8a25087eb0d814 nth 1 of 2
+op edit-line
+regex ^([\s\S]{36})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #5 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51122,1 +51122,1
+scope func 00043A60
+at line sha256:aa79b4d00334e26cc026f600d05142a917fdff52bd24e1037c8a25087eb0d814 nth 2 of 2
+op edit-line
+regex ^([\s\S]{36})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #6 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51128,1 +51128,1
+scope func 00043A60
+at line sha256:ba5df7c1c04da3c22616814e13ca2a32da5b5d649987f413450d0b130a36ef8c nth 1 of 4
+op edit-line
+regex ^([\s\S]{10})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #7 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51177,1 +51177,1
+scope func 00043A60
+at line sha256:ba5df7c1c04da3c22616814e13ca2a32da5b5d649987f413450d0b130a36ef8c nth 2 of 4
+op edit-line
+regex ^([\s\S]{10})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #8 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51330,1 +51330,1
+scope func 00043A60
+at line sha256:ba5df7c1c04da3c22616814e13ca2a32da5b5d649987f413450d0b130a36ef8c nth 3 of 4
+op edit-line
+regex ^([\s\S]{10})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #9 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
+# hunk -51335,1 +51335,1
+scope func 00043A60
+at line sha256:ba5df7c1c04da3c22616814e13ca2a32da5b5d649987f413450d0b130a36ef8c nth 4 of 4
+op edit-line
+regex ^([\s\S]{10})([\s\S]{48})([\s\S]{10})$
+subst \1{ { static int _on=-1; if(_on<0){ extern char* getenv(const char*); const char* _e=getenv("PS3_TRACE_REG"); _on=(_e&&*_e&&*_e!='0')?1:0; } if(_on){ static int _k=0; if(_k++<4) fprintf(stderr,"[ABORTSITE] #10 r9=0x%08X r4=0x%08X r5=0x%08X r26=0x%08X r27=0x%08X r31=0x%08X\n",(uint32_t)ctx->gpr[9],(uint32_t)ctx->gpr[4],(uint32_t)ctx->gpr[5],(uint32_t)ctx->gpr[26],(uint32_t)ctx->gpr[27],(uint32_t)ctx->gpr[31]); fflush(stderr);} } /* E118-ABORTSITE */ \2 }\3
