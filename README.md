@@ -313,7 +313,7 @@ bash tools/android/install_android.sh --data --serial <SERIAL>      # instala e 
 - Nas máquinas de desenvolvimento há dois atalhos locais, fora do git (`build-android/` é
   ignorado): `run_build2.sh` chama o `build_android.sh` acima e **compila**; `run_install_apk.sh`
   chama o `install_android.sh` e **só instala** o APK que já existe.
-- O APK é compilado do seu próprio dump e instalado só no seu aparelho; nunca é distribuído.
+- O APK é compilado do seu próprio dump e instalado só no seu aparelho; nunca é distribuído. As bibliotecas do FFmpeg dentro do app continuam sob a LGPL-2.1 e podem ser copiadas, modificadas e substituídas.
 
 ### iOS e Mac
 
