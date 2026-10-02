@@ -26,6 +26,12 @@ Atalhos:
   `scripts/smoke/smoke_metal_matrix_mac.sh` (M10 matriz metal), `scripts/smoke/smoke_metal_draw_mac.sh`
 - Build Mac: `./build_macos.sh` (LIFT_OPT/HOST_OPT/OUT para A/B; default `-O0`)
 - Smokes Win: `recomp_mid_v2/bt_intro_wads.sh`, `bt_visual_combo.sh`, etc.
+- Organização (2026-10-02): a raiz só tem pontos de entrada (launchers, `build_macos.sh`,
+  `env_gow2.sh`, fontes do build, `apply_all_patches.sh`/`verify_lift.sh`/`accept_relift.sh`).
+  Helpers do lift em `scripts/lift/`, diagnósticos Mac em `scripts/diag/`, `tr*.sh` e scripts do
+  Windows de julho em `scripts/archive/windows/`, `decrypt_self.py`/`extract_pkg.py` em `tools/`.
+  Mapa antigo → novo em `scripts/README.md`; os caminhos antigos viram wrappers até 2026-12-31.
+  Arquivo novo na raiz: só com entrada em `ROOT_KEEP` de `scripts/check_layout.sh` (que falha se não).
 - Recipe de env e **como puxar o upstream sp00nznet sem partir o Mac/GoW2**:
   ver secção **«Integrar melhorias do projeto original»** em `../ps3recomp/CLAUDE.md`
 

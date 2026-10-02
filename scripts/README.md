@@ -18,7 +18,7 @@ file that something outside its batch still cites by its old path keeps a thin w
 | `scripts/` | helper scripts that are not entry points; this page is its map |
 | [`scripts/smoke/`](smoke/README.md) | boot / intro / Metal smoke runs of the Mac build (and three Windows-only smokes); each needs the game data and a built `boot_gow2` |
 | [`scripts/lift/`](lift/README.md) | relift acceptance gates, chain gate, bisect and one-off lift helpers called by `accept_relift.sh` / `promote_lift.sh` |
-| `scripts/diag/` | Mac diagnostics: gdb attach, run-until-marker watcher, RPCS3 oracle checklist |
+| `scripts/diag/` | Mac diagnostics: lldb memory attach, run-until-marker watcher, RPCS3 oracle checklist |
 | `scripts/archive/` | history only: nothing current calls these files |
 | [`scripts/archive/windows/`](archive/windows/README.md) | scripts of the July 2026 Windows bring-up, bound to that machine's paths |
 | [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
@@ -32,7 +32,7 @@ file that something outside its batch still cites by its old path keeps a thin w
 
 | Group | Files | Why at the root |
 |---|---|---|
-| Project files | `README.md`, `README.pt-BR.md`, `LICENSE`, `NOTICE.md`, `CLAUDE.md`, `.gitignore`, `.recomp.json` | GitHub, the kit terms check and agents read them there |
+| Project files | `README.md`, `README.pt-BR.md`, `LICENSE`, `NOTICE.md`, `CLAUDE.md`, `.gitignore`, `.recomp.json` | GitHub and agents read them there; `README.md` and `README.pt-BR.md` are in the monorepo Android terms check (`tools/android/terms_inventory.txt`) |
 | Launchers | `jogar_g2.sh`, `jogar_gow2.sh`, `abrir_launcher.sh`, `rodar_gow2.sh`, `rodar_gow2_intro_skip.sh`, `rodar_gow2_menu_fast.sh`, `testar_fix.sh`, `gow2_launcher.py`, `make_app_bundle.sh` | what a player or a session runs directly; `README.md`, `CLAUDE.md` and the notes give these commands (`testar_fix.sh` execs `jogar_g2.sh`) |
 | Mac build and env | `build_macos.sh`, `env_gow2.sh`, `functions.json` | the Android and iOS builds (`$GOW2_WORK/build_macos.sh`, `$GOW2_WORK/env_gow2.sh`), the kit, and the monorepo gates (`scripts/upstream_block_gate.sh`, `scripts/baseline_run.sh`) use these paths |
 | Sources the build compiles | `boot_macos.cpp`, `gow2_boot.h`, `gow2_overlay_provider.c`, `gow2_overlay_provider.h`, `host_gow2_f2b.c`, `host_gow2_factory.cpp`, `movie_eos_arm.c`, `movie_eos_arm.h` | `build_macos.sh`, the iOS/Android builds (`cmp` against `games/gow2`) and the monorepo CMake name them at the root |

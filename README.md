@@ -147,14 +147,31 @@ user has to supply it.
 
 ## Repository layout
 
+The root holds only entry points; everything else lives in a folder with one
+purpose. The full map (with the old root path of every moved script) is
+[`scripts/README.md`](scripts/README.md), and `scripts/check_layout.sh` keeps
+the root clean.
+
+- `jogar_g2.sh`, `rodar_gow2*.sh`, `testar_fix.sh`, `gow2_launcher.py`,
+  `env_gow2.sh` — launchers and the environment recipe.
+- `build_macos.sh` and the host sources it compiles (`boot_macos.cpp`,
+  `gow2_boot.h`, `host_gow2_*`, `movie_eos_arm.*`, `gow2_overlay_provider.*`).
 - `functions.json` — curated PPU function bounds (truncation repairs,
   mid-function targets).
+- `apply_all_patches.sh`, `verify_lift.sh`, `accept_relift.sh` — lift pipeline
+  entry points; their helpers live in `scripts/lift/`.
 - `recomp_mid_v2/` — hand-written glue: SPU workload registration, function
   overrides, mid-asm hooks, and the idempotent `patch_*.py` scripts that must
   survive every re-lift.
 - `config/gow2_recomp.toml` — lifter configuration (hooks).
-- `jogar_g2.sh`, `env_gow2.sh`, `gow2_launcher.py` — launcher and environment.
-- `docs/` — design notes and investigation logs.
+- `kit/` — the bring-your-own-game installer (`kit/setup.sh`).
+- `launcher/`, `ios/`, `android/` — macOS launcher app, iOS app, Android build.
+- `scripts/` — smoke runs (`scripts/smoke/`), lift helpers (`scripts/lift/`),
+  Mac diagnostics (`scripts/diag/`) and the archive of the 2026 Windows
+  bring-up (`scripts/archive/`); `tools/` — PKG/SELF extraction and RPCS3
+  source search.
+- `tests/`, `lift_baseline/` — offline tests and the lift baseline.
+- `notes/` — dated investigation notes; `docs/img/` — screenshots.
 
 Excluded on purpose (see `.gitignore`): `EBOOT.ELF`, `extracted/`, `*.psarc`,
 SPU images, lifted PPU/SPU sources, texture dumps and build output. Those are

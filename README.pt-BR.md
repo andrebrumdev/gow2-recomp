@@ -60,4 +60,4 @@ licenças. Detalhes em [NOTICE.md](NOTICE.md).
 
 - O README completo (em inglês, com as seções técnicas em português): [README.md](README.md).
 - Os dois repositórios: [Os dois repositórios](README.md#os-dois-repositórios).
-- Mapa dos scripts da raiz: [scripts/README.md](scripts/README.md).
+- Organização das pastas e mapa dos scripts (caminho antigo na raiz → caminho novo): [scripts/README.md](scripts/README.md).
