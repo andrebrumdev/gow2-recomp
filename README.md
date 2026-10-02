@@ -1,3 +1,5 @@
+**English** · [Português (Brasil)](README.pt-BR.md)
+
 # God of War II HD — native macOS port by static recompilation
 
 **God of War II HD** (PS3, `NPUA80491`) running **natively on Apple Silicon**:
