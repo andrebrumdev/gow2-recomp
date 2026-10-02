@@ -7,6 +7,7 @@
     "region": "USA"
   },
   "project": "gow2-recomp",
+  "wikidata": "Q107424185",
   "status": "playable",
   "targets": [
     "macOS",
