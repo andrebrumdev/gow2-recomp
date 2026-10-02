@@ -1,233 +1,134 @@
-# Root files of gow2-recomp — documentation map (nothing moved)
+# Repository layout and script map
 
-This page only **describes** the ~150 files at the root of this repository: what each group is, who
-cites it, and where it could go in a later clean-up. **No file was moved.** Moving any of them is a
-separate, planned change (plan G2 of the monorepo's
-[reorganisation plan](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/superpowers/plans/2026-10-02-reorganizacao-do-repositorio.md)):
-launchers, the kit, `claude_runs/`, tests, the CLAUDE.md files, memory notes and many session logs call
-these files by name, and `games/gow2/` in the monorepo is a copy of this repository.
+The root of this repository holds only what a player, the build or another repository calls by path
+(launchers, the Mac build, the env recipe, the lift pipeline entry points and the sources the build
+compiles). Everything else lives in a folder with one purpose, listed below. `scripts/check_layout.sh`
+fails when a new loose file appears at the root, when a compatibility wrapper loses its target, or when
+a folder is missing from this page.
 
-Columns (counted on 2026-10-02 with `git grep -l -F <name>`; counts are a floor and a short name can
-also match a longer one):
+The reorganisation followed the plan in the monorepo
+([`docs/superpowers/plans/2026-10-02-reorganizacao-do-repositorio.md`](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/superpowers/plans/2026-10-02-reorganizacao-do-repositorio.md), item G2):
+moves are `git mv` (`git log --follow <new path>` keeps the history), done in batches, and every moved
+file that something outside its batch still cites by its old path keeps a thin wrapper there.
 
-- **here**: files in this repository that mention the name, excluding `notes/` and the file itself;
-- **docs/skills**: files under the monorepo's `docs/` (without `docs/re_sessions/`) and `.agents/skills/`;
-- **logs**: files under the monorepo's `docs/re_sessions/` (immutable history: a move would leave them stale).
+## Folders
 
-A file is a safe candidate to move only when **here** and **docs/skills** are both 0.
+| Folder | Purpose |
+|---|---|
+| `scripts/` | helper scripts that are not entry points; this page is its map |
+| `scripts/archive/` | history only: nothing current calls these files |
+| [`scripts/archive/windows/`](archive/windows/README.md) | scripts of the July 2026 Windows bring-up, bound to that machine's paths |
+| [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
+| [`scripts/archive/windows/diag/`](archive/windows/diag/README.md) | Windows gdb attach / sample / watch / dump scripts and gdb command files |
+| [`scripts/archive/windows/build/`](archive/windows/build/README.md) | legacy MinGW lift-and-link scripts (`boot_hle.exe`) |
+| `claude_runs/`, `tests/`, `kit/`, `ios/`, `android/`, `launcher/`, `lift_baseline/`, `recomp_mid_v2/`, `hooks/`, `config/`, `docs/`, `notes/`, `mods/` | unchanged by this reorganisation (see `README.md`, "Repository layout") |
 
-## Entry points and project files (stay at the root)
+## What stays at the root, and why
 
-Proposed destination: stay at the root.
+| Group | Files | Why at the root |
+|---|---|---|
+| Project files | `README.md`, `README.pt-BR.md`, `LICENSE`, `NOTICE.md`, `CLAUDE.md`, `.gitignore`, `.recomp.json` | GitHub, the kit terms check and agents read them there |
+| Launchers | `jogar_g2.sh`, `jogar_gow2.sh`, `abrir_launcher.sh`, `rodar_gow2.sh`, `rodar_gow2_intro_skip.sh`, `rodar_gow2_menu_fast.sh`, `testar_fix.sh`, `gow2_launcher.py`, `make_app_bundle.sh` | what a player or a session runs directly; `README.md`, `CLAUDE.md` and the notes give these commands (`testar_fix.sh` execs `jogar_g2.sh`) |
+| Mac build and env | `build_macos.sh`, `env_gow2.sh`, `functions.json` | the Android and iOS builds (`$GOW2_WORK/build_macos.sh`, `$GOW2_WORK/env_gow2.sh`), the kit, and the monorepo gates (`scripts/upstream_block_gate.sh`, `scripts/baseline_run.sh`) use these paths |
+| Sources the build compiles | `boot_macos.cpp`, `gow2_boot.h`, `gow2_overlay_provider.c`, `gow2_overlay_provider.h`, `host_gow2_f2b.c`, `host_gow2_factory.cpp`, `movie_eos_arm.c`, `movie_eos_arm.h` | `build_macos.sh`, the iOS/Android builds (`cmp` against `games/gow2`) and the monorepo CMake name them at the root |
+| Lift pipeline entry points | `apply_all_patches.sh`, `verify_lift.sh`, `verify_lift_baseline.sh`, `accept_relift.sh`, `lib_boot_chain_metrics.sh`, `PROMOTION_LOG.tsv` | the kit, `build_macos.sh`, `lift_baseline/` and the monorepo (`scripts/upstream_block_gate.sh` sources `$GAME_ROOT/lib_boot_chain_metrics.sh`) use these paths |
 
-| File | here | docs/skills | logs |
+## Moved files (old path -> new path)
+
+"wrapper" = a thin script left at the old path that runs the new one with the same arguments,
+environment, working directory and exit code (`exec`); "stub" = a short note pointing to the new place.
+Wrappers and stubs are deprecated paths: **remove after 2026-12-31**, once the monorepo copy
+(`games/gow2/`), the dated notes and other sessions have moved to the new paths. "none" = nothing
+current cites the old path (or the file is archive-only: it was bound to the old Windows machine).
+
+| Batch | Old path | New path | At the old path |
 |---|---|---|---|
-| `.gitignore` | 3 | 13 | 1 |
-| `.recomp.json` | 0 | 0 | 0 |
-| `CLAUDE.md` | 57 | 54 | 23 |
-| `PROMOTION_LOG.tsv` | 1 | 0 | 0 |
-| `README.md` | 4 | 23 | 2 |
-| `abrir_launcher.sh` | 0 | 1 | 0 |
-| `build_macos.sh` | 44 | 74 | 15 |
-| `env_gow2.sh` | 46 | 56 | 12 |
-| `functions.json` | 24 | 18 | 5 |
-| `gow2_launcher.py` | 6 | 6 | 0 |
-| `jogar_g2.sh` | 11 | 16 | 1 |
-| `jogar_gow2.sh` | 1 | 2 | 0 |
-| `make_app_bundle.sh` | 0 | 1 | 0 |
-| `rodar_gow2.sh` | 6 | 6 | 0 |
-| `rodar_gow2_intro_skip.sh` | 0 | 3 | 0 |
-| `rodar_gow2_menu_fast.sh` | 2 | 4 | 0 |
+| 1 | `tr040.sh` | [`scripts/archive/windows/trace/tr040.sh`](archive/windows/trace/tr040.sh) | none |
+| 1 | `tr042.sh` | [`scripts/archive/windows/trace/tr042.sh`](archive/windows/trace/tr042.sh) | none |
+| 1 | `trallo.sh` | [`scripts/archive/windows/trace/trallo.sh`](archive/windows/trace/trallo.sh) | none |
+| 1 | `trallocaller.sh` | [`scripts/archive/windows/trace/trallocaller.sh`](archive/windows/trace/trallocaller.sh) | none |
+| 1 | `trbridge.sh` | [`scripts/archive/windows/trace/trbridge.sh`](archive/windows/trace/trbridge.sh) | none |
+| 1 | `trbridge2.sh` | [`scripts/archive/windows/trace/trbridge2.sh`](archive/windows/trace/trbridge2.sh) | none |
+| 1 | `trbs.sh` | [`scripts/archive/windows/trace/trbs.sh`](archive/windows/trace/trbs.sh) | none |
+| 1 | `trbuild.sh` | [`scripts/archive/windows/trace/trbuild.sh`](archive/windows/trace/trbuild.sh) | none |
+| 1 | `trcas_all.sh` | [`scripts/archive/windows/trace/trcas_all.sh`](archive/windows/trace/trcas_all.sh) | none |
+| 1 | `trcb.sh` | [`scripts/archive/windows/trace/trcb.sh`](archive/windows/trace/trcb.sh) | none |
+| 1 | `trcbcaller.sh` | [`scripts/archive/windows/trace/trcbcaller.sh`](archive/windows/trace/trcbcaller.sh) | none |
+| 1 | `trchar.sh` | [`scripts/archive/windows/trace/trchar.sh`](archive/windows/trace/trchar.sh) | none |
+| 1 | `trcrash.sh` | [`scripts/archive/windows/trace/trcrash.sh`](archive/windows/trace/trcrash.sh) | none |
+| 1 | `trdl.sh` | [`scripts/archive/windows/trace/trdl.sh`](archive/windows/trace/trdl.sh) | none |
+| 1 | `trf2.sh` | [`scripts/archive/windows/trace/trf2.sh`](archive/windows/trace/trf2.sh) | none |
+| 1 | `trfence.sh` | [`scripts/archive/windows/trace/trfence.sh`](archive/windows/trace/trfence.sh) | none |
+| 1 | `trfifo.sh` | [`scripts/archive/windows/trace/trfifo.sh`](archive/windows/trace/trfifo.sh) | none |
+| 1 | `trfix.sh` | [`scripts/archive/windows/trace/trfix.sh`](archive/windows/trace/trfix.sh) | none |
+| 1 | `trflip.sh` | [`scripts/archive/windows/trace/trflip.sh`](archive/windows/trace/trflip.sh) | none |
+| 1 | `trforce.sh` | [`scripts/archive/windows/trace/trforce.sh`](archive/windows/trace/trforce.sh) | none |
+| 1 | `trfp.sh` | [`scripts/archive/windows/trace/trfp.sh`](archive/windows/trace/trfp.sh) | none |
+| 1 | `trgcm.sh` | [`scripts/archive/windows/trace/trgcm.sh`](archive/windows/trace/trgcm.sh) | none |
+| 1 | `trgcm2.sh` | [`scripts/archive/windows/trace/trgcm2.sh`](archive/windows/trace/trgcm2.sh) | none |
+| 1 | `trgcm3.sh` | [`scripts/archive/windows/trace/trgcm3.sh`](archive/windows/trace/trgcm3.sh) | none |
+| 1 | `trgcm_cfg.sh` | [`scripts/archive/windows/trace/trgcm_cfg.sh`](archive/windows/trace/trgcm_cfg.sh) | none |
+| 1 | `trgpu.sh` | [`scripts/archive/windows/trace/trgpu.sh`](archive/windows/trace/trgpu.sh) | none |
+| 1 | `trheap.sh` | [`scripts/archive/windows/trace/trheap.sh`](archive/windows/trace/trheap.sh) | none |
+| 1 | `trinit.sh` | [`scripts/archive/windows/trace/trinit.sh`](archive/windows/trace/trinit.sh) | none |
+| 1 | `trlv2.sh` | [`scripts/archive/windows/trace/trlv2.sh`](archive/windows/trace/trlv2.sh) | none |
+| 1 | `troobra.sh` | [`scripts/archive/windows/trace/troobra.sh`](archive/windows/trace/troobra.sh) | none |
+| 1 | `trpad.sh` | [`scripts/archive/windows/trace/trpad.sh`](archive/windows/trace/trpad.sh) | none |
+| 1 | `trra0.sh` | [`scripts/archive/windows/trace/trra0.sh`](archive/windows/trace/trra0.sh) | none |
+| 1 | `trra0_run.sh` | [`scripts/archive/windows/trace/trra0_run.sh`](archive/windows/trace/trra0_run.sh) | none |
+| 1 | `trreorder.sh` | [`scripts/archive/windows/trace/trreorder.sh`](archive/windows/trace/trreorder.sh) | none |
+| 1 | `trrsv.sh` | [`scripts/archive/windows/trace/trrsv.sh`](archive/windows/trace/trrsv.sh) | none |
+| 1 | `trrsx.sh` | [`scripts/archive/windows/trace/trrsx.sh`](archive/windows/trace/trrsx.sh) | none |
+| 1 | `trrsx2.sh` | [`scripts/archive/windows/trace/trrsx2.sh`](archive/windows/trace/trrsx2.sh) | none |
+| 1 | `trsc.sh` | [`scripts/archive/windows/trace/trsc.sh`](archive/windows/trace/trsc.sh) | none |
+| 1 | `trsem.sh` | [`scripts/archive/windows/trace/trsem.sh`](archive/windows/trace/trsem.sh) | none |
+| 1 | `trskip.sh` | [`scripts/archive/windows/trace/trskip.sh`](archive/windows/trace/trskip.sh) | none |
+| 1 | `trspin.sh` | [`scripts/archive/windows/trace/trspin.sh`](archive/windows/trace/trspin.sh) | none |
+| 1 | `trspin2.sh` | [`scripts/archive/windows/trace/trspin2.sh`](archive/windows/trace/trspin2.sh) | none |
+| 1 | `trspursready.sh` | [`scripts/archive/windows/trace/trspursready.sh`](archive/windows/trace/trspursready.sh) | none |
+| 1 | `trtid.sh` | [`scripts/archive/windows/trace/trtid.sh`](archive/windows/trace/trtid.sh) | none |
+| 1 | `trtrophy.sh` | [`scripts/archive/windows/trace/trtrophy.sh`](archive/windows/trace/trtrophy.sh) | none |
+| 1 | `trwatch.sh` | [`scripts/archive/windows/trace/trwatch.sh`](archive/windows/trace/trwatch.sh) | none |
+| 1 | `cas.pl` | [`scripts/archive/windows/trace/cas.pl`](archive/windows/trace/cas.pl) | none |
+| 1 | `attach_mem.sh` | [`scripts/archive/windows/diag/attach_mem.sh`](archive/windows/diag/attach_mem.sh) | none |
+| 1 | `attach_oob.sh` | [`scripts/archive/windows/diag/attach_oob.sh`](archive/windows/diag/attach_oob.sh) | none |
+| 1 | `attach_threads.sh` | [`scripts/archive/windows/diag/attach_threads.sh`](archive/windows/diag/attach_threads.sh) | none |
+| 1 | `diag_hang.sh` | [`scripts/archive/windows/diag/diag_hang.sh`](archive/windows/diag/diag_hang.sh) | none |
+| 1 | `diag_sample.sh` | [`scripts/archive/windows/diag/diag_sample.sh`](archive/windows/diag/diag_sample.sh) | none |
+| 1 | `dump_alloc.sh` | [`scripts/archive/windows/diag/dump_alloc.sh`](archive/windows/diag/dump_alloc.sh) | none |
+| 1 | `dump_ctrl_be.sh` | [`scripts/archive/windows/diag/dump_ctrl_be.sh`](archive/windows/diag/dump_ctrl_be.sh) | none |
+| 1 | `oob_bp.sh` | [`scripts/archive/windows/diag/oob_bp.sh`](archive/windows/diag/oob_bp.sh) | none |
+| 1 | `probe_flag.sh` | [`scripts/archive/windows/diag/probe_flag.sh`](archive/windows/diag/probe_flag.sh) | none |
+| 1 | `sample_m2.sh` | [`scripts/archive/windows/diag/sample_m2.sh`](archive/windows/diag/sample_m2.sh) | none |
+| 1 | `sample_mem.sh` | [`scripts/archive/windows/diag/sample_mem.sh`](archive/windows/diag/sample_mem.sh) | none |
+| 1 | `sample_multi.sh` | [`scripts/archive/windows/diag/sample_multi.sh`](archive/windows/diag/sample_multi.sh) | none |
+| 1 | `trace_list.sh` | [`scripts/archive/windows/diag/trace_list.sh`](archive/windows/diag/trace_list.sh) | none |
+| 1 | `trace_obj.sh` | [`scripts/archive/windows/diag/trace_obj.sh`](archive/windows/diag/trace_obj.sh) | none |
+| 1 | `watch_ctrl.sh` | [`scripts/archive/windows/diag/watch_ctrl.sh`](archive/windows/diag/watch_ctrl.sh) | none |
+| 1 | `watch_flag.sh` | [`scripts/archive/windows/diag/watch_flag.sh`](archive/windows/diag/watch_flag.sh) | none |
+| 1 | `hang_cmds.gdb` | [`scripts/archive/windows/diag/hang_cmds.gdb`](archive/windows/diag/hang_cmds.gdb) | none |
+| 1 | `watch_obj.gdb` | [`scripts/archive/windows/diag/watch_obj.gdb`](archive/windows/diag/watch_obj.gdb) | none |
+| 1 | `build3.sh` | [`scripts/archive/windows/build/build3.sh`](archive/windows/build/build3.sh) | none |
+| 1 | `build_boot_gow.sh` | [`scripts/archive/windows/build/build_boot_gow.sh`](archive/windows/build/build_boot_gow.sh) | none |
+| 1 | `build_boot_hle.sh` | [`scripts/archive/windows/build/build_boot_hle.sh`](archive/windows/build/build_boot_hle.sh) | none |
+| 1 | `build_gow_mid.sh` | [`scripts/archive/windows/build/build_gow_mid.sh`](archive/windows/build/build_gow_mid.sh) | none |
+| 1 | `capped_build.sh` | [`scripts/archive/windows/build/capped_build.sh`](archive/windows/build/capped_build.sh) | none |
+| 1 | `patch_build_test.sh` | [`scripts/archive/windows/build/patch_build_test.sh`](archive/windows/build/patch_build_test.sh) | none |
+| 1 | `rebuild_and_test.sh` | [`scripts/archive/windows/build/rebuild_and_test.sh`](archive/windows/build/rebuild_and_test.sh) | none |
+| 1 | `recomp_ra0.sh` | [`scripts/archive/windows/build/recomp_ra0.sh`](archive/windows/build/recomp_ra0.sh) | none |
 
-## Sources compiled by the build (stay at the root: build_macos.sh and the iOS/Android builds name them)
+## Compatibility wrappers (0, deprecated, remove after 2026-12-31)
 
-Proposed destination: stay at the root.
+None yet.
 
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `boot_macos.cpp` | 9 | 24 | 2 |
-| `gow2_boot.h` | 8 | 7 | 1 |
-| `gow2_overlay_provider.c` | 1 | 3 | 0 |
-| `gow2_overlay_provider.h` | 3 | 0 | 0 |
-| `host_gow2_f2b.c` | 6 | 1 | 0 |
-| `host_gow2_factory.cpp` | 11 | 6 | 0 |
-| `movie_eos_arm.c` | 12 | 10 | 3 |
-| `movie_eos_arm.h` | 4 | 2 | 0 |
+## Checking the layout
 
-## Lift pipeline helpers
+```bash
+scripts/check_layout.sh              # root allowlist, wrapper targets, folders documented here
+scripts/check_layout.sh --self-test  # proves each check can fail
+```
 
-Proposed destination: keep at the root while cited (apply_all_patches.sh, verify_lift.sh, accept_relift.sh are referenced by many scripts and docs); the rest → `scripts/lift/`.
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `accept_relift.sh` | 10 | 8 | 0 |
-| `analyze_eboot_ghidra.sh` | 1 | 4 | 1 |
-| `apply_all_patches.sh` | 63 | 18 | 10 |
-| `capped_build.sh` | 0 | 0 | 0 |
-| `cas.pl` | 1 | 0 | 0 |
-| `count_menu_gate.py` | 2 | 4 | 0 |
-| `decrypt_self.py` | 3 | 3 | 0 |
-| `extract_pkg.py` | 1 | 1 | 0 |
-| `inventory_lift_markers.py` | 2 | 0 | 0 |
-| `lib_boot_chain_metrics.sh` | 7 | 2 | 4 |
-| `lib_patch_convergence.sh` | 2 | 0 | 0 |
-| `patch_e401_fios_done_yield_gate.py` | 0 | 0 | 1 |
-| `promote_lift.sh` | 0 | 1 | 0 |
-| `rebuild_and_test.sh` | 0 | 0 | 0 |
-| `recomp_ra0.sh` | 0 | 0 | 0 |
-| `verify_lift.sh` | 15 | 6 | 3 |
-| `verify_lift_baseline.sh` | 3 | 4 | 0 |
-
-## Legacy Windows / MinGW build scripts
-
-Proposed destination: `scripts/legacy-windows/` (they hard-code the original machine's paths).
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `build3.sh` | 0 | 0 | 0 |
-| `build_boot_gow.sh` | 0 | 1 | 0 |
-| `build_boot_hle.sh` | 4 | 2 | 2 |
-| `build_gow_mid.sh` | 0 | 0 | 0 |
-
-## Smoke tests (`smoke_*.sh`)
-
-Proposed destination: `scripts/smoke/`.
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `smoke_asset_pipeline.sh` | 1 | 4 | 0 |
-| `smoke_bctr_tail.sh` | 0 | 0 | 0 |
-| `smoke_boot_mac.sh` | 3 | 10 | 0 |
-| `smoke_chain_gate.sh` | 7 | 2 | 3 |
-| `smoke_fios_open_probe.sh` | 1 | 0 | 0 |
-| `smoke_intro_macos.sh` | 2 | 3 | 1 |
-| `smoke_intro_open_wall.sh` | 0 | 1 | 0 |
-| `smoke_intro_to_rsx.sh` | 1 | 3 | 0 |
-| `smoke_intro_vdec_wad.sh` | 0 | 3 | 0 |
-| `smoke_m0_baseline.sh` | 4 | 0 | 0 |
-| `smoke_metal_draw_mac.sh` | 1 | 1 | 0 |
-| `smoke_metal_matrix_mac.sh` | 1 | 2 | 0 |
-| `smoke_metalfx_mac.sh` | 0 | 0 | 0 |
-| `smoke_movie_eos_mac.sh` | 0 | 1 | 0 |
-| `smoke_moviefsm_mac.sh` | 1 | 2 | 0 |
-| `smoke_perf_macos.sh` | 1 | 1 | 0 |
-| `smoke_relift_equiv.sh` | 6 | 3 | 0 |
-| `smoke_rsx_spu.sh` | 0 | 3 | 0 |
-
-## Tests, A/B and bisect helpers
-
-Proposed destination: `scripts/dev/`.
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `bisect_regression.sh` | 2 | 0 | 0 |
-| `bisect_verdict.sh` | 0 | 0 | 0 |
-| `patch_ab_sandbox.sh` | 0 | 0 | 0 |
-| `patch_build_test.sh` | 0 | 0 | 0 |
-| `patch_diag06_147038_revert_test.py` | 1 | 0 | 0 |
-| `patch_diag08_committed_range_revert_test.py` | 0 | 0 | 0 |
-| `test_patch_convergence.sh` | 2 | 0 | 0 |
-| `test_relift_build.sh` | 2 | 0 | 0 |
-| `test_relift_prepatch_link.sh` | 0 | 0 | 0 |
-| `testar_fix.sh` | 1 | 0 | 0 |
-
-## Diagnostics: attach / sample / watch / dump / probe / oracle / gdb
-
-Proposed destination: `scripts/diag/`.
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `attach_mem.sh` | 1 | 2 | 0 |
-| `attach_mem_mac.sh` | 0 | 2 | 0 |
-| `attach_oob.sh` | 0 | 1 | 0 |
-| `attach_threads.sh` | 0 | 1 | 0 |
-| `diag_hang.sh` | 0 | 0 | 0 |
-| `diag_sample.sh` | 0 | 0 | 0 |
-| `dump_alloc.sh` | 0 | 1 | 0 |
-| `dump_ctrl_be.sh` | 0 | 0 | 0 |
-| `hang_cmds.gdb` | 1 | 0 | 0 |
-| `oob_bp.sh` | 0 | 1 | 0 |
-| `probe_flag.sh` | 0 | 1 | 0 |
-| `sample_m2.sh` | 1 | 1 | 0 |
-| `sample_mem.sh` | 1 | 0 | 0 |
-| `sample_multi.sh` | 1 | 0 | 0 |
-| `trace_list.sh` | 0 | 0 | 0 |
-| `trace_obj.sh` | 0 | 0 | 0 |
-| `watch_ctrl.sh` | 0 | 0 | 0 |
-| `watch_flag.sh` | 1 | 0 | 0 |
-| `watch_obj.gdb` | 0 | 0 | 0 |
-| `watch_run.sh` | 0 | 0 | 0 |
-| `oracle_intro_checklist.sh` | 0 | 4 | 0 |
-
-## One-off trace scripts (`tr*.sh`)
-
-Proposed destination: `scripts/diag/trace/` (most have no reference at all; candidates for deletion after a check).
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `tr040.sh` | 0 | 0 | 0 |
-| `tr042.sh` | 0 | 0 | 0 |
-| `trallo.sh` | 0 | 0 | 0 |
-| `trallocaller.sh` | 0 | 0 | 0 |
-| `trbridge.sh` | 0 | 1 | 0 |
-| `trbridge2.sh` | 0 | 1 | 0 |
-| `trbs.sh` | 0 | 0 | 0 |
-| `trbuild.sh` | 0 | 0 | 0 |
-| `trcas_all.sh` | 0 | 0 | 0 |
-| `trcb.sh` | 0 | 0 | 0 |
-| `trcbcaller.sh` | 0 | 0 | 0 |
-| `trchar.sh` | 0 | 0 | 0 |
-| `trcrash.sh` | 0 | 0 | 0 |
-| `trdl.sh` | 0 | 1 | 0 |
-| `trf2.sh` | 0 | 1 | 0 |
-| `trfence.sh` | 0 | 1 | 0 |
-| `trfifo.sh` | 0 | 0 | 0 |
-| `trfix.sh` | 0 | 0 | 0 |
-| `trflip.sh` | 0 | 1 | 0 |
-| `trforce.sh` | 0 | 0 | 0 |
-| `trfp.sh` | 0 | 1 | 0 |
-| `trgcm.sh` | 0 | 0 | 0 |
-| `trgcm2.sh` | 0 | 0 | 0 |
-| `trgcm3.sh` | 0 | 0 | 0 |
-| `trgcm_cfg.sh` | 0 | 0 | 0 |
-| `trgpu.sh` | 0 | 0 | 0 |
-| `trheap.sh` | 0 | 0 | 0 |
-| `trinit.sh` | 0 | 0 | 0 |
-| `trlv2.sh` | 0 | 0 | 0 |
-| `troobra.sh` | 0 | 0 | 0 |
-| `trpad.sh` | 0 | 0 | 0 |
-| `trra0.sh` | 0 | 0 | 0 |
-| `trra0_run.sh` | 0 | 0 | 0 |
-| `trreorder.sh` | 0 | 0 | 0 |
-| `trrsv.sh` | 0 | 0 | 0 |
-| `trrsx.sh` | 0 | 0 | 0 |
-| `trrsx2.sh` | 0 | 0 | 0 |
-| `trsc.sh` | 0 | 0 | 0 |
-| `trsem.sh` | 0 | 0 | 0 |
-| `trskip.sh` | 0 | 0 | 0 |
-| `trspin.sh` | 0 | 0 | 0 |
-| `trspin2.sh` | 0 | 0 | 0 |
-| `trspursready.sh` | 0 | 0 | 0 |
-| `trtid.sh` | 0 | 0 | 0 |
-| `trtrophy.sh` | 0 | 0 | 0 |
-| `trwatch.sh` | 0 | 0 | 0 |
-
-## Design notes, data and stray artefacts
-
-Proposed destination: `notes/` (or delete when dead).
-
-| File | here | docs/skills | logs |
-|---|---|---|---|
-| `SPURS_M2_FINDINGS.md` | 1 | 4 | 0 |
-| `SPURS_TRACE_M1.md` | 0 | 1 | 0 |
-| `_stopn_test.c` | 0 | 1 | 0 |
-| `boot_fixed.stdout` | 0 | 1 | 0 |
-| `elf_loader_design.json` | 0 | 0 | 0 |
-| `items123_design.json` | 0 | 0 | 0 |
-| `override_test.json` | 0 | 0 | 0 |
-| `research_result.json` | 0 | 1 | 0 |
-| `spu_interp_design.json` | 0 | 0 | 0 |
-| `tasks_design.json` | 0 | 0 | 0 |
-
-Files added on 2026-10-02 and not counted above: `LICENSE`, `NOTICE.md`, `README.pt-BR.md` and this
-page (all stay where they are).
+To add a file at the root, add it to `ROOT_KEEP` in `scripts/check_layout.sh` and to the table above
+with the reason. To move another file: `git mv`, fix its self-location (`HERE`/`REPO` must still be the
+repository root), update the callers, leave a wrapper if anything outside the change cites the old path,
+and add the row here.
