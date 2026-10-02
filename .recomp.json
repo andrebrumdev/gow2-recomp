@@ -1,0 +1,22 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "God of War II HD",
+  "system": "PS3",
+  "type": "recomp",
+  "original": { "region": "USA" },
+  "project": "gow2-recomp",
+  "status": "playable",
+  "targets": ["macOS"],
+  "toolchain": "ps3recomp",
+  "approach": "Static recompilation of the PPU and Cell SPU code to C/C++ (custom lifters), on a reimplementation of the PS3 OS and libraries. Metal renderer, VideoToolbox for cutscenes, CoreAudio, GameController input. Runs natively on Apple Silicon, no emulator and no JIT.",
+  "maintainers": [{ "name": "andrebrumdev", "link": "https://github.com/andrebrumdev" }],
+  "links": [
+    { "label": "Engine (ps3recomp)", "url": "https://github.com/sp00nznet/ps3recomp" }
+  ],
+  "help": [
+    "SCREAM mixer: audio clock is still partly host-driven",
+    "Linux, Android and iOS builds (in progress)",
+    "Chapters after the Colossus of Rhodes are not verified"
+  ],
+  "notes": "Boot, intro videos, main menu, New Game, memory-card saves and combat in the Rhodes palace run natively at 45-60 fps on Apple Silicon; the Colossus fight is playable. No game code or assets are in this repository: the setup kit builds on your machine from your own copy of the game. See the README for the full status table."
+}
