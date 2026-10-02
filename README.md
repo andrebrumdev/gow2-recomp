@@ -26,9 +26,10 @@ MetalFX upscaled).*
 |---|---|
 | Boot, intro videos, logos | ✅ natural path, videos decoded by VideoToolbox |
 | Main menu, New Game, saves | ✅ memory-card saves on disk |
-| Rhodes gameplay (combat, HUD, particles, lighting) | ✅ 45–60 fps on Apple Silicon |
+| Rhodes gameplay (combat, HUD, particles, lighting) | ✅ 45–60 fps on Apple Silicon (Mac, Metal; measured numbers in [Estado por plataforma e desempenho](#estado-por-plataforma-e-desempenho-2026-10-02)) |
 | Colossus of Rhodes fight | 🟡 playable; the bronze drape on its shoulder is skinned with a sheared bone matrix (under investigation) |
-| After the Colossus cutscene | 🔴 a script virtual call jumps to an invalid target (`ICALL-BAD 0x80029F47`); regression window narrowed to 2026-09-20 |
+| After the Colossus cutscene | ✅ fixed 2026-09-22: a lifted SPU program (spu1) was writing into the PPU code segment, which produced `ICALL-BAD 0x80029F47`; validated with 305 s of New Game → gameplay, 0 ICALL-BAD ([log](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-09-22-spu1-6074-texto-corrompido.md)) |
+| iOS (iPhone) and Android (tablet) | 🟡 experimental; see [Estado por plataforma e desempenho](#estado-por-plataforma-e-desempenho-2026-10-02) (pt-BR) |
 | Audio | 🟡 music/SFX through the SCREAM mixer SPU program; clock still partly host-driven |
 | Controllers | ✅ DualShock 4 / DualSense / Xbox / MFi via GameController, keyboard + mouse |
 
@@ -181,6 +182,184 @@ O APK para Android é compilado localmente a partir do seu próprio dump e insta
 
 Full technical history lives in the Claude project memory (`ps3recomp-feasibility`,
 levas 13-17) and in `ps3recomp/docs/`.
+
+## Estado por plataforma e desempenho (2026-10-02)
+
+Resumo das sessões de 2026-09-30 a 2026-10-02. Cada número diz **onde** foi medido e **com quantas
+corridas**. Classes de evidência: **in-boot no aparelho** (jogo real no tablet ou no iPhone),
+**Mac** (jogo real num MacBook; não vale para o tablet), **offline/unit** (testes sem o jogo) e
+**não exercitado**. Os links apontam para o motor
+([andrebrumdev/ps3recomp](https://github.com/andrebrumdev/ps3recomp), ramo `spurs-bringup`).
+
+### Estado atual por plataforma
+
+| Plataforma | Backend | Provado | Não provado / em aberto |
+|---|---|---|---|
+| **Mac** (Apple Silicon) | Metal | in-boot: boot → menu → gameplay de Rodes; 44–52 fps p50 no gameplay num M5 na tomada antes do merge (3 corridas por braço, [medição](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-mac-medicao-env-correto.md)) | depois do merge de 2026-10-02 só houve 3 corridas com a máquina carregada (load 4,7–14): 26–42 fps, sem valor de comparação; o portão de ~45 fps com a máquina ociosa **não foi refeito** ([merge](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-merge-para-spurs-bringup.md)) |
+| **iOS** (iPhone 14) | Metal | in-boot em ramos anteriores: P2 de 2026-09-25 com p50 33 / p5 21 em 195 de 200 s de gameplay, 1 corrida, meta de p5 ≥ 25 não atingida ([P2](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/superpowers/specs/2026-09-25-ios-p2-perf-milestone.md)) | o `spurs-bringup` depois do merge **não foi compilado nem rodado no iPhone** |
+| **Android** (Galaxy Tab S9 FE, Mali-G68) | Vulkan | in-boot: gameplay com toque virtual; p50 12 / p5 11 no APK padrão depois do merge (1 corrida); cinemática de abertura a 29–30 fps | a thread do RSX com fragmentos (`PS3_RSX_FRAG`) dá 17/15, mas continua desligada por padrão (revisão independente pendente) |
+| **Windows** | D3D12 | histórico de bring-up (paredes A–G no `CLAUDE.md` do motor) | **não compilado nem exercitado** nesta leva; lá `PS3_RSX_FIFO`, `PS3_VDEC_ASYNC`, `PS3_MOVIE_IO` e `PS3_SPU1` continuam opt-in; a correção do `recomp_mid_v2/build_d3d.sh` (`rsx_frame_notes.c` no link) está só no gow2-recomp |
+
+### Desempenho medido — tablet (Galaxy Tab S9 FE)
+
+In-boot, APK do `feat/gow2-android`, tablet no USB, `PS3_MUTE=1`, 100 s de gameplay por
+`run_perf.sh --drive`, salvo indicação. Ruído entre corridas de ~±1 fps, **não caracterizado**.
+Gargalo medido: a thread principal (PPU + walker do RSX inline) a ~87–91 % de um núcleo; a GPU
+fica ~9 % ocupada ([GPU timing](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-gpu-timing-gameplay.md)).
+
+| Mudança | Resultado (p50 / p5) | n | Fonte |
+|---|---|---|---|
+| Baseline → parar de reler memória Vulkan mapeada write-combined (`rsx_core_index_fetch`, `529f5962`) | 9 / 8 → 11 / 10 | 1 por ponto | [GPU timing](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-gpu-timing-gameplay.md) |
+| + as outras leituras mapeadas por draw (`c0762b29`, `929f607a`) | **12 / 11** | 1 | idem |
+| Cache de pipeline persistente (`551bc38e`) | `pso_ms` nos primeiros 60 s: 559 → 262 → **4** da 1.ª à 3.ª execução; fps 10/9 → 12/11 → 12/11 (a 1.ª execução é a mais lenta) | 1 série de 3 | idem |
+| Thread dedicada do RSX (`PS3_RSX_THREAD=1`) sozinha | medianas 12 / 11 contra 12 / 11: **sem ganho consistente**; a Thread-2 cai ~15 pontos, a `host:rsx` gasta ~45 % de um núcleo e a PPU espera ~17 % de cada segundo no overflow | 3 pares | [thread RSX](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-thread-rsx.md) |
+| Thread + fragmentos de 32 KB (`PS3_RSX_FRAG=1`, etapa 3) | **17 / 15** contra 13 / 11 (3 de 3 pares a favor; espera de overflow 156–207 → 0 ms/s); na ponta do merge, 17 / 15 em 1 corrida | 3 pares + 1 | [FRAG](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-frag-etapa3.md) |
+| Interpretador SPU S0–S2 | CPU dos 6 workers SPURS −8 % (2368 → 2178 ms/s), interpretador −23 %, processo −5,4 %; **fps igual** (12 / 11); áudio sem regressão (3 pares com som) | PRE 5, S2 3 | [SPU S0–S2](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-spu-s0s2.md) |
+| Dedup de comandos do replay Vulkan (`PS3_VK_REPLAY_DEDUP`, ligado por padrão) | ON 12/11 e 12/11, OFF 12/10 e 11/10: inconclusivo, compatível com um ganho pequeno | 2 pares | [GPU timing](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-gpu-timing-gameplay.md) |
+| Vídeo da cinemática de abertura | 29–30 fps estáveis com e sem som; os 5–6 fps de uma corrida anterior **não se reproduziram** (causa não identificada) | 2 | idem |
+
+**Medido sem ganho no tablet** (não repetir sem motivo novo): número de workers SPURS (2, 3 ou 6:
+9–10 fps, 1 corrida cada); afinidade nos núcleos grandes (`PS3_ANDROID_BIG_CORES` 1/2: 9/7 e 9/8;
+o modo 3, PPU sozinha num núcleo, piora para 7/6); lift com `-O2` (12/11, igual ao `-O1`, 2 corridas);
+desvirtualização das chamadas indiretas (ON 12/11 e 12/11, OFF 12/11 e 13/12, 2 pares,
+[devirt](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-devirt-merge.md));
+a terceira leva de otimizações da thread principal (12/11 antes e depois); o dedup de
+descritores/estado (acima, inconclusivo).
+
+### Desempenho medido — Mac (MacBook M5, não vale para o tablet)
+
+Jogo real, na tomada, janela oculta, mudo, 3 corridas por braço alternadas, janela de 60 s de
+gameplay ([medição](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-mac-medicao-env-correto.md)).
+
+| Mudança | Resultado | Leitura |
+|---|---|---|
+| Interpretador SPU S0–S2 (Metal) | fps p50 **48 [47..52] contra 44 [43..46]**; workers −7 %, interpretador −12 %; áudio igual | ganho medido no Mac; no tablet o mesmo código não muda o fps |
+| Thread do RSX (Vulkan via MoltenVK) | 58 [56..59] contra 46 [46..47] | o backend de produção do Mac é o Metal, e a thread recusa o Metal: **não vale para o Mac distribuído** |
+| `PS3_RSX_DRAIN=1 PS3_GCM_FIFO_NOLOCK=1` (Metal) | 48 contra 48 | sem ganho; fica desligado |
+| Desvirtualização das chamadas indiretas | −13 % de CPU por quadro (64,0 → 58,1 ms), 44 → 47 fps | medido no Mac; no tablet, sem ganho ([devirt](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-devirt-merge.md)) |
+
+A "regressão" de 10 fps no Mac de 2026-10-01 **não era código**: um binário de antes das
+promoções de ambiente rodou sem as 9 variáveis que ele ainda precisava (abaixo); o mesmo binário
+faz 48 fps com elas ([bisect](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-bisect-regressao-fps-mac.md)).
+
+### Experimentos e variáveis de ambiente
+
+Conferidas no código do `spurs-bringup`. Sondas e experimentos ficam desligados por padrão.
+
+| Variável | Padrão | O que faz | Estado |
+|---|---|---|---|
+| `PS3_RSX_THREAD=1` | desligada | walker do FIFO do RSX numa thread própria (`host:rsx`) | experimental; só com backend Vulkan (recusada no Metal, inexistente no Windows) |
+| `PS3_RSX_FRAG=1` | desligada | contexto padrão em fragmentos de 32 KB como a libgcm (etapa 3); só vale com `PS3_RSX_THREAD=1` | experimental; o maior ganho medido no tablet; revisão independente pendente |
+| `PS3_TRACE_RSXT=1` | desligada | sonda `[RSXT]`: tempos de walk/parse/draw, esperas, kicks | sonda |
+| `PS3_TRACE_SPU_INTERP=1` | desligada | sonda `[SPUISTAT]` do interpretador SPU | sonda; troca o laço rápido pelo instrumentado (`spui_run_instr`, ~56 ms/s mais caro no tablet): não mede o laço de produção |
+| `PS3_SPU_INTERP=0` | ligado (1) | volta a imagem 7 (mixer SCREAM) ao spu6 liftado | A/B |
+| `PS3_TRACE_VDEC_PIPE=1` | desligada | sonda `[VDECPIPE]`, uma linha por segundo com filme tocando | sonda |
+| `PS3_VK_GPU_TIMING=1` | desligada | tempo de GPU por passe (`[GPUTIME]`) | sonda |
+| `PS3_VK_PCACHE=0` | ligado | `=0` desliga o cache de pipeline em disco (precisa do diretório de cache) | padrão ligado, provado no Mali-G68 |
+| `PS3_VK_REPLAY_DEDUP=0` | ligado | `=0` desliga o dedup de comandos repetidos do replay Vulkan | padrão ligado (ganho inconclusivo) |
+| `PS3_VK_REPLAY_STATS=1` | desligada | contadores `[VKREPLAY]` | sonda |
+| `PS3_ANDROID_BIG_CORES=1\|2\|3` | desligada (0) | afinidade da PPU/SPU nos núcleos grandes | medido sem ganho; código mantido |
+| `PS3_SPU_WORKERS=N` | nº de SPUs pedido pelo jogo | número de workers SPURS | medido sem ganho no tablet |
+| `PS3_HOST_PROFILE=1` | desligada | amostrador por SIGPROF (`[HPROF]`), só Linux/Android | ferramenta de medição |
+| `PS3_ICALL_DEVIRT=0` | ligado | desliga os sítios desvirtualizados (só em lift construído com `ICALL_DEVIRT=1`, o padrão do `build_macos.sh`) | A/B |
+| `PS3_ICALL_DEVIRT_CHECK=1` | desligada | recompara cada chamada desvirtualizada com o registro | diagnóstico |
+| `PS3_RSX_DRAIN=1`, `PS3_GCM_FIFO_NOLOCK=1` | desligadas | dreno extra do FIFO / walker sem o lock | medido sem ganho no Mac |
+
+Variáveis do harness: `PS3_MUTE=1` (sem som), `PS3_TRACE_FPS=1` (linhas `[FPS]`),
+`PS3_WINDOW_HIDDEN=1` (janela oculta no Mac), `PS3_TRACE_AUDIO=1` (`[AUDIO]`).
+
+### Como medir
+
+- **Tablet:** `bash games/gow2/android/run_perf.sh OUT --seconds 100 --drive --env PS3_MUTE=1 [--env PS3_HOST_PROFILE=1] [--env K=V ...]`.
+  `--drive` chama `android/drive_gameplay.sh` (toques reais por `adb` da tela inicial até o
+  gameplay; para com um motivo em vez de girar); `--timed N --drive-newgame` deixa a cinemática de
+  abertura tocar (medição de vídeo). O `report.md` sai do `ios/perf_report.py --tag ANDPERF`.
+  O script sempre apaga o `gow2.override.env` do app e para o app ao sair. O `simpleperf` não
+  funciona neste aparelho (`cpu-cycles` não suportado); use `PS3_HOST_PROFILE=1`.
+- **Perfil por símbolo:** `python3 tools/mobile/hprof_report.py gow2.log libmain.so --window S E --top 400 [--check]`
+  (no motor). Recusa um `libmain.so` com build-id diferente do log.
+- **Mac:** `claude_runs/run_metrics.sh BIN SHA256 LOG SECS [PS3_X=v ...]` e
+  `python3 claude_runs/metrics_report.py LOG...`; na tomada (`pmset -g batt`), mudo, sem outra
+  instância do jogo aberta, e anotando a carga (`uptime`) no início.
+- **Protocolo A/B:** o mesmo binário/APK quando o braço for só uma variável; ≥ 3 pares
+  **alternados**; tablet no USB e Mac na tomada; mudo; dizer o n e as faixas (mín..máx); fps de
+  uma corrida só não é veredito. Antes de um A/B, a skill
+  [`changing-the-game-across-platforms`](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/.agents/skills/changing-the-game-across-platforms/SKILL.md).
+- **Armadilha das 9 variáveis promovidas:** `PS3_RSX_FIFO`, `PS3_VDEC_ASYNC`, `PS3_MOVIE_IO`,
+  `PS3_SPU1`, `PS3_SPU6`, `PS3_GCM_CB`, `PS3_METAL_PER_DRAW_RT`, `PS3_METAL_PASS_MERGE` e
+  `PS3_METAL_GPU_DESWIZZLE` viraram padrão no código (Mac/iOS; no Android as que valem lá). O
+  `env_gow2.sh` e o `claude_runs/run_metrics.sh` deste repositório **não as exportam mais**
+  (gow2-recomp `b0a167d`). Num ramo que contém as promoções isso é o certo; num binário de **antes** delas,
+  essa receita roda o jogo em modo degradado (no Mac, 10 fps em vez de 48). Para medir um binário
+  antigo, exporte as 9. No Windows, `PS3_RSX_FIFO`, `PS3_VDEC_ASYNC`, `PS3_MOVIE_IO` e `PS3_SPU1`
+  continuam lidas do ambiente.
+
+### Android: compilar e instalar
+
+O APK é compilado **a partir do monorepo** (motor + `games/gow2`), com este repositório como
+`GOW2_WORK` (dados do jogo, `recomp_macos_e435/`, `spu_lifted/`):
+
+```bash
+cd ps3recomp                                         # o monorepo (ou um worktree dele)
+GOW2_WORK=../gow2-recomp bash games/gow2/android/build_android.sh   # compila; última linha GOW2_ANDROID_APK=<apk>
+bash tools/android/install_android.sh --serial <SERIAL>             # só instala o build-android/gow2.apk
+bash tools/android/install_android.sh --data --serial <SERIAL>      # instala e copia EBOOT.ELF, USRDIR/ e movie_cache/
+```
+
+- Pré-requisitos: rodar `./build_macos.sh recomp_macos_e435` uma vez no Mac (aplica e confere os
+  lifts SPU) e `tools/android/probe_transport.sh` uma vez com o aparelho.
+- Opções do lift: `LIFT_OPT=-O1` (padrão; `-O2` medido sem ganho), `FORCE_REBUILD_LIFT=1`,
+  `ICALL_DEVIRT=0` (lift sem desvirtualização; objetos em pasta separada).
+- Nas máquinas de desenvolvimento há dois atalhos locais, fora do git (`build-android/` é
+  ignorado): `run_build2.sh` chama o `build_android.sh` acima e **compila**; `run_install_apk.sh`
+  chama o `install_android.sh` e **só instala** o APK que já existe.
+- O APK é compilado do seu próprio dump e instalado só no seu aparelho; nunca é distribuído.
+
+### iOS e Mac
+
+- **Mac:** `./jogar_g2.sh` (ou o `GoW2 Recomp.app`); build com `./build_macos.sh` (no Mac o padrão
+  é Metal). O `build_macos.sh` **não** recompila a biblioteca do motor: rode antes
+  `cmake --build build-macos` no `ps3recomp`.
+- **iOS:** `ios/build_ios.sh` assa o `env_gow2.sh` deste repositório no app. Com o motor do
+  `spurs-bringup` (que já tem as promoções) isso é coerente; com um motor anterior às promoções o
+  app cairia no modo degradado descrito acima (leitura de código, não verificado no aparelho).
+
+### Os dois repositórios
+
+- **[gow2-recomp](https://github.com/andrebrumdev/gow2-recomp)** é o checkout físico de
+  build/run: fica ao lado dos dados do jogo (não versionados) e dos launchers.
+- **[ps3recomp](https://github.com/andrebrumdev/ps3recomp)** (ramo `spurs-bringup`) é o monorepo:
+  o motor (`runtime/`, `libs/`, `tools/`) e uma cópia deste port em `games/gow2/`.
+- A sincronização é **por cópia**, nos dois sentidos, conferida blob a blob. A última foi do
+  monorepo para cá em 2026-10-02 (Android, iOS, launcher, kit, testes:
+  [port](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-port-games-gow2-para-gow2-recomp.md));
+  as anteriores foram daqui para o monorepo. O APK é compilado do `games/gow2` do monorepo.
+  Este README é igual nos dois lugares.
+
+### Documentação e skills
+
+| Documento (motor) | Assunto |
+|---|---|
+| [2026-10-01 GPU timing e gameplay no Android](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-android-gpu-timing-gameplay.md) | perfil da thread principal, leituras de memória mapeada, cache de pipeline, dedup, vídeo |
+| [2026-10-01 desenho da thread do RSX](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-rsx-thread-design.md) | etapas 0–4, contrato de ordem e critérios de aborto |
+| [2026-10-02 etapa 3 (fragmentos)](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-rsx-etapa3-fragmentos.md) | fragmentos de 32 KB, rodadas de revisão, mutantes |
+| [2026-10-01 interpretador SPU](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-01-spu-jit-design.md) | desenho do S0–S2 (sem JIT) |
+| [A/B thread do RSX](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-thread-rsx.md), [A/B FRAG](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-frag-etapa3.md), [A/B SPU S0–S2](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-tablet-ab-spu-s0s2.md) | medições no tablet |
+| [Mac com o ambiente certo](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-mac-medicao-env-correto.md), [bisect do fps no Mac](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-bisect-regressao-fps-mac.md) | medições no Mac e a armadilha das variáveis promovidas |
+| [Merge para o spurs-bringup](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-merge-para-spurs-bringup.md) | conflitos, matriz de paridade, verificação |
+| [PRs de Vulkan do upstream](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/docs/re_sessions/2026-10-02-upstream-vulkan-prs-vs-nosso.md) | leitura (sem execução) dos PRs #182/#192 contra o nosso backend |
+| Skill [`changing-the-game-across-platforms`](https://github.com/andrebrumdev/ps3recomp/blob/spurs-bringup/.agents/skills/changing-the-game-across-platforms/SKILL.md) | como levar uma mudança a Mac, iOS, Android e Windows com A/B e matriz de paridade |
+
+### Em aberto
+
+- Revisão independente (Codex) da etapa 3 da thread do RSX: incompleta; `PS3_RSX_FRAG` fica
+  desligada por padrão até lá. Também falta comparar pixels com e sem FRAG.
+- iOS: o `spurs-bringup` depois do merge não foi verificado no iPhone.
+- Mac: o fps depois do merge não foi re-medido com a máquina ociosa.
+- Windows: não compilado nesta leva; levar o `recomp_mid_v2/build_d3d.sh` do gow2-recomp para o
+  monorepo.
+- Tablet: o próximo ganho de fps está na thread principal (`vm_read*`, `ppu_rsv_*`, decode de
+  vértices, FIFO), não no SPU.
 
 ## Central do jogo (PS/Home, Select+Start ou F1) e o launcher
 
