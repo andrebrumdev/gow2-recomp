@@ -7,12 +7,12 @@
 # a lista exacta de simbolos em falta/duplicados. Qualquer um dos dois
 # desfechos fecha D-3.6; nao ha' tentativa de forcar o link aqui.
 #
-# Run: bash games/gow2/test_relift_prepatch_link.sh
+# Run: bash games/gow2/scripts/lift/test_relift_prepatch_link.sh
 # Exit 0 = investigacao conclusiva (confirmado OU documentado). Exit 1 so'
 # se nem o binario nem um log utilizavel existirem.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 GOW2_RECOMP="${GOW2_RECOMP:-$(cd "$HERE/../../../gow2-recomp" && pwd)}"
 LIFT="$GOW2_RECOMP/recomp_macos_v3"
 BIN="$GOW2_RECOMP/boot_gow2_relift_test"

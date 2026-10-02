@@ -10,7 +10,7 @@
 # patches, nao so' esta fase.
 #
 # Uso:
-#   ./patch_ab_sandbox.sh REF OUT_DIR [--include-probe]
+#   scripts/lift/patch_ab_sandbox.sh REF OUT_DIR [--include-probe]
 #
 #   REF        WORKTREE (usa o checkout actual de recomp_mid_v2/patch_*.py)
 #              ou qualquer git ref valido no repositorio gow2-recomp (ex.:
@@ -28,7 +28,7 @@
 
 set -uo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1   # repo root (this script lives in scripts/lift/)
 REPO="$PWD"
 
 REF="${1:-}"

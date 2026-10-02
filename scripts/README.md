@@ -17,6 +17,7 @@ file that something outside its batch still cites by its old path keeps a thin w
 |---|---|
 | `scripts/` | helper scripts that are not entry points; this page is its map |
 | [`scripts/smoke/`](smoke/README.md) | boot / intro / Metal smoke runs of the Mac build (and three Windows-only smokes); each needs the game data and a built `boot_gow2` |
+| [`scripts/lift/`](lift/README.md) | relift acceptance gates, chain gate, bisect and one-off lift helpers called by `accept_relift.sh` / `promote_lift.sh` |
 | `scripts/archive/` | history only: nothing current calls these files |
 | [`scripts/archive/windows/`](archive/windows/README.md) | scripts of the July 2026 Windows bring-up, bound to that machine's paths |
 | [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
@@ -143,8 +144,25 @@ current cites the old path (or the file is archive-only: it was bound to the old
 | 3 | `smoke_asset_pipeline.sh` | [`scripts/smoke/smoke_asset_pipeline.sh`](smoke/smoke_asset_pipeline.sh) | wrapper |
 | 3 | `smoke_intro_to_rsx.sh` | [`scripts/smoke/smoke_intro_to_rsx.sh`](smoke/smoke_intro_to_rsx.sh) | wrapper |
 | 3 | `smoke_rsx_spu.sh` | [`scripts/smoke/smoke_rsx_spu.sh`](smoke/smoke_rsx_spu.sh) | wrapper |
+| 4 | `promote_lift.sh` | [`scripts/lift/promote_lift.sh`](lift/promote_lift.sh) | wrapper |
+| 4 | `lib_patch_convergence.sh` | [`scripts/lift/lib_patch_convergence.sh`](lift/lib_patch_convergence.sh) | sourced stub |
+| 4 | `test_patch_convergence.sh` | [`scripts/lift/test_patch_convergence.sh`](lift/test_patch_convergence.sh) | wrapper |
+| 4 | `smoke_relift_equiv.sh` | [`scripts/lift/smoke_relift_equiv.sh`](lift/smoke_relift_equiv.sh) | wrapper |
+| 4 | `smoke_chain_gate.sh` | [`scripts/lift/smoke_chain_gate.sh`](lift/smoke_chain_gate.sh) | wrapper |
+| 4 | `smoke_m0_baseline.sh` | [`scripts/lift/smoke_m0_baseline.sh`](lift/smoke_m0_baseline.sh) | wrapper |
+| 4 | `bisect_regression.sh` | [`scripts/lift/bisect_regression.sh`](lift/bisect_regression.sh) | wrapper |
+| 4 | `bisect_verdict.sh` | [`scripts/lift/bisect_verdict.sh`](lift/bisect_verdict.sh) | wrapper |
+| 4 | `patch_ab_sandbox.sh` | [`scripts/lift/patch_ab_sandbox.sh`](lift/patch_ab_sandbox.sh) | wrapper |
+| 4 | `test_relift_build.sh` | [`scripts/lift/test_relift_build.sh`](lift/test_relift_build.sh) | wrapper |
+| 4 | `test_relift_prepatch_link.sh` | [`scripts/lift/test_relift_prepatch_link.sh`](lift/test_relift_prepatch_link.sh) | wrapper |
+| 4 | `analyze_eboot_ghidra.sh` | [`scripts/lift/analyze_eboot_ghidra.sh`](lift/analyze_eboot_ghidra.sh) | wrapper |
+| 4 | `inventory_lift_markers.py` | [`scripts/lift/inventory_lift_markers.py`](lift/inventory_lift_markers.py) | wrapper (python) |
+| 4 | `count_menu_gate.py` | [`scripts/lift/count_menu_gate.py`](lift/count_menu_gate.py) | wrapper (python) |
+| 4 | `patch_e401_fios_done_yield_gate.py` | [`scripts/lift/patch_e401_fios_done_yield_gate.py`](lift/patch_e401_fios_done_yield_gate.py) | wrapper (python) |
+| 4 | `patch_diag06_147038_revert_test.py` | [`scripts/lift/patch_diag06_147038_revert_test.py`](lift/patch_diag06_147038_revert_test.py) | wrapper (python) |
+| 4 | `patch_diag08_committed_range_revert_test.py` | [`scripts/lift/patch_diag08_committed_range_revert_test.py`](lift/patch_diag08_committed_range_revert_test.py) | wrapper (python) |
 
-## Compatibility wrappers (15, deprecated, remove after 2026-12-31)
+## Compatibility wrappers (32, deprecated, remove after 2026-12-31)
 
 Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_layout.sh` checks.
 
@@ -163,6 +181,23 @@ Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_
 - `smoke_asset_pipeline.sh` -> `scripts/smoke/smoke_asset_pipeline.sh`
 - `smoke_intro_to_rsx.sh` -> `scripts/smoke/smoke_intro_to_rsx.sh`
 - `smoke_rsx_spu.sh` -> `scripts/smoke/smoke_rsx_spu.sh`
+- `promote_lift.sh` -> `scripts/lift/promote_lift.sh`
+- `lib_patch_convergence.sh` -> `scripts/lift/lib_patch_convergence.sh`
+- `test_patch_convergence.sh` -> `scripts/lift/test_patch_convergence.sh`
+- `smoke_relift_equiv.sh` -> `scripts/lift/smoke_relift_equiv.sh`
+- `smoke_chain_gate.sh` -> `scripts/lift/smoke_chain_gate.sh`
+- `smoke_m0_baseline.sh` -> `scripts/lift/smoke_m0_baseline.sh`
+- `bisect_regression.sh` -> `scripts/lift/bisect_regression.sh`
+- `bisect_verdict.sh` -> `scripts/lift/bisect_verdict.sh`
+- `patch_ab_sandbox.sh` -> `scripts/lift/patch_ab_sandbox.sh`
+- `test_relift_build.sh` -> `scripts/lift/test_relift_build.sh`
+- `test_relift_prepatch_link.sh` -> `scripts/lift/test_relift_prepatch_link.sh`
+- `analyze_eboot_ghidra.sh` -> `scripts/lift/analyze_eboot_ghidra.sh`
+- `inventory_lift_markers.py` -> `scripts/lift/inventory_lift_markers.py`
+- `count_menu_gate.py` -> `scripts/lift/count_menu_gate.py`
+- `patch_e401_fios_done_yield_gate.py` -> `scripts/lift/patch_e401_fios_done_yield_gate.py`
+- `patch_diag06_147038_revert_test.py` -> `scripts/lift/patch_diag06_147038_revert_test.py`
+- `patch_diag08_committed_range_revert_test.py` -> `scripts/lift/patch_diag08_committed_range_revert_test.py`
 
 ## Checking the layout
 

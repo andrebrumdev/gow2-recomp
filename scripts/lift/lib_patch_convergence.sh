@@ -39,7 +39,7 @@
 # (o diagnostico, opcoes A+B) e 2026-08-03-promocao.md §4 (a medicao das duas
 # falhas fabricadas e da convergencia sha256 identica).
 #
-# Testado por: games/gow2/test_patch_convergence.sh (11 testes, hermeticos).
+# Testado por: games/gow2/scripts/lift/test_patch_convergence.sh (11 testes, hermeticos).
 
 # ---- lift_chunks_sha LIFT_DIR ----------------------------------------------
 # sha256 estavel do CONTEUDO dos ppu_recomp_*.cpp (nunca mtime -- a 2a passagem

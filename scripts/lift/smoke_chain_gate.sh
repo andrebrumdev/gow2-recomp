@@ -5,11 +5,11 @@
 # com st620=11 num binario que nao desenha um unico frame depois da intro).
 #
 # Uso:
-#   ./smoke_chain_gate.sh --bin BIN_PATH [RUNS] [TSV]
+#   scripts/lift/smoke_chain_gate.sh --bin BIN_PATH [RUNS] [TSV]
 #       mede um binario ja construido, sem rebuild -- e o modo que serve
 #       para a prova de GATE-01 contra binarios reais guardados
 #       (boot_gow2, boot_gow2.pre_v3), que so existem como binario.
-#   ./smoke_chain_gate.sh [LIFT_REL] [RUNS] [TSV]   (default recomp_macos_v3/6)
+#   scripts/lift/smoke_chain_gate.sh [LIFT_REL] [RUNS] [TSV]   (default recomp_macos_v3/6)
 #       builda o binario a partir do lift candidato (FORCE_REBUILD_LIFT=1,
 #       nunca corre um binario desactualizado) e mede-o.
 #
@@ -26,7 +26,7 @@
 # lib_boot_chain_metrics.sh). NUNCA pkill -f boot_gow2.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 cd "$HERE" || exit 1
 
 [ -f EBOOT.ELF ] || { echo "ERRO: falta EBOOT.ELF em $HERE" >&2; exit 2; }
@@ -96,7 +96,7 @@ fi
 # Nunca reimplementar estes dois greps aqui.
 count_gate_pair() {
   local log_path="$1"
-  python3 - "$HERE" "$log_path" <<'PY'
+  python3 - "$HERE/scripts/lift" "$log_path" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 from count_menu_gate import count_gate

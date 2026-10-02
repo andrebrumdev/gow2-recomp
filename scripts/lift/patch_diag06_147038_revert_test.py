@@ -26,7 +26,7 @@ from pathlib import Path
 import re
 import sys
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "recomp_macos_v2.diag06_test"
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "recomp_macos_v2.diag06_test"
 ROOT = ROOT.resolve()
 
 if ".diag06_test" not in ROOT.name:

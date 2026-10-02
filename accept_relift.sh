@@ -53,7 +53,7 @@
 #              pode mudar um byte). O rc e o TSV dela sao INFORMATIVOS.
 #              Sem o TSV da etapa 4 a perna 3 FALHA: um gate sem medicao
 #              nunca passa (a mesma politica de check_boot_health.py).
-#              Testado por games/gow2/test_patch_convergence.sh (11 testes,
+#              Testado por games/gow2/scripts/lift/test_patch_convergence.sh (11 testes,
 #              prova nos dois sentidos).
 #   perna 4 -- smoke_chain_gate.sh --bin BIN RUNS TSV (GATE-03, Fase 7)
 #              mede a cadeia de elos + a saude do boot. Reutiliza o MESMO
@@ -105,7 +105,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 REPO="$PWD"
 
 # ---- nucleo da perna 3 (D2): convergencia, nao repeticao -------------------
-LIB_CONV="$REPO/lib_patch_convergence.sh"
+LIB_CONV="$REPO/scripts/lift/lib_patch_convergence.sh"
 if [ ! -f "$LIB_CONV" ]; then
   echo "ERRO: $LIB_CONV nao encontrado -- sem ele a perna 3 nao pode ser avaliada" >&2
   exit 2
@@ -167,7 +167,7 @@ echo
 # ---- PERNA 1: smoke_relift_equiv.sh ----------------------------------------
 TSV1="$OUTDIR/accept_${TAG}_smoke.tsv"
 echo "---- PERNA 1: smoke_relift_equiv.sh ----"
-"$REPO/smoke_relift_equiv.sh" "$LIFT_REL" "$RUNS" "$TSV1"
+"$REPO/scripts/lift/smoke_relift_equiv.sh" "$LIFT_REL" "$RUNS" "$TSV1"
 leg1_rc=$?
 leg1_ok=$(awk -F'\t' 'NR>1 && $8=="OK"{n++} END{print n+0}' "$TSV1" 2>/dev/null)
 leg1_ok=${leg1_ok:-0}
@@ -196,7 +196,7 @@ fi
 
 echo "---- PERNA 4: smoke_chain_gate.sh (cadeia) + check_boot_health.py (nao pior que a producao) ----"
 if [ -x "$BIN4" ]; then
-  "$REPO/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4" 2>&1 | tee "$LOG4"
+  "$REPO/scripts/lift/smoke_chain_gate.sh" --bin "$BIN4" "$RUNS" "$TSV4" 2>&1 | tee "$LOG4"
   leg4_rc_bruto=${PIPESTATUS[0]}
   # Rule 1 (2026-08-03): estes dois liam as colunas ERRADAS do TSV do
   # smoke_chain_gate.sh -- o cabecalho e' run(1)..pad_total(9) elo_stopped(10)
@@ -305,7 +305,7 @@ counters_baseline_freeze() {
   # numero apos "= " evita esse falso-positivo.
   ftc_prod=$(grep -h "function_table_count = " "$REPO"/recomp_macos_v2/ppu_recomp_*.cpp 2>/dev/null | grep -oE '= [0-9]+' | grep -oE '[0-9]+' | head -1)
   prod_tsv="$OUTDIR/counters_baseline_prod.tsv"
-  "$REPO/smoke_relift_equiv.sh" --bin "$REPO/boot_gow2" 1 "$prod_tsv"
+  "$REPO/scripts/lift/smoke_relift_equiv.sh" --bin "$REPO/boot_gow2" 1 "$prod_tsv"
   lifted_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $3}')
   modules_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $4}')
   imports_prod=$(tail -1 "$prod_tsv" | awk -F'\t' '{print $5}')

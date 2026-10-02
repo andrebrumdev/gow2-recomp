@@ -176,7 +176,7 @@ oracle_step() {
     #    ELF (stale) nao pode ser tratado como oraculo. Falha ALTO.
     if [ ! -f "$ORACLE_FUNCTIONS" ]; then
         echo "ORACLE: absent -- sem $ORACLE_FUNCTIONS"
-        echo "  produz com: ./analyze_eboot_ghidra.sh   (ou define PS3_GHIDRA_OUT)"
+        echo "  produz com: scripts/lift/analyze_eboot_ghidra.sh   (ou define PS3_GHIDRA_OUT)"
         return 1
     fi
     "$PY" "$PS3_ROOT/tools/oracle_manifest.py" check \

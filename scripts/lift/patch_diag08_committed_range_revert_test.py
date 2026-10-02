@@ -28,7 +28,7 @@ from pathlib import Path
 import re
 import sys
 
-DIAG_ROOT = Path(__file__).resolve().parent.parent / "ps3recomp"
+DIAG_ROOT = Path(__file__).resolve().parents[3] / "ps3recomp"  # ../ps3recomp next to the repo root
 TARGET_ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/tmp/ps3recomp_diag08_rt")
 TARGET_ROOT = TARGET_ROOT.resolve()
 

@@ -61,7 +61,7 @@
 # esperado, mesmo que a promocao nunca tenha chegado a um estado final.
 #
 # Uso:
-#   ./promote_lift.sh NEW_LIFT_DIR [--yes] [--patch-status TSV_DA_ETAPA_4]
+#   scripts/lift/promote_lift.sh NEW_LIFT_DIR [--yes] [--patch-status TSV_DA_ETAPA_4]
 #     --patch-status (ou ACCEPT_PATCH_STATUS no ambiente) e' OBRIGATORIO desde
 #     a correccao do defeito D2 (2026-08-03): a perna 3 do accept_relift.sh
 #     julga o TSV da PRIMEIRA passagem do apply_all_patches.sh -- a corrida que
@@ -71,7 +71,7 @@
 #     interativa ("digite 'sim'") antes de tocar em qualquer coisa. Com
 #     --yes, prossegue sem perguntar (para uso nao-interativo/rehearsal).
 #
-#   ./promote_lift.sh --revert SUFFIX
+#   scripts/lift/promote_lift.sh --revert SUFFIX
 #     Desfaz a promocao identificada por SUFFIX (o mesmo que aparece nos
 #     nomes recomp_macos_v2.pre_<SUFFIX> / boot_gow2.pre_<SUFFIX> e nas
 #     linhas PROMOTE-BEGIN/PROMOTE-OK/PROMOTE-FAIL de PROMOTION_LOG.tsv).
@@ -91,11 +91,11 @@
 # /tmp, fora dos dois repositorios.
 set -uo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1   # repo root (this script lives in scripts/lift/)
 REPO="$PWD"
 PS3_ENGINE_ROOT="${PS3_ENGINE_ROOT:-$REPO/../ps3recomp}"
 
-# ---- hash_dir(): copiada literalmente de games/gow2/test_relift_build.sh:20-22
+# ---- hash_dir(): copiada literalmente de games/gow2/scripts/lift/test_relift_build.sh:20-22
 hash_dir() {
     find "$1" -type f -print0 | sort -z | tar --null -T - -cf - 2>/dev/null | md5 -q
 }
@@ -282,7 +282,7 @@ cmd_promote() {
     # ---- confirmacao pos-build (o gate testou o LIFT; isto testa o BINARIO
     #      reconstruido) ------------------------------------------------------
     echo "=== confirmacao pos-build (smoke_relift_equiv.sh --bin, 6 corridas) ==="
-    "$REPO/smoke_relift_equiv.sh" --bin "$REPO/boot_gow2" 6 "/tmp/promote_confirm_${SUFFIX}.tsv"
+    "$REPO/scripts/lift/smoke_relift_equiv.sh" --bin "$REPO/boot_gow2" 6 "/tmp/promote_confirm_${SUFFIX}.tsv"
     local confirm_rc=$?
     if [ "$confirm_rc" != "0" ]; then
         echo "CONFIRMACAO POS-BUILD FALHOU (rc=$confirm_rc) -- a reverter automaticamente (o build pode ter introduzido uma regressao que o accept_relift.sh nao viu, porque esse testou o LIFT, nao o binario reconstruido)" >&2
@@ -299,7 +299,7 @@ cmd_promote() {
     echo "promovido : $NEW_LIFT_REL -> recomp_macos_v2 (suffix=$SUFFIX)"
     echo "backups   : recomp_macos_v2.pre_${SUFFIX} / boot_gow2.pre_${SUFFIX}"
     echo "hash antes: recomp_macos_v2=$H_V2_BEFORE boot_gow2=$H_BOOT_BEFORE"
-    echo "reversao  : ./promote_lift.sh --revert ${SUFFIX}"
+    echo "reversao  : scripts/lift/promote_lift.sh --revert ${SUFFIX}"
 }
 
 # ---- modo de reversao explicita --------------------------------------------

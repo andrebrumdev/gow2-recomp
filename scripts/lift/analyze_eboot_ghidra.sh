@@ -19,12 +19,12 @@
 #                    por verdade. O passo opcional do verify_lift.sh
 #                    (VERIFY_ORACLE=1) recusa-se a correr sem ele.
 #
-# Uso:  ./analyze_eboot_ghidra.sh [EBOOT] [OUTDIR]
+# Uso:  scripts/lift/analyze_eboot_ghidra.sh [EBOOT] [OUTDIR]
 # Custo: o EBOOT tem 5,6 MB e ~13 mil funcoes; a auto-analise com decompilacao
 # demora dezenas de minutos. Corre uma vez; os JSON ficam em disco.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 PS3="${PS3_ENGINE_ROOT:-$HERE/../ps3recomp}"
 ELF="${1:-$HERE/EBOOT.ELF}"
 OUT="${2:-$HERE/ghidra_out}"

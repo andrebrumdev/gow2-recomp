@@ -32,10 +32,10 @@
 #      "bad".
 #
 # Uso:
-#   ./bisect_verdict.sh <sha>                 -- classifica+constroi+mede,
+#   scripts/lift/bisect_verdict.sh <sha>                 -- classifica+constroi+mede,
 #                                                 devolve 0/1/125 (contrato
 #                                                 do git bisect run)
-#   ./bisect_verdict.sh                        -- SEM argumento: e' o modo
+#   scripts/lift/bisect_verdict.sh                        -- SEM argumento: e' o modo
 #                                                 que o `git bisect run`
 #                                                 realmente usa. `git bisect`
 #                                                 ja fez `git checkout
@@ -51,7 +51,7 @@
 #                                                 confiar em $1 quando chamado
 #                                                 assim -- git bisect run nao
 #                                                 injecta argumentos.
-#   ./bisect_verdict.sh --classify-only <sha>  -- so' imprime o nivel
+#   scripts/lift/bisect_verdict.sh --classify-only <sha>  -- so' imprime o nivel
 #                                                 (HERDA/RELINK/
 #                                                 RECONSTRUCAO-COMPLETA), sem
 #                                                 construir nada (Tarefa 3)
@@ -75,7 +75,7 @@ set -uo pipefail
 # script exigia um argumento que o `git bisect run` nunca fornece).
 INVOKED_CWD="$(pwd)"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 cd "$HERE" || exit 1
 
 PS3_REPO="${PS3_REPO:-$HOME/Documents/PESSOAL/ps3recomp}"
@@ -317,7 +317,7 @@ build_and_measure() {
 
   # ---- medicao: minimo BISECT_RUNS corridas, veredicto por MAIORIA --------
   local tsv="/tmp/bisect09_verdict_${sha:0:12}.tsv"
-  if "$HERE/smoke_chain_gate.sh" --bin "$candidate" "$BISECT_RUNS" "$tsv" >&2 2>&1; then
+  if "$HERE/scripts/lift/smoke_chain_gate.sh" --bin "$candidate" "$BISECT_RUNS" "$tsv" >&2 2>&1; then
     rc_measure=0
   else
     rc_measure=1

@@ -11,12 +11,12 @@
 # checkout com EBOOT.ELF/functions.json/recomp_macos_v2 reais) -- ver
 # 03-CONTEXT.md e a nota de decisao operacional no PLAN.md desta task.
 #
-# Run: bash games/gow2/test_relift_build.sh
+# Run: bash games/gow2/scripts/lift/test_relift_build.sh
 # Exit 0 = TODOS OS TESTES PASSARAM. Duracao esperada: minutos (inclui o
 # build completo real, nao so' o lifter).
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 GOW2_RECOMP="${GOW2_RECOMP:-$(cd "$HERE/../../../gow2-recomp" && pwd)}"
 
 hash_dir() {

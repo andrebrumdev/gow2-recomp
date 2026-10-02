@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke_relift_equiv.sh -- entrega do criterio 1 da Fase 5 (REQ-RDY0-6):
-# ./smoke_relift_equiv.sh recomp_macos_v3 6 <tsv> tem de sair 0 quando
+# scripts/lift/smoke_relift_equiv.sh recomp_macos_v3 6 <tsv> tem de sair 0 quando
 # st620 max >= 3 em >= 4 de 6 execucoes.
 #
 # Base literal: smoke_m0_baseline.sh (6 runs, protocolo G6, grep do st620 ja
@@ -32,10 +32,10 @@
 # o TSV e o modo --bin desta entrega.
 #
 # Uso:
-#   ./smoke_relift_equiv.sh [LIFT_DIR] [RUNS] [TSV]   (contrato literal do
+#   scripts/lift/smoke_relift_equiv.sh [LIFT_DIR] [RUNS] [TSV]   (contrato literal do
 #                                                       ROADMAP; default
 #                                                       recomp_macos_v3/6)
-#   ./smoke_relift_equiv.sh --bin BIN_PATH [RUNS] [TSV]  (sem rebuild --
+#   scripts/lift/smoke_relift_equiv.sh --bin BIN_PATH [RUNS] [TSV]  (sem rebuild --
 #                                                       mede um binario ja
 #                                                       compilado, ex. de
 #                                                       producao)
@@ -45,7 +45,7 @@
 # dois repositorios.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 cd "$HERE" || exit 1
 
 # ---- parsing de argumentos (duas formas) ------------------------------------

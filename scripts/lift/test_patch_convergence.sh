@@ -26,7 +26,7 @@
 #   - arvore que NAO converge (a reaplicacao muda um byte) -> VERMELHO
 #
 # Hermetico: zero builds, zero boots, zero lifts reais. Tudo em /tmp.
-# Run: bash games/gow2/test_patch_convergence.sh
+# Run: bash games/gow2/scripts/lift/test_patch_convergence.sh
 # Exit 0 = todos passaram.
 set -uo pipefail
 

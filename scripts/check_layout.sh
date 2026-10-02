@@ -57,23 +57,6 @@ lib_boot_chain_metrics.sh
 
 # Files still waiting for their move batch (temporary; emptied by the last batch).
 ROOT_PENDING="
-promote_lift.sh
-lib_patch_convergence.sh
-test_patch_convergence.sh
-smoke_relift_equiv.sh
-smoke_chain_gate.sh
-smoke_m0_baseline.sh
-bisect_regression.sh
-bisect_verdict.sh
-patch_ab_sandbox.sh
-test_relift_build.sh
-test_relift_prepatch_link.sh
-analyze_eboot_ghidra.sh
-inventory_lift_markers.py
-count_menu_gate.py
-patch_e401_fios_done_yield_gate.py
-patch_diag06_147038_revert_test.py
-patch_diag08_committed_range_revert_test.py
 attach_mem_mac.sh
 watch_run.sh
 oracle_intro_checklist.sh

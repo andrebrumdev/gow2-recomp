@@ -117,4 +117,4 @@ for line in s.splitlines():
         print(line[:160])
 PY
 # Companion counters (same metrics, stable CLI for scripts/CI)
-python3 "$HERE/count_menu_gate.py" "$LOG" || true
+python3 "$HERE/scripts/lift/count_menu_gate.py" "$LOG" || true

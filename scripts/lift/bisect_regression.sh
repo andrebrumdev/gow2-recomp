@@ -13,15 +13,15 @@
 # pkill -f, D-5.5/CLAUDE.md, ja derrubou a maquina com load 75).
 #
 # Uso:
-#   ./bisect_regression.sh --bin CAMINHO [LOG] [TIMEOUT]
+#   scripts/lift/bisect_regression.sh --bin CAMINHO [LOG] [TIMEOUT]
 #       mede um unico binario, imprime uma linha da tabela.
-#   ./bisect_regression.sh [TSV_PATH]
+#   scripts/lift/bisect_regression.sh [TSV_PATH]
 #       corre a lista fixa dos 9 binarios conhecidos desta sessao,
 #       imprime a tabela completa e grava em TSV (default
 #       /tmp/bisect_regression_<timestamp>.tsv).
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/lift/)
 cd "$HERE" || exit 1
 
 [ -f EBOOT.ELF ] || { echo "ERRO: falta EBOOT.ELF em $HERE" >&2; exit 2; }

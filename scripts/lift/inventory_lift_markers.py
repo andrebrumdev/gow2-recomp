@@ -39,7 +39,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent
+REPO = Path(__file__).resolve().parents[2]  # repo root (this script lives in scripts/lift/)
 PATCH_DIR = REPO / "recomp_mid_v2"
 NOTES_DIR = REPO / "notes"
 REPORT_PATH = NOTES_DIR / "2026-07-31-fase10-inventario-marcadores.md"
