@@ -1,6 +1,13 @@
 #!/bin/bash
 # bake_env.sh turns the real env_gow2.sh into the play recipe the iOS bundle ships.
 set -u
+# The bake turns env_gow2.sh into the iOS (Metal) recipe, and env_gow2.sh picks the
+# RSX backend per host OS: off Apple there is no PS3_RSX_BACKEND=metal to find, so
+# the checks below cannot hold. Not a failure -- a missing precondition (F0-3 SKIP).
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo "SKIP: bake_env.sh checks the Apple (Metal) recipe; host is $(uname -s)"
+    exit 0
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # The caller's environment must never leak into the baked recipe: PS3_TRACE_FPS,
 # PS3_PAD_AUTOSTART, PS3_FULLSCREEN and PS3_METAL_VSYNC are all things jogar_g2.sh

@@ -5,6 +5,8 @@
 # game, runtime or SDL builds); install_ios.sh --data marks the phone's manifest
 # incomplete before copying the game and says what the launcher re-copies.
 set -u
+# install_ios.sh reads the phone's app list with plutil (macOS only): nothing to run elsewhere.
+command -v plutil >/dev/null 2>&1 || { echo "SKIP: plutil (macOS) not available"; exit 0; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PORT="$(cd "$HERE/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -68,6 +70,18 @@ grep -q "gow2-install.manifest" "$P/ios/install_ios.sh" || F "install_ios.sh --d
 mkdir -p "$APP"
 cat > "$T/bin/xcrun" <<EOF
 #!/bin/bash
+# install_ios.sh asks the phone's app list first (first install = no saves to back up).
+# Answer "not installed" with a success outcome; it is not part of the copy order
+# this test pins, so it is logged apart from XCRUN_LOG.
+case "\$*" in
+    *"info apps"*)
+        echo "\$*" >> "$T/XCRUN_APPS_LOG"
+        j=""; prev=""
+        for a in "\$@"; do [ "\$prev" = -j ] && j="\$a"; prev="\$a"; done
+        [ -n "\$j" ] || exit 1
+        printf '%s\n' '{"info":{"outcome":"success"},"result":{"apps":[]}}' > "\$j"
+        exit 0 ;;
+esac
 echo "\$*" >> "$T/XCRUN_LOG"
 src=""; dst=""
 while [ \$# -gt 0 ]; do
