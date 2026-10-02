@@ -35,6 +35,7 @@
 
 #include "ppu_memory.h"   /* vm_read32 / vm_write32 / vm_write8 (static inline) */
 #include "ps3_trace.h"    /* ps3_trace_emit -- formato G1 "[PS3T] a | b | ..." */
+#include "ppu_coop.h"     /* PS3_PPU_COOP: a espera dorme a fibra, nao o executor */
 
 #include <unistd.h>       /* usleep -- ver a nota de portabilidade acima */
 
@@ -162,11 +163,11 @@ extern "C" {
 GOW2_MIDASM_USED
 void gow2_midasm_Ce03cWaitIdle(ppu_context* ctx)
 {
-    /* OFF by default since 2026-09-23. Waiting here for the 1st movie to end
-     * made the Santa Monica logo play twice: on RPCS3 the game's 2nd Play stops
-     * the 1st before it ever opens the decoder (cellVdecClose(handle=0), one
-     * cellVdecStartSeq in the whole intro). Without the wait: one StartSeq, 325
-     * pictures, menu reached, WADs 11 s earlier. PS3_CE03C_WAIT_IDLE=1 = old. */
+    /* OFF by default since 2026-09-23 (gow2-recomp c9f0d7d; this copy never got it, so the Android APK, which builds
+     * this file, played the Santa Monica logo twice). Waiting here for the 1st movie to end made the logo play twice:
+     * on RPCS3 the game's 2nd Play stops the 1st before it ever opens the decoder (cellVdecClose(handle=0), one
+     * cellVdecStartSeq in the whole intro). Without the wait: one StartSeq, 325 pictures, menu reached, WADs 11 s
+     * earlier. PS3_CE03C_WAIT_IDLE=1 = old. */
     { static int on = -1;
       if (on < 0) { const char* e = getenv("PS3_CE03C_WAIT_IDLE"); on = (e && e[0] == '1'); }
       if (!on) return; }
@@ -192,9 +193,15 @@ void gow2_midasm_Ce03cWaitIdle(ppu_context* ctx)
                 if (st == 0u) break;
             }
             if (st == 0u) break;
-            ppu_giant_lock_release();
-            usleep(50000);
-            ppu_giant_lock_acquire();
+            if (ppu_coop_self()) {
+                /* PS3_PPU_COOP: numa fibra o giant lock nao existe e usleep pararia o
+                 * executor (todas as outras fibras); dorme so' esta fibra. */
+                ppu_coop_sleep_ns(50000000ull);
+            } else {
+                ppu_giant_lock_release();
+                usleep(50000);
+                ppu_giant_lock_acquire();
+            }
             if ((i % 40) == 0) {
                 static int n = 0; if (n++ < 16)
                     fprintf(stderr, "[INTROSEQ] CE03C wait tick st620=%u i=%d\n", st, i);

@@ -40,7 +40,8 @@ void gow2_spu_config_from_env(gow2_spu_config* c)
     const char* e0 = getenv("PS3_SPU0");
     const int all = getenv("PS3_SPU_ALL") != NULL;
     c->spu0 = !(e0 && e0[0] == '0');
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__ANDROID__)
+    /* Android: every APK baked the spu1 opt-in (without it the intro's MPEG decoder never runs, st620 stuck at 11). */
     c->spu1 = 1;   /* dearch / EDGE-zlib: HIT, MISS=0 (84fd9db); 0x6074 fixed (72ce581, 305 s, 0 ICALL-BAD) */
 #else
     c->spu1 = all || getenv("PS3_SPU1") != NULL;
@@ -75,7 +76,7 @@ void gow2_register_spu_workloads(const gow2_spu_config* cfg)
     /* PS3_SPU0=0 (A/B, opt-in): leave spu0 unregistered (its jobs MISS). */
     if (cfg->spu0)
         spu_workload_register_image(0xDE6DC3A5EA2BE487ull, spu0_spu_func_00003070, "gow2_spu0", 1);
-    /* spu1 (dearch / EDGE-zlib): always registered on macOS/iOS -- HIT with
+    /* spu1 (dearch / EDGE-zlib): always registered on macOS/iOS/Android -- HIT with
      * MISS=0 in-boot (84fd9db), the 0x6074 write-into-PPU-code defect fixed in
      * 72ce581 (305 s, 0 ICALL-BAD). Other hosts keep the PS3_SPU1 / PS3_SPU_ALL
      * opt-in. */

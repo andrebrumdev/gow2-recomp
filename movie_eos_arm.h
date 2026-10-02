@@ -153,6 +153,12 @@ uint32_t movie_cutscene_publish_for_handle(uint32_t handle, int active,
  * elapsed_ms through movie_cutscene_publish_samples. 0 writes nothing. */
 uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms);
 
+/* PS3_TRACE_VDEC_PIPE (libs/codec/vdec_pipe.h, OFF by default): the clock the movie player compares
+ * its pictures with -- the open movie's snd_stream sample count (session+0x154, 48 kHz) -- in ms.
+ * Read only. 1 = *ms valid; 0 = no movie object / session (the probe prints aclk_ms=-1). Overrides
+ * the library's weak default. */
+int vdec_pipe_audio_clock_ms(uint64_t* ms);
+
 #ifdef __cplusplus
 }
 #endif

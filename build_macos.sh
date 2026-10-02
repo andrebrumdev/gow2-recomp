@@ -31,6 +31,9 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# Kit stage hashes (no-op unless KIT_STAGE_DIR is set).
+[ -f "$HERE/kit/lib/stages.sh" ] && . "$HERE/kit/lib/stages.sh"
+command -v stage_capture >/dev/null 2>&1 || stage_capture() { :; }
 # Raiz do motor. Override por PS3_ENGINE_ROOT para compilar contra uma worktree
 # git do ps3recomp em vez do checkout ao lado -- necessario quando duas sessoes
 # partilham o checkout principal e cada uma tem o seu branch. Sem a variavel o
@@ -42,18 +45,34 @@ PYBIN="${PY:-$PS3/.venv/bin/python}"
 [ -x "$PYBIN" ] || PYBIN="$(command -v python3)"
 # GOW2_TARGET=ios: the same object selection compiled for iOS arm64 (device)
 # into $OBJ and archived as a static library ($OUT) for games/gow2/ios/build_ios.sh
-# instead of linking the macOS binary. Default macos: unchanged.
+# instead of linking the macOS binary. GOW2_TARGET=android: the same, with the pinned
+# NDK's clang (android-arm64, API 33, -fPIC) and llvm-ar, for games/gow2/android/build_android.sh
+# (which links libmain.so). Default macos: unchanged.
 GOW2_TARGET="${GOW2_TARGET:-macos}"
+CC_BIN=clang; CXX_BIN=clang++
 case "$GOW2_TARGET" in
     macos) TGT="" ;;
     ios)   TGT="-target arm64-apple-ios16.0" ;;
-    *) echo "GOW2_TARGET must be macos|ios (got '$GOW2_TARGET')" >&2; exit 1 ;;
+    android)
+        . "$PS3/tools/android/android_env.sh"; android_env_resolve; android_env_check_ndk
+        TGT="--target=aarch64-linux-android$MIN_SDK -fPIC -D_GNU_SOURCE"
+        CC_BIN="$NDK_BIN/clang"; CXX_BIN="$NDK_BIN/clang++" ;;
+    *) echo "GOW2_TARGET must be macos|ios|android (got '$GOW2_TARGET')" >&2; exit 1 ;;
 esac
-export TGT
+export TGT CC_BIN CXX_BIN
+# Imagens SPU liftadas (dados do jogo, fora do git): por omissao ao lado deste script;
+# SPU_LIFTED_DIR aponta outra copia (um worktree do port nao as tem -- sem elas o boot
+# linka 0 imagens SPU e a intro nao passa).
+SPU_LIFTED_DIR="${SPU_LIFTED_DIR:-$HERE/spu_lifted}"
 # Keep the Metal ring-fence fix reproducible across runtime rebuilds. The patch
 # is idempotent and preserves PS3_METAL_FRAME_FENCE=0 as an explicit unsafe A/B.
-"$PYBIN" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
-"$PYBIN" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
+if [ "$GOW2_TARGET" != android ]; then   # Metal-only patches (they edit the engine's rsx_metal_backend.m)
+    METAL_DIR="$HERE/../ps3recomp/libs/video"   # what patch_metal_*.py edit (Path(__file__).parents[2])
+    stage_capture engine_metal_pre "$METAL_DIR" rsx_metal_backend.m
+    "$PYBIN" "$HERE/recomp_mid_v2/patch_metal_frame_fence_default.py"
+    "$PYBIN" "$HERE/recomp_mid_v2/patch_metal_varace_underflow.py"
+    stage_capture engine_metal_post "$METAL_DIR" rsx_metal_backend.m
+fi
 # The Xcode clang selected on this host does not infer the active SDK when it
 # is invoked directly.  Without SDKROOT every lifted C++ TU fails at the first
 # standard-library include (for example, <atomic>).  Keep an explicitly
@@ -61,6 +80,8 @@ export TGT
 if [ "$GOW2_TARGET" = ios ]; then
     SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
     export SDKROOT
+elif [ "$GOW2_TARGET" = android ]; then
+    unset SDKROOT                         # the NDK clang uses its own sysroot
 elif [ "$(uname -s)" = "Darwin" ] && [ -z "${SDKROOT:-}" ]; then
     SDKROOT="$(xcrun --show-sdk-path)"
     export SDKROOT
@@ -88,7 +109,11 @@ SPU_OPT="${SPU_OPT:--O1}"
 # ldaxr/stlxr; com ele vira casal/swpal numa instrucao. Toca o stwcx. inteiro
 # (ppu_res_stwcx), o spinlock de reserva e o lockline do SPU.
 # PS3_MCPU=  (vazio) desliga, para A/B.
-if [ "$GOW2_TARGET" = ios ]; then MCPU="${PS3_MCPU--mcpu=apple-a15}"; else MCPU="${PS3_MCPU--mcpu=apple-m1}"; fi
+case "$GOW2_TARGET" in
+    ios)     MCPU="${PS3_MCPU--mcpu=apple-a15}" ;;
+    android) MCPU="${PS3_MCPU--march=armv8.2-a+lse+dotprod}" ;;   # LSE atomics on every Android 13+ arm64 core
+    *)       MCPU="${PS3_MCPU--mcpu=apple-m1}" ;;
+esac
 FORCE_REBUILD_LIFT="${FORCE_REBUILD_LIFT:-0}"
 
 # RELIFT=1: regenera o lift a partir do EBOOT.ELF/functions.json num
@@ -170,7 +195,8 @@ fi
 # compiles a derived lift "<lift>_dv" instead of <lift> itself, so the source
 # lift (recomp_macos_e435, v2, a fresh RELIFT dir) is never modified.
 #   ICALL_DEVIRT=0          build the plain lift (old behaviour)
-#   ICALL_PROFILE=<tsv>     profile(s) to use [config/gow2_icall_profile.tsv]
+#   ICALL_PROFILE=<tsv>[:<tsv>...]  profile(s) to use, summed [config/gow2_icall_profile.tsv]
+#                           (e.g. the Mac profile plus one pulled from an Android device)
 #   ICALL_MIN_SHARE / ICALL_MIN_CALLS   site selection [0.90 / 1000]
 # The derived dir is regenerated only when the source lift, the profile or the
 # tool changes (stamp), and a chunk is rewritten only when its patched text
@@ -181,7 +207,10 @@ fi
 ICALL_DEVIRT="${ICALL_DEVIRT:-1}"
 ICALL_PROFILE="${ICALL_PROFILE:-$HERE/config/gow2_icall_profile.tsv}"
 ICALL_TOOL="$PS3/tools/lift_patches/icall_sites.py"
-if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; then
+IFS=: read -r -a _icall_profiles <<< "$ICALL_PROFILE"
+_icall_prof_ok=1
+for _p in "${_icall_profiles[@]}"; do [ -f "$_p" ] || _icall_prof_ok=0; done
+if [ "$ICALL_DEVIRT" = 1 ] && [ "$_icall_prof_ok" = 1 ] && [ -f "$ICALL_TOOL" ]; then
     SRC_LIFT="$(cd "$LIFT" && pwd)"
     case "$SRC_LIFT" in *_dv) echo "ICALL_DEVIRT: $SRC_LIFT is already a derived lift; pass the source lift" >&2; exit 1 ;; esac
     DV_LIFT="${SRC_LIFT}_dv"
@@ -190,15 +219,18 @@ if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; t
     # invalidate the derived lift (Codex review of the release).
     _stamp="$( { ls "$SRC_LIFT" | grep -E '^(ppu_recomp[^.]*\.cpp|ppu_recomp\.h|ppu_stubs\.cpp)$' | sort
                  cat "$SRC_LIFT"/ppu_recomp*.cpp "$SRC_LIFT"/ppu_recomp.h "$SRC_LIFT"/ppu_stubs.cpp 2>/dev/null | shasum -a 256
-                 cat "$ICALL_PROFILE" "$ICALL_TOOL" | shasum -a 256   # content only: ios/android pass another engine path
+                 cat "${_icall_profiles[@]}" "$ICALL_TOOL" | shasum -a 256   # content only: ios/android pass another engine path
                  echo "${ICALL_MIN_SHARE:-0.90} ${ICALL_MIN_CALLS:-1000}"; } | shasum -a 256 | cut -d' ' -f1 )"
     if [ "$(cat "$DV_LIFT/.devirt_stamp" 2>/dev/null)" != "$_stamp" ]; then
-        echo "=== 0b. devirtualized lift: $SRC_LIFT -> $DV_LIFT (profile $(basename "$ICALL_PROFILE")) ==="
+        echo "=== 0b. devirtualized lift: $SRC_LIFT -> $DV_LIFT (profile(s) $ICALL_PROFILE) ==="
         _stage="$DV_LIFT.stage"
         rm -rf "$_stage"; mkdir -p "$_stage"
-        rsync -a --include='ppu_recomp*.cpp' --include='ppu_recomp.h' --include='ppu_stubs.cpp' \
+        # -L: a worktree lift (e.g. gow2-recomp-env-promo/recomp_macos_e435) holds SYMLINKS to
+        # the main checkout's chunks; copying them as links would make the patch below write
+        # THROUGH them into the pristine source lift. Dereference: the stage holds real files.
+        rsync -aL --include='ppu_recomp*.cpp' --include='ppu_recomp.h' --include='ppu_stubs.cpp' \
               --exclude='*' "$SRC_LIFT/" "$_stage/"
-        "$PYBIN" "$ICALL_TOOL" devirt "$_stage" --profile "$ICALL_PROFILE" \
+        "$PYBIN" "$ICALL_TOOL" devirt "$_stage" --profile "${_icall_profiles[@]}" \
             --min-share "${ICALL_MIN_SHARE:-0.90}" --min-calls "${ICALL_MIN_CALLS:-1000}" \
             --report "$DV_LIFT/icall_devirt_report.tsv"
         # Content-only sync (no -t): identical chunks keep their mtime and objects;
@@ -212,11 +244,23 @@ if [ "$ICALL_DEVIRT" = 1 ] && [ -f "$ICALL_PROFILE" ] && [ -f "$ICALL_TOOL" ]; t
         echo "=== 0b. devirtualized lift up to date: $DV_LIFT ==="
     fi
     LIFT="$DV_LIFT"
+    # An explicit OBJ (android/build_android.sh, ios/build_ios.sh, worktree builds) is shared
+    # by name between the plain and the derived lift, and staleness is mtime-based: after a
+    # devirtualized build, a plain one (ICALL_DEVIRT=0, older chunk mtimes) would silently
+    # link the devirtualized objects. Give the derived lift its own object dir.
+    if [ -n "${OBJ:-}" ]; then
+        OBJ="${OBJ%/}_dv"
+        echo "  ICALL_DEVIRT: objects in $OBJ (a plain build keeps ${OBJ%_dv})"
+    fi
 elif [ "$ICALL_DEVIRT" = 1 ]; then
     echo "  ICALL_DEVIRT: no profile ($ICALL_PROFILE) or tool ($ICALL_TOOL) -- plain lift"
 fi
 
-if [ "$GOW2_TARGET" = ios ]; then OBJ="${OBJ:-$LIFT/ios-arm64}"; else OBJ="${OBJ:-$LIFT}"; fi
+case "$GOW2_TARGET" in
+    ios)     OBJ="${OBJ:-$LIFT/ios-arm64}" ;;
+    android) OBJ="${OBJ:-$LIFT/android-arm64}" ;;
+    *)       OBJ="${OBJ:-$LIFT}" ;;
+esac
 mkdir -p "$OBJ"
 # Resolve to an absolute path now: section 1 below does `cd "$LIFT"` (itself
 # possibly relative to the caller's cwd), and a still-relative $OBJ used with
@@ -286,7 +330,7 @@ t0=$(date +%s)
     'src="$1"; ps3="$2"; opt="$3"
      if [ "$opt" = "-O0" ]; then o="$src.o"; else o="${src}.${opt#-O}.o"; fi
      if [ -n "$LIFT_OBJ_TAG" ]; then o="${o%.o}.${LIFT_OBJ_TAG}.o"; fi
-     clang++ $TGT -std=c++20 "$opt" $MCPU $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
+     "$CXX_BIN" $TGT -std=c++20 "$opt" $MCPU $LIFT_CFLAGS -w -c -I . -I "$ps3/include" -I "$ps3/runtime/ppu" \
          "$src" -o "$OBJ/$o" 2> "$OBJ/$src.cclog"' \
     _ {} "$PS3" "$LIFT_OPT"
 NOBJ=0
@@ -300,11 +344,11 @@ echo "  dur=$(( $(date +%s) - t0 ))s objs=$NOBJ errors=$(cat "$OBJ"/*.cclog 2>/d
 echo "=== 2. runtime PPU sources -> .o (HOST_OPT=$HOST_OPT) ==="
 cd "$HERE"
 for src in ppu_loader ppu_imports ppu_hle ppu_sysprx ppu_fs; do
-    clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$OBJ/$src.o"
+    "$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/$src.cpp" -o "$OBJ/$src.o"
 done
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$OBJ/ppu_icall_ascii.o"
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$OBJ/ppu_vm_fast_policy.o"
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$OBJ/ppu_p10_ctr.o"
+"$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_icall_ascii.c" -o "$OBJ/ppu_icall_ascii.o"
+"$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_vm_fast_policy.c" -o "$OBJ/ppu_vm_fast_policy.o"
+"$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" "$PS3/runtime/ppu/ppu_p10_ctr.c" -o "$OBJ/ppu_p10_ctr.o"
 # host_gow2_factory: subsistema factory/TYPE15 extraido do lift para ficheiro
 # versionado (games/gow2/host_gow2_factory.cpp, commit 1f651aa no irmao
 # gow2-recomp; porte para o monorepo, criterio 3 do ROADMAP da Fase 2). O
@@ -328,7 +372,7 @@ if [ -f "$HERE/host_gow2_factory.cpp" ]; then
         echo "  host_gow2_factory: definicoes ja' no lift -- nao compilar (evita duplicate symbol)"
         rm -f "$OBJ/host_gow2_factory.o"
     else
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
+        "$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
             "$HERE/host_gow2_factory.cpp" -o "$OBJ/host_gow2_factory.o"
         echo "  host_gow2_factory: compilado"
     fi
@@ -362,7 +406,7 @@ if [ -f "$HERE/host_gow2_f2b.c" ]; then
         echo "  host_gow2_f2b: definicao (static ou extern) ja' no lift -- nao compilar (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$OBJ/host_gow2_f2b.o"
     else
-        clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
+        "$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" \
             "$HERE/host_gow2_f2b.c" -o "$OBJ/host_gow2_f2b.o"
         echo "  host_gow2_f2b: compilado"
     fi
@@ -407,7 +451,7 @@ if [ -f "$HERE/hooks/gow2_midasm_hooks.cpp" ]; then
         echo "                     (evita duplicate symbol OU estado duplicado em silencio)"
         rm -f "$OBJ/gow2_midasm_hooks.o"
     else
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
+        "$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$HERE/hooks/gow2_midasm_hooks.cpp" -o "$OBJ/gow2_midasm_hooks.o"
         echo "  gow2_midasm_hooks: compilado"
     fi
@@ -476,7 +520,7 @@ if [ -f "$HERE/hooks/gow2_func_overrides.cpp" ]; then
             echo "  gow2_func_overrides: AVISO -- o lift nao tem wrapper fraco para:$_ovr_noweak"
             echo "                       (o override compila e liga, mas ninguem o chama: NO-OP SILENCIOSO)"
         fi
-        clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
+        "$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$HERE/hooks" \
             "$_ovr_src" -o "$OBJ/gow2_func_overrides.o"
         echo "  gow2_func_overrides: compilado (overrides: $_ovr_names)"
     fi
@@ -486,12 +530,12 @@ fi
 # patch_host_res_inflate.py hooks func_001E7B50. Uses rsx_host_content + stbi
 # from the runtime .a — portable Mac/Win.
 if [ -f "$PS3/runtime/ppu/host_res_inflate.c" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    "$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_res_inflate.c" -o "$OBJ/host_res_inflate.o"
 fi
 # WAD ~texture packages after WADLD-T1R (patch_wad_tex_capture → force-bind).
 if [ -f "$PS3/runtime/ppu/host_wad_tex.c" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
+    "$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs/video" \
         "$PS3/runtime/ppu/host_wad_tex.c" -o "$OBJ/host_wad_tex.o"
 fi
 
@@ -499,17 +543,26 @@ echo "=== 3. HLE NID table -> .o ==="
 # ppu_hle_register_all() is a weak no-op in the runtime; without a strong
 # override every firmware call the game makes logs "unresolved NID" and returns
 # nothing. Regenerated from the /* NID */ annotations in the HLE sources.
-mkdir -p "$LIFT/gen"
+# With a separate object dir (OBJ=..., e.g. android/build_android.sh or a worktree build) the
+# generated table lives with those objects, so such a build never rewrites $LIFT/gen, which the
+# default macOS build of the gow2-recomp checkout owns. Default (OBJ = the lift dir): unchanged.
+if [ "$OBJ" != "$(cd "$LIFT" && pwd)" ]; then GEN="$OBJ/gen"; else GEN="$LIFT/gen"; fi
+mkdir -p "$GEN"
 # Espelha a exclusao do CMakeLists do motor: sceNpCommerce.c colide com
 # sceNpCommerce2.c e ficou fora da biblioteca (ver o comentario la para o que
 # se perde). O gerador varre o disco, nao o que o CMake compila, entao tem de
 # saltar o ficheiro tambem -- senao declara simbolos que nao existem na .a.
 LIBS=$(ls "$PS3"/libs/*/*.c | xargs -n1 basename | sed 's/\.c$//' | sort -u \
        | grep -vx 'sceNpCommerce')
-# shellcheck disable=SC2086
-"$PYBIN" "$PS3/tools/gen_hle_nids.py" \
-    --out "$LIFT/gen/ppu_hle_nids.cpp" $LIBS > /dev/null
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$LIFT/gen/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
+if [ -n "${PS3KIT:-}" ] && [ -x "$PS3KIT" ]; then
+    # shellcheck disable=SC2086
+    "$PS3KIT" hle-nids --root "$PS3" --out "$GEN/ppu_hle_nids.cpp" $LIBS > /dev/null
+else
+    # shellcheck disable=SC2086
+    "$PYBIN" "$PS3/tools/gen_hle_nids.py" --out "$GEN/ppu_hle_nids.cpp" $LIBS > /dev/null
+fi
+stage_capture hle_nids "$GEN" ppu_hle_nids.cpp
+"$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS -w -c "${INC[@]}" -I "$PS3/libs" "$GEN/ppu_hle_nids.cpp" -o "$OBJ/ppu_hle_nids.o"
 
 echo "=== 3b. imagens SPU liftadas do GoW2 -> .o ==="
 # spu_lifted/spu{0..3}_v2 ja vem com simbolos prefixados (spu0_, spu1_, ...),
@@ -529,7 +582,7 @@ SPU_FLAGS_STALE=1
 if [ -f "$SPU_FLAGS_FILE" ] && [ "$(cat "$SPU_FLAGS_FILE")" = "$SPU_FLAGS_VALUE" ]; then
     SPU_FLAGS_STALE=0
 fi
-for d in "$HERE"/spu_lifted/spu?_v2; do
+for d in "$SPU_LIFTED_DIR"/spu?_v2; do
     [ -f "$d/spu_recomp.c" ] || continue
     n=$(basename "$d")
     o="$OBJ/${n}_spu_recomp.o"
@@ -545,7 +598,9 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         # Re-lift the captured image in a temporary directory and import every
         # observed bi/bisl destination.  SPU0_OBSERVED_LOG may point at a fresh
         # runtime log; the tracked manifest remains the baseline evidence.
-        "$PYBIN" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
+        # SPU_OBSERVED_PATCHES=0 (android/build_android.sh): the lift was patched by the Mac build
+        # in $GOW2_WORK (these two scripts need its captured SPU images); the verify below still runs.
+        [ "${SPU_OBSERVED_PATCHES:-1}" = 0 ] || "$PYBIN" "$HERE/recomp_mid_v2/patch_spu0_observed_entries.py" "$d"
         SPU0_CONTRACT_ARGS=(
             --observed "$HERE/recomp_mid_v2/spu0_observed_indirect_targets.lst"
         )
@@ -555,7 +610,7 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu0_ \
             "${SPU0_CONTRACT_ARGS[@]}"
     elif [ "$n" = spu1_v2 ]; then
-        "$PYBIN" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
+        [ "${SPU_OBSERVED_PATCHES:-1}" = 0 ] || "$PYBIN" "$HERE/recomp_mid_v2/patch_spu1_observed_entries.py" "$d"
         if [ -n "${SPU1_OBSERVED_LOG:-}" ]; then
             "$PYBIN" "$PS3/tools/verify_spu_indirect_entries.py" "$d" spu1_ \
                 --observed "$HERE/recomp_mid_v2/spu1_observed_indirect_targets.lst" \
@@ -577,14 +632,17 @@ for d in "$HERE"/spu_lifted/spu?_v2; do
         [ -f "$h" ] && [ "$h" -nt "$o" ] && stale=1
     done
     if [ "$stale" = 1 ]; then
-        clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
+        "$CC_BIN" $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$d" -I "$PS3/runtime/spu" -I "$PS3/include" \
               "$d/spu_recomp.c" -o "$o"
     fi
     SPU_OBJS+=("$o")
 done
+for d in "$HERE"/spu_lifted/spu?_v2; do
+    [ -f "$d/spu_recomp.c" ] && stage_capture spu_postbuild "$HERE/spu_lifted" "$(basename "$d")/spu_recomp.c" "$(basename "$d")/spu_recomp.h"
+done
 printf '%s' "$SPU_FLAGS_VALUE" > "$SPU_FLAGS_FILE"
 if [ ${#SPU_OBJS[@]} -gt 0 ]; then
-    clang $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
+    "$CC_BIN" $TGT -std=c11 $SPU_OPT $MCPU -w -c -I "$PS3/runtime/spu" -I "$PS3/include" \
           "$HERE/recomp_mid_v2/gow2_spu_register.c" -o "$OBJ/gow2_spu_register.o"
     SPU_OBJS+=("$OBJ/gow2_spu_register.o")
 else
@@ -596,13 +654,13 @@ fi
 echo "  imagens SPU: ${#SPU_OBJS[@]} objecto(s)"
 
 echo "=== 4. boot host -> .o ==="
-BOOT_DEFS=(); [ "$GOW2_TARGET" = ios ] && BOOT_DEFS=(-DGOW2_BOOT_NO_MAIN)
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS ${BOOT_DEFS[@]+"${BOOT_DEFS[@]}"} -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$OBJ/boot_macos.o"
+BOOT_DEFS=(); [ "$GOW2_TARGET" != macos ] && BOOT_DEFS=(-DGOW2_BOOT_NO_MAIN)
+"$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS ${BOOT_DEFS[@]+"${BOOT_DEFS[@]}"} -w -c "${INC[@]}" "$HERE/boot_macos.cpp" -o "$OBJ/boot_macos.o"
 # Amostrador do movie player ([MOVIEFSM]), gated por PS3_TRACE_MOVIEOBJ /
 # PS3_MOVIE_EOS / PS3_PERF_FSM. C puro e portatil de proposito.
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$OBJ/movie_eos_arm.o"
+"$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" "$HERE/movie_eos_arm.c" -o "$OBJ/movie_eos_arm.o"
 # Diagnosticos do overlay de runtime (copia snapshots do host; sem ponteiro guest).
-clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" \
+"$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c -I "$HERE" -I "$PS3/libs/video" \
       "$HERE/gow2_overlay_provider.c" -o "$OBJ/gow2_overlay_provider.o"
 
 echo "=== 5. link ==="
@@ -628,12 +686,18 @@ if [ "$GOW2_TARGET" = ios ]; then
     echo "*** $OUT archived (GOW2_TARGET=ios) ***"
     exit 0
 fi
+if [ "$GOW2_TARGET" = android ]; then
+    rm -f "$OUT"
+    "$NDK_BIN/llvm-ar" rcs "$OUT" "${LINK_OBJS[@]}"
+    echo "*** $OUT archived (GOW2_TARGET=android, $(( ${#SPU_OBJS[@]} )) SPU objects) ***"
+    exit 0
+fi
 
 SDL_FLAGS="${SDL_FLAGS-$(pkg-config --libs sdl2)}"
 # Sem SDL (corrida headless com TSan): compila os stubs no lugar da biblioteca.
 SDL_STUB_OBJ=""
 if [ -z "$SDL_FLAGS" ]; then
-    clang $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c \
+    "$CC_BIN" $TGT -std=c11 $HOST_OPT $MCPU $HOST_CFLAGS -w -c \
         "$HERE/recomp_mid_v2/sdl_stubs_headless.c" -o "$OBJ/sdl_stubs_headless.o"
     SDL_STUB_OBJ="$OBJ/sdl_stubs_headless.o"
     echo "  SDL: stubs headless (sem libSDL2)"
@@ -660,7 +724,7 @@ fi
 # The real SIGBUS is the cap's skip returning a corrupt result (r3=0x84010002,
 # an unmapped guest EA) that the caller derefs; the committed bctr-tail fix
 # already keeps that poll from reaching the cap. See runtime/ppu/ppu_loader.cpp.
-clang++ $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
+"$CXX_BIN" $TGT -std=c++20 $HOST_OPT $MCPU $HOST_CFLAGS $LINK_CFLAGS \
     "${LINK_OBJS[@]}" \
     "$RUNTIME_LIB" \
     -framework Metal -framework MetalFX -framework MetalPerformanceShaders -framework QuartzCore -framework Foundation \

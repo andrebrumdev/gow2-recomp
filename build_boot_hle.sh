@@ -4,7 +4,7 @@ PS3=../../ps3recomp
 INC="-I $PS3/include -I $PS3/runtime/ppu -I $PS3/runtime/syscalls -I $PS3/runtime/spu -I $PS3/runtime/prx -I $PS3/runtime/memory -I $PS3/libs/system -I $PS3/libs/spurs -I $PS3/libs/sync -I $PS3/libs/video -I $PS3/libs/audio -I $PS3/libs/network -I $PS3/libs/codec -I $PS3/gow2_gen -I ."
 
 CPPSRC="$PS3/runtime/ppu/ppu_loader.cpp $PS3/runtime/ppu/ppu_imports.cpp $PS3/runtime/ppu/ppu_hle.cpp $PS3/runtime/ppu/ppu_sysprx.cpp $PS3/runtime/ppu/ppu_fs.cpp $PS3/gow2_gen/ppu_hle_nids.cpp $PS3/runtime/ppu/tests/boot_main.cpp"
-CSRC="$PS3/libs/system/sysPrxForUser.c $PS3/libs/system/cellSysmodule.c $PS3/libs/system/cellSysutil.c $PS3/libs/system/cellGame.c $PS3/libs/spurs/cellSpurs.c $PS3/libs/sync/cellSync.c $PS3/libs/video/cellGcmSys.c $PS3/libs/audio/cellAudio.c $PS3/libs/network/sceNp.c $PS3/libs/network/sceNpTrophy.c $PS3/libs/codec/cellVdec.c $PS3/runtime/syscalls/*.c $PS3/runtime/spu/*.c $PS3/runtime/prx/*.c"
+CSRC="$PS3/libs/system/sysPrxForUser.c $PS3/libs/system/cellSysmodule.c $PS3/libs/system/cellSysutil.c $PS3/libs/system/cellGame.c $PS3/libs/spurs/cellSpurs.c $PS3/libs/sync/cellSync.c $PS3/libs/video/cellGcmSys.c $PS3/libs/audio/cellAudio.c $PS3/libs/network/sceNp.c $PS3/libs/network/sceNpTrophy.c $PS3/libs/codec/cellVdec.c $PS3/libs/codec/vdec_yuv_convert.c $PS3/libs/codec/vdec_pipe.c $PS3/runtime/syscalls/*.c $PS3/runtime/spu/*.c $PS3/runtime/prx/*.c"
 
 CERR=0
 echo "=== compile C++ pieces ($(date +%H:%M:%S)) ==="

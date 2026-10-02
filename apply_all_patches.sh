@@ -217,7 +217,7 @@ fi
 # build_macos.sh compila host_wad_tex.c e linka; force-bind via rsx_host_content.
 # WAD ~tex packages apos WADLD-T1R → [WADTEX] + unit 1+ bind (nao e aceite de
 # menu natural, mas desbloqueia pixels WAD no path de bind).
-SKIP_LIST=""
+SKIP_LIST="${PS3_PATCH_SKIP_LIST:-}"   # test-only override (kit fase 2a); empty default, no behaviour change
 
 is_skipped() {
   case " $SKIP_LIST " in *" $1 "*) return 0 ;; *) return 1 ;; esac
@@ -231,6 +231,26 @@ snapshot() {
   for f in $TRACKED; do
     if [ -f "$LIFT/$f" ]; then printf '%s %s\n' "$f" "$(hash_file "$LIFT/$f")"; fi
   done
+}
+
+# ---- golden por patch (Kit sem Python, fase 2a) -----------------------------
+# Com KIT_STAGE_DIR definido (so' o kit/golden/record.sh o define), grava depois de
+# CADA patch o SHA-256 dos 8 arquivos do lift (estagio ppu_after/<patch>) e a ordem +
+# status do patch (estagio ppu_status). So' hashes: KIT_STAGE_KEEP e' ignorado aqui
+# (255 copias do lift = ~65 GB de codigo liftado). Sem KIT_STAGE_DIR: nada muda.
+KIT_PPU_FILES="ppu_recomp.h ppu_recomp_000.cpp ppu_recomp_001.cpp ppu_recomp_002.cpp ppu_recomp_003.cpp ppu_recomp_004.cpp ppu_recomp_005.cpp ppu_recomp_006.cpp"
+if [ -f "$REPO/kit/lib/stages.sh" ]; then . "$REPO/kit/lib/stages.sh"; fi
+patch_seq=0
+capture_after() { # capture_after <patch> <status>
+  [ -n "${KIT_STAGE_DIR:-}" ] || return 0
+  if ! command -v stage_capture >/dev/null 2>&1 || ! command -v stage_record >/dev/null 2>&1; then
+    echo "ERRO: KIT_STAGE_DIR definido mas kit/lib/stages.sh ausente" >&2; exit 2
+  fi
+  # shellcheck disable=SC2086
+  KIT_STAGE_KEEP=0 stage_capture "ppu_after/$1" "$LIFT" $KIT_PPU_FILES \
+    || { echo "ERRO: stage_capture ppu_after/$1 falhou" >&2; exit 2; }
+  stage_record ppu_status "$1" "$(printf '%03d' "$patch_seq"):$2" \
+    || { echo "ERRO: stage_record ppu_status $1 falhou" >&2; exit 2; }
 }
 
 # ---- verificacao de marcadores (o "teste") ----------------------------------
@@ -416,11 +436,13 @@ nomatch_list=""
 unverified_list=""
 
 for name in $PATCH_NAMES; do
+  patch_seq=$((patch_seq + 1))
   p="$PATCH_DIR/$name"
   if is_skipped "$name"; then
     printf '%-16s %s\n' "SKIPPED" "$name"
     echo "                   | host helper so existe no backend D3D12 (Windows); nao linka no macOS"
     n_skipped=$((n_skipped + 1))
+    capture_after "$name" SKIPPED
     continue
   fi
   before="$(snapshot)"
@@ -470,6 +492,7 @@ $contract_out"
   if [ -n "$STATUS_TSV" ]; then
     printf '%s\t%s\t%s\n' "$name" "$status" "$(classe_de "$name")" >> "$STATUS_TSV"
   fi
+  capture_after "$name" "$status"
 
   printf '%-16s %s%s\n' "$status" "$name" "$probe_suffix"
   # Detalhe do script so quando interessa (falha) ou quando mudou algo.

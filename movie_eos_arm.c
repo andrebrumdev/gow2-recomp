@@ -637,6 +637,21 @@ uint32_t movie_cutscene_on_picture(uint64_t elapsed_ms)
     return movie_cutscene_publish_for_handle(h720, 1, elapsed_ms);
 }
 
+/* PS3_TRACE_VDEC_PIPE: what FUN_0045b780 reads (movie_eos_arm.h). Called once per second by the
+ * probe, never when it is off. */
+int vdec_pipe_audio_clock_ms(uint64_t* ms)
+{
+    uint32_t obj = 0, h720 = 0, sess, samples = 0;
+    if (!ms || !vm_base) return 0;
+    if (!movie_eos_peek32(MOVIE_OBJ_SLOT_EA, &obj) || !obj) return 0;
+    if (!movie_eos_can_sample(obj)) return 0;
+    if (!movie_eos_peek32(obj + MOVIE_OFF_SND_H, &h720)) return 0;
+    sess = movie_audio_resolve_session(h720);
+    if (!sess || !movie_eos_peek32(sess + MOVIE_AUDIO_SAMPLES_OFF, &samples)) return 0;
+    *ms = (uint64_t)samples / 48u;
+    return 1;
+}
+
 /* cellVdec.c owns the real one (intro = 1 StartSeq unless PS3_CE03C_WAIT_IDLE=1). */
 __attribute__((weak)) int vdec_intro_seqs(void) { return 1; }
 /* movie_hle.c owns the real one; the vdec unit test links this file alone. */

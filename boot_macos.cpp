@@ -37,9 +37,15 @@ extern "C" void gow2_spu_config_from_env(gow2_spu_config* cfg) __attribute__((we
 #if defined(__APPLE__) && TARGET_OS_IPHONE
 #define GOW2_HOST_NAME "iOS"
 #define GOW2_HAVE_VULKAN 0     /* no Vulkan on iOS; PS3_RSX_BACKEND=vulkan falls back to Metal */
+#define GOW2_HAVE_METAL 1
+#elif defined(__ANDROID__)
+#define GOW2_HOST_NAME "Android"
+#define GOW2_HAVE_VULKAN 1     /* the phone's native ICD; failure falls back to the SDL null backend */
+#define GOW2_HAVE_METAL 0
 #else
 #define GOW2_HOST_NAME "macOS"
 #define GOW2_HAVE_VULKAN 1
+#define GOW2_HAVE_METAL 1
 #endif
 
 #include "ppu_recomp.h"
@@ -98,9 +104,11 @@ int  rsx_null_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_null_backend_shutdown(void);
 int  rsx_null_backend_pump_messages(void);
 
+#if GOW2_HAVE_METAL
 int  rsx_metal_backend_init(uint32_t w, uint32_t h, const char* title);
 void rsx_metal_backend_shutdown(void);
 int  rsx_metal_backend_pump_messages(void);
+#endif
 
 #if GOW2_HAVE_VULKAN
 int  rsx_vulkan_backend_init(uint32_t w, uint32_t h, const char* title);
@@ -248,16 +256,17 @@ Backend pick_backend()
 
     const char* want = getenv("PS3_RSX_BACKEND");
     if (!want || !*want) {
-        /* M10: native Metal is the windowed default on macOS. */
-        want = "metal";
+        /* M10: native Metal is the windowed default on macOS; Vulkan on Android. */
+        want = GOW2_HAVE_METAL ? "metal" : "vulkan";
     }
     Backend b = Backend::Sdl;
-    if (strcmp(want, "metal")  == 0) b = Backend::Metal;
+    if (strcmp(want, "metal")  == 0) b = GOW2_HAVE_METAL ? Backend::Metal : Backend::Sdl;
     else if (strcmp(want, "vulkan") == 0) b = GOW2_HAVE_VULKAN ? Backend::Vulkan : Backend::Metal;
     else if (strcmp(want, "sdl")    == 0) b = Backend::Sdl;
     else {
-        fprintf(stderr, "[boot] unknown PS3_RSX_BACKEND '%s', falling back to metal\n", want);
-        b = Backend::Metal;
+        fprintf(stderr, "[boot] unknown PS3_RSX_BACKEND '%s', falling back to %s\n", want,
+                GOW2_HAVE_METAL ? "metal" : "sdl");
+        b = GOW2_HAVE_METAL ? Backend::Metal : Backend::Sdl;
     }
     const char* name = "sdl";
     if (b == Backend::Metal)  name = "metal";
@@ -271,7 +280,11 @@ int backend_init(Backend b)
 {
     switch (b) {
     case Backend::Sdl:    return rsx_null_backend_init(1280, 720, "God of War II HD");
+#if GOW2_HAVE_METAL
     case Backend::Metal:  return rsx_metal_backend_init(1280, 720, "God of War II HD");
+#else
+    case Backend::Metal:  return -1;
+#endif
 #if GOW2_HAVE_VULKAN
     case Backend::Vulkan: return rsx_vulkan_backend_init(1280, 720, "God of War II HD");
 #else
@@ -286,7 +299,11 @@ void backend_shutdown(Backend b)
 {
     switch (b) {
     case Backend::Sdl:    rsx_null_backend_shutdown();   break;
+#if GOW2_HAVE_METAL
     case Backend::Metal:  rsx_metal_backend_shutdown();  break;
+#else
+    case Backend::Metal:  break;
+#endif
 #if GOW2_HAVE_VULKAN
     case Backend::Vulkan: rsx_vulkan_backend_shutdown(); break;
 #else
@@ -467,19 +484,32 @@ extern "C" int gow2_boot_prepare_display(void)
      * PS3_OVERLAY_SETTINGS; started without the launcher, the per-user default
      * path is used. The GoW2 provider only copies host-side snapshots (no guest
      * pointer, no giant lock). The overlay stays closed until F1/Start.
-     * Only the Metal backend draws it: with sdl/vulkan/none it stays
-     * uninitialized, so Start and the pad reach the game exactly as before
-     * instead of toggling a menu nobody can see. */
-    auto overlay_init_for_metal = []() {
-        if (g_backend != Backend::Metal) return;
-        if (!rsx_overlay_init(rsx_overlay_settings_path_from_env()))
+     * Only a backend with an overlay renderer draws it: Metal everywhere, and
+     * on Android also Vulkan (rsx_vk_overlay: the home screen and the touch
+     * controls). With the other backends (sdl/none, and vulkan off Android) it
+     * stays uninitialized, so Start and the pad reach the game exactly as
+     * before instead of toggling a menu nobody can see. */
+    auto overlay_init_for_ui = []() {
+#if defined(__ANDROID__)
+        const bool draws = g_backend == Backend::Metal || g_backend == Backend::Vulkan;   /* the Vulkan overlay renderer exists (rsx_vk_overlay) */
+#else
+        const bool draws = g_backend == Backend::Metal;                                   /* sdl/vulkan/none: nothing draws it, Start reaches the game */
+#endif
+        if (!draws) return;
+        if (!rsx_overlay_init(rsx_overlay_settings_path_from_env())) {
             fprintf(stderr, "[boot] runtime overlay unavailable\n");
+#ifdef __ANDROID__
+            /* the home screen waits for a "Jogar" only while the core is live: disabled, it starts the game */
+            rsx_overlay_disable("overlay init failed");
+#endif
+        }
         rsx_overlay_set_title("God of War II HD");
         gow2_overlay_provider_register();
     };
-    overlay_init_for_metal();
+    overlay_init_for_ui();
     int brc = backend_init(g_backend);
     if (brc != 0 && g_backend == Backend::Vulkan) {
+#if GOW2_HAVE_METAL
         /* Spec (ps3recomp docs/superpowers/specs/2026-09-23-vulkan-backend-a-design.md §5):
          * Vulkan unavailable -> platform default with one log line, never abort. The env is
          * updated so cellGcmSys's rsx_bridge_mode keeps the Metal backend registered here.
@@ -487,7 +517,17 @@ extern "C" int gow2_boot_prepare_display(void)
         fprintf(stderr, "[boot] vulkan init failed -> metal (platform default)\n");
         setenv("PS3_RSX_BACKEND", "metal", 1);
         g_backend = Backend::Metal;
-        overlay_init_for_metal();
+        overlay_init_for_ui();
+#else
+        /* Android spec §4.3: no Metal -- fail loudly and keep booting on the SDL null
+         * backend (no pixels, the rest of the game runs), never abort. */
+        fprintf(stderr, "[BOOT] vulkan init failed -> sdl (null backend)\n");
+        /* The overlay core came up for Vulkan above; nothing draws it on the null backend:
+         * disabled, it withholds nothing from the guest and the Android home starts the game. */
+        rsx_overlay_disable("Vulkan unavailable: SDL null backend draws no overlay");
+        setenv("PS3_RSX_BACKEND", "sdl", 1);
+        g_backend = Backend::Sdl;
+#endif
         brc = backend_init(g_backend);
     }
     if (brc != 0) {
