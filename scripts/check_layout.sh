@@ -57,21 +57,6 @@ lib_boot_chain_metrics.sh
 
 # Files still waiting for their move batch (temporary; emptied by the last batch).
 ROOT_PENDING="
-smoke_bctr_tail.sh
-smoke_boot_mac.sh
-smoke_fios_open_probe.sh
-smoke_intro_macos.sh
-smoke_intro_open_wall.sh
-smoke_intro_vdec_wad.sh
-smoke_metal_draw_mac.sh
-smoke_metal_matrix_mac.sh
-smoke_metalfx_mac.sh
-smoke_movie_eos_mac.sh
-smoke_moviefsm_mac.sh
-smoke_perf_macos.sh
-smoke_asset_pipeline.sh
-smoke_intro_to_rsx.sh
-smoke_rsx_spu.sh
 promote_lift.sh
 lib_patch_convergence.sh
 test_patch_convergence.sh

@@ -49,10 +49,10 @@
 #                                         depois (shader/textura) descarta o
 #                                         resultado.
 #
-# Uso: ./smoke_asset_pipeline.sh [timeout_segundos]   (default 150)
+# Uso: scripts/smoke/smoke_asset_pipeline.sh [timeout_segundos]   (default 150)
 set +e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 RUN_DIR="$SCRIPT_DIR/recomp_mid_v2"
 LOG="$RUN_DIR/smoke_asset_pipeline.log"
 TIMEOUT_S="${1:-150}"

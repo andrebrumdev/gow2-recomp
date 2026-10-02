@@ -14,10 +14,10 @@
 #   [D] CGOWShader                -> desacoplada de C, mesma raiz de fundo
 #   [E] Pixels de jogo            -> BLOQUEADA por C+D
 #
-# Uso: ./smoke_intro_to_rsx.sh [timeout_segundos]   (default 150)
+# Uso: scripts/smoke/smoke_intro_to_rsx.sh [timeout_segundos]   (default 150)
 set +e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 RUN_DIR="$SCRIPT_DIR/recomp_mid_v2"
 LOG="$RUN_DIR/smoke_intro_to_rsx.log"
 TIMEOUT_S="${1:-150}"

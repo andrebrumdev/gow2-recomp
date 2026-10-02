@@ -5,13 +5,13 @@
 # valida logs e (opcionalmente) dumps.
 #
 # Uso:
-#   ./smoke_metal_matrix_mac.sh
-#   SECS=6 ./smoke_metal_matrix_mac.sh
+#   scripts/smoke/smoke_metal_matrix_mac.sh
+#   SECS=6 scripts/smoke/smoke_metal_matrix_mac.sh
 #
 # Exit: 0 se todos GREEN; 1 se algum FAIL.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 SECS="${SECS:-8}"
 

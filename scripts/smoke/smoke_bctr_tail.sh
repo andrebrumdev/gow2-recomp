@@ -21,10 +21,10 @@
 #             corrida) de func_002B4224 a ver [op+0x90] != 0: func_002B4274 e o
 #             ramo que so existe depois desse teste passar
 #
-# Uso: ./smoke_bctr_tail.sh [M] [SEGUNDOS] [F|L|FL]
+# Uso: scripts/smoke/smoke_bctr_tail.sh [M] [SEGUNDOS] [F|L|FL]
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 M="${1:-8}"

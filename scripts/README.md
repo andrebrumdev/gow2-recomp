@@ -16,6 +16,7 @@ file that something outside its batch still cites by its old path keeps a thin w
 | Folder | Purpose |
 |---|---|
 | `scripts/` | helper scripts that are not entry points; this page is its map |
+| [`scripts/smoke/`](smoke/README.md) | boot / intro / Metal smoke runs of the Mac build (and three Windows-only smokes); each needs the game data and a built `boot_gow2` |
 | `scripts/archive/` | history only: nothing current calls these files |
 | [`scripts/archive/windows/`](archive/windows/README.md) | scripts of the July 2026 Windows bring-up, bound to that machine's paths |
 | [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
@@ -127,13 +128,41 @@ current cites the old path (or the file is archive-only: it was bound to the old
 | 2 | `tasks_design.json` | [`notes/artifacts/tasks_design.json`](../notes/artifacts/tasks_design.json) | none |
 | 2 | `boot_fixed.stdout` | [`notes/artifacts/boot_fixed.stdout`](../notes/artifacts/boot_fixed.stdout) | none |
 | 2 | `_stopn_test.c` | [`notes/artifacts/_stopn_test.c`](../notes/artifacts/_stopn_test.c) | none |
+| 3 | `smoke_bctr_tail.sh` | [`scripts/smoke/smoke_bctr_tail.sh`](smoke/smoke_bctr_tail.sh) | none |
+| 3 | `smoke_boot_mac.sh` | [`scripts/smoke/smoke_boot_mac.sh`](smoke/smoke_boot_mac.sh) | wrapper |
+| 3 | `smoke_fios_open_probe.sh` | [`scripts/smoke/smoke_fios_open_probe.sh`](smoke/smoke_fios_open_probe.sh) | wrapper |
+| 3 | `smoke_intro_macos.sh` | [`scripts/smoke/smoke_intro_macos.sh`](smoke/smoke_intro_macos.sh) | wrapper |
+| 3 | `smoke_intro_open_wall.sh` | [`scripts/smoke/smoke_intro_open_wall.sh`](smoke/smoke_intro_open_wall.sh) | wrapper |
+| 3 | `smoke_intro_vdec_wad.sh` | [`scripts/smoke/smoke_intro_vdec_wad.sh`](smoke/smoke_intro_vdec_wad.sh) | wrapper |
+| 3 | `smoke_metal_draw_mac.sh` | [`scripts/smoke/smoke_metal_draw_mac.sh`](smoke/smoke_metal_draw_mac.sh) | wrapper |
+| 3 | `smoke_metal_matrix_mac.sh` | [`scripts/smoke/smoke_metal_matrix_mac.sh`](smoke/smoke_metal_matrix_mac.sh) | wrapper |
+| 3 | `smoke_metalfx_mac.sh` | [`scripts/smoke/smoke_metalfx_mac.sh`](smoke/smoke_metalfx_mac.sh) | none |
+| 3 | `smoke_movie_eos_mac.sh` | [`scripts/smoke/smoke_movie_eos_mac.sh`](smoke/smoke_movie_eos_mac.sh) | wrapper |
+| 3 | `smoke_moviefsm_mac.sh` | [`scripts/smoke/smoke_moviefsm_mac.sh`](smoke/smoke_moviefsm_mac.sh) | wrapper |
+| 3 | `smoke_perf_macos.sh` | [`scripts/smoke/smoke_perf_macos.sh`](smoke/smoke_perf_macos.sh) | wrapper |
+| 3 | `smoke_asset_pipeline.sh` | [`scripts/smoke/smoke_asset_pipeline.sh`](smoke/smoke_asset_pipeline.sh) | wrapper |
+| 3 | `smoke_intro_to_rsx.sh` | [`scripts/smoke/smoke_intro_to_rsx.sh`](smoke/smoke_intro_to_rsx.sh) | wrapper |
+| 3 | `smoke_rsx_spu.sh` | [`scripts/smoke/smoke_rsx_spu.sh`](smoke/smoke_rsx_spu.sh) | wrapper |
 
-## Compatibility wrappers (2, deprecated, remove after 2026-12-31)
+## Compatibility wrappers (15, deprecated, remove after 2026-12-31)
 
 Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_layout.sh` checks.
 
 - `SPURS_M2_FINDINGS.md` -> `notes/SPURS_M2_FINDINGS.md`
 - `SPURS_TRACE_M1.md` -> `notes/SPURS_TRACE_M1.md`
+- `smoke_boot_mac.sh` -> `scripts/smoke/smoke_boot_mac.sh`
+- `smoke_fios_open_probe.sh` -> `scripts/smoke/smoke_fios_open_probe.sh`
+- `smoke_intro_macos.sh` -> `scripts/smoke/smoke_intro_macos.sh`
+- `smoke_intro_open_wall.sh` -> `scripts/smoke/smoke_intro_open_wall.sh`
+- `smoke_intro_vdec_wad.sh` -> `scripts/smoke/smoke_intro_vdec_wad.sh`
+- `smoke_metal_draw_mac.sh` -> `scripts/smoke/smoke_metal_draw_mac.sh`
+- `smoke_metal_matrix_mac.sh` -> `scripts/smoke/smoke_metal_matrix_mac.sh`
+- `smoke_movie_eos_mac.sh` -> `scripts/smoke/smoke_movie_eos_mac.sh`
+- `smoke_moviefsm_mac.sh` -> `scripts/smoke/smoke_moviefsm_mac.sh`
+- `smoke_perf_macos.sh` -> `scripts/smoke/smoke_perf_macos.sh`
+- `smoke_asset_pipeline.sh` -> `scripts/smoke/smoke_asset_pipeline.sh`
+- `smoke_intro_to_rsx.sh` -> `scripts/smoke/smoke_intro_to_rsx.sh`
+- `smoke_rsx_spu.sh` -> `scripts/smoke/smoke_rsx_spu.sh`
 
 ## Checking the layout
 

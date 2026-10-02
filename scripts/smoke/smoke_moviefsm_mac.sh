@@ -22,10 +22,10 @@
 #   MAPA    o ppu_guest_range_committed passa a responder segundo as regioes
 #           que o host commitou, em vez do "sim" universal de guard aberto.
 #
-# Uso: ./smoke_moviefsm_mac.sh [segundos]        (default 25)
+# Uso: scripts/smoke/smoke_moviefsm_mac.sh [segundos]        (default 25)
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 SECS="${1:-25}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M1: prove Metal draw path is not clear-only (demo triangle + optional guest draws).
 set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 . ./env_gow2.sh
 unset PS3_NO_RSX || true

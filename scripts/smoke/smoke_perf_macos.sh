@@ -9,10 +9,10 @@
 #   4. Sem Sleep(1) extra no poll (ja no runtime).
 #
 # Uso:
-#   ./smoke_perf_macos.sh                 # 30s, binario actual (assume -O0)
-#   ./smoke_perf_macos.sh 30              # segundos
-#   MODE=ab ./smoke_perf_macos.sh 30      # rebuild O0 + O1 e compara
-#   BIN=./boot_gow2_O1 ./smoke_perf_macos.sh 30
+#   scripts/smoke/smoke_perf_macos.sh                 # 30s, binario actual (assume -O0)
+#   scripts/smoke/smoke_perf_macos.sh 30              # segundos
+#   MODE=ab scripts/smoke/smoke_perf_macos.sh 30      # rebuild O0 + O1 e compara
+#   BIN=./boot_gow2_O1 scripts/smoke/smoke_perf_macos.sh 30
 #
 # Env:
 #   SECS / $1     duracao do run (default 30)
@@ -21,7 +21,7 @@
 #   SKIP_BUILD=1  no MODE=ab, nao rebuild (usa boot_gow2 e boot_gow2_O1)
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 SECS="${1:-${SECS:-30}}"

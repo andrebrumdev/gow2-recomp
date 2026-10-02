@@ -6,7 +6,7 @@
 #
 # Gated: sem PS3_METALFX=1 o baseline nao chama MetalFX (no-op).
 set -uo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 . ./env_gow2.sh
 unset PS3_NO_RSX || true

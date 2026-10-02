@@ -14,7 +14,7 @@
  *     vm_base=NULL e ranges nao commitados -- os quatro casos em que o
  *     amostrador do Windows fazia `continue`.
  *
- * Build/run: ../smoke_moviefsm_mac.sh (ou clang -std=c11 este ficheiro +
+ * Build/run: ../scripts/smoke/smoke_moviefsm_mac.sh (ou clang -std=c11 este ficheiro +
  * ../movie_eos_arm.c).
  */
 #include <assert.h>

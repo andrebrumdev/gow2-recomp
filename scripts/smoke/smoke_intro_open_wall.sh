@@ -21,9 +21,9 @@
 #   base       (default) baseline sem probes -- Task 0
 #   probe_snd  PS3_TRACE_SNDOPEN=1 -- Task 1 (probe de patch_snd_open_probe.py)
 #
-# Uso: ./smoke_intro_open_wall.sh [M] [SEGUNDOS] [MODE]
-#      ./smoke_intro_open_wall.sh 8 25 base
-#      ./smoke_intro_open_wall.sh 8 25 probe_snd
+# Uso: scripts/smoke/smoke_intro_open_wall.sh [M] [SEGUNDOS] [MODE]
+#      scripts/smoke/smoke_intro_open_wall.sh 8 25 base
+#      scripts/smoke/smoke_intro_open_wall.sh 8 25 probe_snd
 #
 # ---------------------------------------------------------------------------
 # RESULTADO Task 0 (M=8, 25 s, baseline, 2026-07-20)
@@ -72,7 +72,7 @@
 #     [SNDOPEN] sem a variavel definida   0/8   (OFF por default, no-op)
 #     [fs] open                           1 linha/run, sempre so' o gow2.psarc
 #     smlogo_io                           0/8 nas duas suites
-#     ./smoke_boot_mac.sh 25 com probe OFF -> PASS (sem regressao)
+#     scripts/smoke/smoke_boot_mac.sh 25 com probe OFF -> PASS (sem regressao)
 #
 #   CORRELACAO (input para a Task 3, NAO e' decisao desta task): nas duas
 #   suites deu left_with_wav = 0.
@@ -92,7 +92,7 @@
 # ---------------------------------------------------------------------------
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 M="${1:-8}"

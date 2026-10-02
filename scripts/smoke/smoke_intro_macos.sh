@@ -6,13 +6,13 @@
 # o mesmo: um aceite de N-de-M corridas, com etiquetas HONESTAS que distinguem o
 # que esta provado do que esta bloqueado.
 #
-# Uso: ./smoke_intro_macos.sh [M]        (default 8 corridas)
+# Uso: scripts/smoke/smoke_intro_macos.sh [M]        (default 8 corridas)
 #
 # NAO usa `set -e`: os boots correm ate serem mortos por timeout (rc != 0 e
 # normal), e um `set -e` mataria o loop -- o mesmo trap que ja custou uma suite.
 set +e
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 M="${1:-8}"

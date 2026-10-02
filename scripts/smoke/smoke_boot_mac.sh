@@ -11,10 +11,10 @@
 # runtime/ppu/ppu_sysprx.cpp (ctx-based, BE-aware) e vencem os de libs/spurs,
 # que nunca executam -- por isso NAO se deve procurar por linhas "[cellSpurs]".
 #
-# Uso: ./smoke_boot_mac.sh [segundos]        (default 30)
+# Uso: scripts/smoke/smoke_boot_mac.sh [segundos]        (default 30)
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 SECS="${1:-30}"
@@ -65,7 +65,7 @@ grep -q "\[spu_workload\] registered 'gow2_spu6'" "$LOG" || fail "imagem SPU spu
 # desactualizado: o `stwcx.` com campo rA=0 saía como `ctx->gpr[0] + base`, e em
 # PPC um rA de 0 significa o literal 0, nao o GPR0 -- com GPR0 a conter scratch
 # vivo, o store da flag aterrava num endereco aleatorio. Por isso o watchpoint de
-# hardware registado no SPURS_M2_FINDINGS.md via ZERO escritas em 0x86E118: a
+# hardware registado no notes/SPURS_M2_FINDINGS.md via ZERO escritas em 0x86E118: a
 # escrita existia, ia para outro sitio. Re-liftar com o lifter actual (que ja
 # tinha o fix, via ppu_lwarx/ppu_stwcx) resolveu.
 #

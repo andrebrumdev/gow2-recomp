@@ -14,10 +14,10 @@
 #                                        os handles do [MOVIEOBJ] nao dependem
 #                                        dela
 #
-# Uso: ./smoke_fios_open_probe.sh [M] [SEGUNDOS] [A|B|AB]
+# Uso: scripts/smoke/smoke_fios_open_probe.sh [M] [SEGUNDOS] [A|B|AB]
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 M="${1:-8}"

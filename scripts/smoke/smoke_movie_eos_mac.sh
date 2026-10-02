@@ -20,10 +20,10 @@
 # isso um binario com nome unico (ex. ./boot_eosarm) fica isolado de outra sessao
 # a correr ./boot_gow2 em paralelo.
 #
-# Uso: ./smoke_movie_eos_mac.sh [M] [secs]     (default M=8 secs=48)
-#      BOOT=./boot_eosarm ./smoke_movie_eos_mac.sh 8 48
+# Uso: scripts/smoke/smoke_movie_eos_mac.sh [M] [secs]     (default M=8 secs=48)
+#      BOOT=./boot_eosarm scripts/smoke/smoke_movie_eos_mac.sh 8 48
 set -uo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 
 M="${1:-8}"

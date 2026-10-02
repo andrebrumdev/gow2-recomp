@@ -11,7 +11,7 @@
 # Kill SEMPRE por PID (TERM → -9). Nunca pkill -f boot_gow2.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 cd "$HERE"
 EXE=./boot_gow2
 LOGDIR="${TMPDIR:-/tmp}/gow2_vdec_wad_$$"

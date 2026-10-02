@@ -8,11 +8,11 @@
 # SPU) sem crashar, ate a parede de conteudo conhecida (o jogo ainda nao emite draws/
 # texturas proprios neste ponto do boot — ver ressalvas honestas em gow2-recomp-notes.md).
 #
-# Uso: ./smoke_rsx_spu.sh [timeout_segundos]   (default 60)
+# Uso: scripts/smoke/smoke_rsx_spu.sh [timeout_segundos]   (default 60)
 
 set +e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (this script lives in scripts/smoke/)
 RUN_DIR="$SCRIPT_DIR/recomp_mid_v2"
 LOG="$RUN_DIR/smoke_e2e.log"
 TIMEOUT_S="${1:-60}"
