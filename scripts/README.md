@@ -18,11 +18,13 @@ file that something outside its batch still cites by its old path keeps a thin w
 | `scripts/` | helper scripts that are not entry points; this page is its map |
 | [`scripts/smoke/`](smoke/README.md) | boot / intro / Metal smoke runs of the Mac build (and three Windows-only smokes); each needs the game data and a built `boot_gow2` |
 | [`scripts/lift/`](lift/README.md) | relift acceptance gates, chain gate, bisect and one-off lift helpers called by `accept_relift.sh` / `promote_lift.sh` |
+| `scripts/diag/` | Mac diagnostics: gdb attach, run-until-marker watcher, RPCS3 oracle checklist |
 | `scripts/archive/` | history only: nothing current calls these files |
 | [`scripts/archive/windows/`](archive/windows/README.md) | scripts of the July 2026 Windows bring-up, bound to that machine's paths |
 | [`scripts/archive/windows/trace/`](archive/windows/trace/README.md) | the 46 one-off `tr*.sh` trace runs (+ `cas.pl`) |
 | [`scripts/archive/windows/diag/`](archive/windows/diag/README.md) | Windows gdb attach / sample / watch / dump scripts and gdb command files |
 | [`scripts/archive/windows/build/`](archive/windows/build/README.md) | legacy MinGW lift-and-link scripts (`boot_hle.exe`) |
+| `tools/` | standalone tools: PKG extraction, SELF decryption, RPCS3 source index/grep |
 | [`notes/artifacts/`](../notes/artifacts/README.md) | stray design JSONs, a captured stdout and a scratch C file from early sessions |
 | `claude_runs/`, `tests/`, `kit/`, `ios/`, `android/`, `launcher/`, `lift_baseline/`, `recomp_mid_v2/`, `hooks/`, `config/`, `docs/`, `notes/`, `mods/` | unchanged by this reorganisation (see `README.md`, "Repository layout") |
 
@@ -161,8 +163,13 @@ current cites the old path (or the file is archive-only: it was bound to the old
 | 4 | `patch_e401_fios_done_yield_gate.py` | [`scripts/lift/patch_e401_fios_done_yield_gate.py`](lift/patch_e401_fios_done_yield_gate.py) | wrapper (python) |
 | 4 | `patch_diag06_147038_revert_test.py` | [`scripts/lift/patch_diag06_147038_revert_test.py`](lift/patch_diag06_147038_revert_test.py) | wrapper (python) |
 | 4 | `patch_diag08_committed_range_revert_test.py` | [`scripts/lift/patch_diag08_committed_range_revert_test.py`](lift/patch_diag08_committed_range_revert_test.py) | wrapper (python) |
+| 5 | `attach_mem_mac.sh` | [`scripts/diag/attach_mem_mac.sh`](diag/attach_mem_mac.sh) | wrapper |
+| 5 | `watch_run.sh` | [`scripts/diag/watch_run.sh`](diag/watch_run.sh) | wrapper |
+| 5 | `oracle_intro_checklist.sh` | [`scripts/diag/oracle_intro_checklist.sh`](diag/oracle_intro_checklist.sh) | wrapper |
+| 5 | `decrypt_self.py` | [`tools/decrypt_self.py`](../tools/decrypt_self.py) | wrapper (python) |
+| 5 | `extract_pkg.py` | [`tools/extract_pkg.py`](../tools/extract_pkg.py) | wrapper (python) |
 
-## Compatibility wrappers (32, deprecated, remove after 2026-12-31)
+## Compatibility wrappers (37, deprecated, remove after 2026-12-31)
 
 Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_layout.sh` checks.
 
@@ -198,6 +205,11 @@ Each carries the marker `gow2-recomp:moved-to <new path>`, which `scripts/check_
 - `patch_e401_fios_done_yield_gate.py` -> `scripts/lift/patch_e401_fios_done_yield_gate.py`
 - `patch_diag06_147038_revert_test.py` -> `scripts/lift/patch_diag06_147038_revert_test.py`
 - `patch_diag08_committed_range_revert_test.py` -> `scripts/lift/patch_diag08_committed_range_revert_test.py`
+- `attach_mem_mac.sh` -> `scripts/diag/attach_mem_mac.sh`
+- `watch_run.sh` -> `scripts/diag/watch_run.sh`
+- `oracle_intro_checklist.sh` -> `scripts/diag/oracle_intro_checklist.sh`
+- `decrypt_self.py` -> `tools/decrypt_self.py`
+- `extract_pkg.py` -> `tools/extract_pkg.py`
 
 ## Checking the layout
 

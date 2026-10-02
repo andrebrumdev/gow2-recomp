@@ -17,7 +17,7 @@ Fluxo:
   reconstroi ELF: copia ehdr/phdr/shdr em claro + cola dados das secoes em p_offset
 
 Uso:
-  python decrypt_self.py <EBOOT.BIN> <saida.elf> [--rap <arquivo.rap>] [--klic <hex32>]
+  python3 tools/decrypt_self.py <EBOOT.BIN> <saida.elf> [--rap <arquivo.rap>] [--klic <hex32>]
 """
 import argparse, struct, sys, zlib
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes

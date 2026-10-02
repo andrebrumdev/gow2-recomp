@@ -36,7 +36,7 @@ fail() { echo "FALTA: $1" >&2; shift; printf '  %s\n' "$@" >&2; exit 1; }
 
 # ---- preflight ------------------------------------------------------------
 [ -f "$ELF" ] || fail "o EBOOT decifrado ($ELF)" \
-    "Se so' tens o EBOOT.BIN cifrado: $PY $HERE/decrypt_self.py EBOOT.BIN EBOOT.ELF"
+    "Se so' tens o EBOOT.BIN cifrado: $PY $HERE/tools/decrypt_self.py EBOOT.BIN EBOOT.ELF"
 
 if ! file "$ELF" | grep -q 'ELF 64-bit MSB.*PowerPC'; then
     fail "um ELF64 BE PowerPC valido em $ELF" "file diz: $(file -b "$ELF")"

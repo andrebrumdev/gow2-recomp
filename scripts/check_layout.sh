@@ -13,6 +13,7 @@
 # Usage: scripts/check_layout.sh [REPO_ROOT]       (default: the repo holding this script)
 #        scripts/check_layout.sh --self-test       (proves each check can fail)
 # Exit: 0 = clean, 1 = layout problem, 2 = usage/environment error.
+# (No `cmd | grep -q` pipelines: with pipefail, grep -q exiting early makes the writer die of SIGPIPE.)
 set -uo pipefail
 
 MARKER="gow2-recomp:moved-to"
@@ -55,15 +56,6 @@ accept_relift.sh
 lib_boot_chain_metrics.sh
 "
 
-# Files still waiting for their move batch (temporary; emptied by the last batch).
-ROOT_PENDING="
-attach_mem_mac.sh
-watch_run.sh
-oracle_intro_checklist.sh
-decrypt_self.py
-extract_pkg.py
-"
-
 # Directories outside scripts/ that the reorganisation created; each must be in scripts/README.md.
 EXTRA_DIRS="notes/artifacts tools"
 
@@ -91,21 +83,21 @@ check() {
             grep -q -F "\`$f\`" "$readme" || { echo "FAIL (ii): wrapper $f not listed in scripts/README.md"; bad=1; }
             continue
         fi
-        printf '%s\n' "$ROOT_KEEP" "$ROOT_PENDING" | grep -q -x -F "$f" \
+        grep -q -x -F "$f" <<< "$ROOT_KEEP" \
             || { echo "FAIL (ii): root file $f is not on the allowlist (scripts/check_layout.sh ROOT_KEEP) and is not a wrapper"; bad=1; }
     done <<< "$files"
 
     # (iii): directories under scripts/ plus EXTRA_DIRS
     local dirs
     dirs="$( { printf '%s\n' "$files" | grep '^scripts/.*/' | sed 's|/[^/]*$||' | sort -u
-               for d in $EXTRA_DIRS; do printf '%s\n' "$files" | grep -q "^$d/" && echo "$d"; done; } | sort -u)"
+               for d in $EXTRA_DIRS; do grep -q "^$d/" <<< "$files" && echo "$d"; done; } | sort -u)"
     # include every ancestor directory below scripts/ (scripts/archive for scripts/archive/windows/trace)
     dirs="$(printf '%s\n' "$dirs" | awk -F/ 'NF{p=$1; for(i=2;i<=NF;i++){p=p"/"$i; print p}}' | sort -u)"
     while IFS= read -r d; do
         [ -n "$d" ] || continue
         grep -q -F "\`$d/\`" "$readme" || { echo "FAIL (iii): directory $d/ not described in scripts/README.md"; bad=1; }
         n="$(printf '%s\n' "$files" | grep -c "^$d/[^/]*$")"
-        if [ "$n" -gt 5 ] && ! printf '%s\n' "$files" | grep -q -x -F "$d/README.md"; then
+        if [ "$n" -gt 5 ] && ! grep -q -x -F "$d/README.md" <<< "$files"; then
             echo "FAIL (iii): directory $d/ has $n files and no README.md"; bad=1
         fi
     done <<< "$dirs"
@@ -123,14 +115,14 @@ self_test() {
     git -C "$T" init -q && git -C "$T" add -A
     check "$T" >/dev/null || { echo "self-test: clean tree reported dirty"; rc=1; }
     : > "$T/stray.sh"; git -C "$T" add stray.sh
-    out="$(check "$T")"; echo "$out" | grep -q "FAIL (ii): root file stray.sh" || { echo "self-test: stray root file not caught"; rc=1; }
+    out="$(check "$T")"; grep -q "FAIL (ii): root file stray.sh" <<< "$out" || { echo "self-test: stray root file not caught"; rc=1; }
     git -C "$T" rm -q --cached stray.sh; rm -f "$T/stray.sh"
     git -C "$T" rm -q -f scripts/smoke/new.sh
-    out="$(check "$T")"; echo "$out" | grep -q "FAIL (i): wrapper old.sh" || { echo "self-test: missing wrapper target not caught"; rc=1; }
+    out="$(check "$T")"; grep -q "FAIL (i): wrapper old.sh" <<< "$out" || { echo "self-test: missing wrapper target not caught"; rc=1; }
     mkdir -p "$T/scripts/diag"; for i in 1 2 3 4 5 6; do : > "$T/scripts/diag/d$i.sh"; done; git -C "$T" add scripts/diag
     out="$(check "$T")"
-    echo "$out" | grep -q "FAIL (iii): directory scripts/diag/ not described" || { echo "self-test: undocumented directory not caught"; rc=1; }
-    echo "$out" | grep -q "FAIL (iii): directory scripts/diag/ has 6 files and no README.md" || { echo "self-test: missing README not caught"; rc=1; }
+    grep -q "FAIL (iii): directory scripts/diag/ not described" <<< "$out" || { echo "self-test: undocumented directory not caught"; rc=1; }
+    grep -q "FAIL (iii): directory scripts/diag/ has 6 files and no README.md" <<< "$out" || { echo "self-test: missing README not caught"; rc=1; }
     [ $rc -eq 0 ] && echo "check_layout self-test: PASS" || echo "check_layout self-test: FAIL"
     return $rc
 }

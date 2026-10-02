@@ -25,8 +25,8 @@ if [ ! -x ./boot_gow2 ]; then
 fi
 if [ ! -f EBOOT.ELF ]; then
     echo "EBOOT.ELF nao encontrado. Extraia e decripte o PKG antes:" >&2
-    echo "  python extract_pkg.py <PKG> --out extracted" >&2
-    echo "  python decrypt_self.py extracted/USRDIR/EBOOT.BIN EBOOT.ELF --rap <arquivo.rap>" >&2
+    echo "  python3 tools/extract_pkg.py <PKG> --out extracted" >&2
+    echo "  python3 tools/decrypt_self.py extracted/USRDIR/EBOOT.BIN EBOOT.ELF --rap <arquivo.rap>" >&2
     exit 1
 fi
 

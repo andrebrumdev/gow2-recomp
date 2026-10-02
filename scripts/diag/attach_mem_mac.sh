@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Le a memoria do guest num boot_gow2 vivo (Phase 3 Task 3.1).
 #
-# Porte do attach_mem.sh (gdb/Windows) para lldb/macOS. Mesmas moradas: a flag
+# Porte do attach_mem.sh (gdb/Windows, hoje em scripts/archive/windows/diag/) para lldb/macOS. Mesmas moradas: a flag
 # em que func_0030600C gira e o controlo do allocator, ambas big-endian.
 #
-# Uso: ./attach_mem_mac.sh [segundos-antes-de-ler]      (default 15)
+# Uso: scripts/diag/attach_mem_mac.sh [segundos-antes-de-ler]      (default 15)
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/diag/)
 cd "$HERE"
 
 WAIT="${1:-15}"

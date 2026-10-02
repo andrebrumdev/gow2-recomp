@@ -8,9 +8,9 @@
 # Plan:        ../ps3recomp/docs/superpowers/plans/2026-07-20-macos-intro-audio-open-wall.md
 #
 # Usage:
-#   ./oracle_intro_checklist.sh              # 25s default
-#   ./oracle_intro_checklist.sh 40           # longer
-#   ./oracle_intro_checklist.sh 25 /path/to/RPCS3.log   # attach RPCS3 log hints
+#   scripts/diag/oracle_intro_checklist.sh              # 25s default
+#   scripts/diag/oracle_intro_checklist.sh 40           # longer
+#   scripts/diag/oracle_intro_checklist.sh 25 /path/to/RPCS3.log   # attach RPCS3 log hints
 #
 # Output:
 #   oracle_out/recomp_<ts>.log
@@ -18,7 +18,7 @@
 #
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (this script lives in scripts/diag/)
 cd "$HERE"
 
 SECS="${1:-25}"
@@ -137,7 +137,7 @@ fi
         echo "## RPCS3 log"
         echo ""
         echo "Optional: pass path as 2nd arg to auto-grep:"
-        echo "  ./oracle_intro_checklist.sh 25 /path/to/RPCS3.log"
+        echo "  scripts/diag/oracle_intro_checklist.sh 25 /path/to/RPCS3.log"
         echo ""
     fi
 } >>"$MD"

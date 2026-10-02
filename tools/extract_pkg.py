@@ -10,9 +10,9 @@ ATENÇÃO: NÃO decifra o EBOOT.BIN/.edat internos -- esses saem como SELF NPDRM
 cifrado (a camada SELF é tratada por decrypt_self.py). Assets normais saem em claro.
 
 Uso:
-  python extract_pkg.py PKG                 # parse + lista (valida)
-  python extract_pkg.py PKG --out DIR       # extrai tudo (streaming)
-  python extract_pkg.py PKG --out DIR --only SUBSTR   # só caminhos contendo SUBSTR
+  python3 tools/extract_pkg.py PKG                 # parse + lista (valida)
+  python3 tools/extract_pkg.py PKG --out DIR       # extrai tudo (streaming)
+  python3 tools/extract_pkg.py PKG --out DIR --only SUBSTR   # só caminhos contendo SUBSTR
 """
 import argparse, os, struct, sys
 from Crypto.Cipher import AES

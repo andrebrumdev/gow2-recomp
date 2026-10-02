@@ -1,6 +1,6 @@
 #!/bin/bash
 # watch_run.sh -- run a boot script and kill the process as soon as a stop criterion shows in the log.
-# Usage: ./watch_run.sh <run_script> <log> [idle_s=8] [deadline_s=120]
+# Usage: scripts/diag/watch_run.sh <run_script> <log> [idle_s=8] [deadline_s=120]
 # Stop criteria (first wins):
 #   - "[ICALL-BAD]" whose host_ra names func_002F0AAC (the E385 GCM-callback crash)
 #   - "[ACC30-CYCLE]" dump (registry-walk cycle detector, E387)
