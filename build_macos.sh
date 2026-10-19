@@ -721,7 +721,10 @@ case "$PS3_MAC_VULKAN" in
     *) echo "PS3_MAC_VULKAN must be auto|0 (got '$PS3_MAC_VULKAN')" >&2; exit 1 ;;
 esac
 if [ "$PS3_MAC_VULKAN" = 0 ]; then
-    if nm -u "$RUNTIME_LIB" 2>/dev/null | grep -q '_vkCreateInstance'; then
+    # No pipe into `grep -q`: under pipefail its early exit SIGPIPEs the producer
+    # and the check would read as "not found".
+    _vk_undef=$(nm -u "$RUNTIME_LIB" 2>/dev/null || true)
+    if [[ "$_vk_undef" == *_vkCreateInstance* ]]; then
         echo "PS3_MAC_VULKAN=0 but $RUNTIME_LIB references _vkCreateInstance." >&2
         echo "Build a Vulkan-free runtime and point RUNTIME_LIB at it:" >&2
         echo "  cmake -B $PS3/build-macos-novk -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=TRUE $PS3" >&2
