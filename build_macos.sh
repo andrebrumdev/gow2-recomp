@@ -19,6 +19,18 @@
 #                             -O0 continua disponivel para depurar.
 #   OUT=/path/to/boot_gow2    binary path (default $HERE/boot_gow2)
 #   FORCE_REBUILD_LIFT=1      ignore stale .o and rebuild all lift chunks
+#   GOW2_MACOS_MIN=14.0       macOS deployment target (-mmacosx-version-min) for every
+#                             compile and the link (default: $MACOSX_DEPLOYMENT_TARGET,
+#                             else 14.0). Changing it requires FORCE_REBUILD_LIFT=1
+#                             (cached lift .o keep the old minos) and a runtime archive
+#                             built with the same target.
+#   PS3_MAC_VULKAN=auto|0     auto (default): link Homebrew libvulkan/shaderc when
+#                             present. 0: never link Vulkan (no -lvulkan/shaderc/rpath)
+#                             and abort if the runtime archive still references
+#                             _vkCreateInstance; build such a runtime with
+#                             cmake -B build-macos-novk -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=TRUE
+#                             and RUNTIME_LIB=<ps3recomp>/build-macos-novk/libps3recomp_runtime.a.
+#                             SDL stays mandatory (the runtime references _SDL_* unconditionally).
 #   RELIFT=1  regenera o lift a partir do EBOOT.ELF/functions.json num
 #             directorio NOVO (default recomp_macos_v3) antes de compilar;
 #             NUNCA escreve em recomp_macos_v2 (aborta se o alvo resolver
@@ -51,7 +63,7 @@ PYBIN="${PY:-$PS3/.venv/bin/python}"
 GOW2_TARGET="${GOW2_TARGET:-macos}"
 CC_BIN=clang; CXX_BIN=clang++
 case "$GOW2_TARGET" in
-    macos) TGT="" ;;
+    macos) TGT="-mmacosx-version-min=${GOW2_MACOS_MIN:-${MACOSX_DEPLOYMENT_TARGET:-14.0}}" ;;
     ios)   TGT="-target arm64-apple-ios16.0" ;;
     android)
         . "$PS3/tools/android/android_env.sh"; android_env_resolve; android_env_check_ndk
@@ -703,16 +715,31 @@ if [ -z "$SDL_FLAGS" ]; then
     echo "  SDL: stubs headless (sem libSDL2)"
 fi   # SDL_FLAGS="" para um binario sem SDL (corridas headless com TSan)
 VK_FLAGS=""
-if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
-    VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
-    # The runtime archive's Vulkan backend requires shaderc (it is only compiled in when CMake found it).
-    if pkg-config --exists shaderc; then VK_FLAGS="$VK_FLAGS $(pkg-config --libs shaderc)"; fi
-fi
-# The Homebrew validation layer manifest names its library by bare dylib name, so the
-# loader dlopen()s it through the binary's rpaths (CMake-built tools get this rpath
-# for free; this hand-linked binary did not, and PS3_VK_VALIDATION=1 found no layer).
-if [ -d /opt/homebrew/lib ]; then
-    VK_FLAGS="$VK_FLAGS -Wl,-rpath,/opt/homebrew/lib"
+PS3_MAC_VULKAN="${PS3_MAC_VULKAN:-auto}"
+case "$PS3_MAC_VULKAN" in
+    auto|0) ;;
+    *) echo "PS3_MAC_VULKAN must be auto|0 (got '$PS3_MAC_VULKAN')" >&2; exit 1 ;;
+esac
+if [ "$PS3_MAC_VULKAN" = 0 ]; then
+    if nm -u "$RUNTIME_LIB" 2>/dev/null | grep -q '_vkCreateInstance'; then
+        echo "PS3_MAC_VULKAN=0 but $RUNTIME_LIB references _vkCreateInstance." >&2
+        echo "Build a Vulkan-free runtime and point RUNTIME_LIB at it:" >&2
+        echo "  cmake -B $PS3/build-macos-novk -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=TRUE $PS3" >&2
+        echo "  cmake --build $PS3/build-macos-novk && RUNTIME_LIB=$PS3/build-macos-novk/libps3recomp_runtime.a PS3_MAC_VULKAN=0 ./build_macos.sh" >&2
+        exit 1
+    fi
+else
+    if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
+        VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
+        # The runtime archive's Vulkan backend requires shaderc (it is only compiled in when CMake found it).
+        if pkg-config --exists shaderc; then VK_FLAGS="$VK_FLAGS $(pkg-config --libs shaderc)"; fi
+    fi
+    # The Homebrew validation layer manifest names its library by bare dylib name, so the
+    # loader dlopen()s it through the binary's rpaths (CMake-built tools get this rpath
+    # for free; this hand-linked binary did not, and PS3_VK_VALIDATION=1 found no layer).
+    if [ -d /opt/homebrew/lib ]; then
+        VK_FLAGS="$VK_FLAGS -Wl,-rpath,/opt/homebrew/lib"
+    fi
 fi
 
 # The guest's CRT recurses deeply under -O0; the default 8 MB main-thread stack
