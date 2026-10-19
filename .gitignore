@@ -144,3 +144,9 @@ gcm_stream_*.bin
 build-ios/
 # symlink to the movie cache (movie_cache/ above only matches a directory)
 movie_cache
+
+# dumps de textura e de quadro na raiz (fxtex_*/show_f*.bmp): assets do jogo, nunca versionar
+/fxtex_*.bmp
+/show_f*.bmp
+# binarios de experimento na raiz (g2audio, g2v4, g2vk*...): codigo do jogo recompilado
+/g2*
