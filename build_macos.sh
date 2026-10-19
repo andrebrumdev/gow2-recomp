@@ -290,6 +290,29 @@ if [ "$GOW2_TARGET" = macos ] && [ ! -f "$RUNTIME_LIB" ]; then
     echo "  cmake --build $PS3/build-macos" >&2
     exit 1
 fi
+# PS3_MAC_VULKAN is validated here, before any compile, so a Vulkan-linked runtime
+# aborts in seconds instead of after the whole lift build.
+PS3_MAC_VULKAN="${PS3_MAC_VULKAN:-auto}"
+case "$PS3_MAC_VULKAN" in
+    auto|0) ;;
+    *) echo "PS3_MAC_VULKAN must be auto|0 (got '$PS3_MAC_VULKAN')" >&2; exit 1 ;;
+esac
+if [ "$GOW2_TARGET" = macos ] && [ "$PS3_MAC_VULKAN" = 0 ]; then
+    # No pipe into `grep -q`: under pipefail its early exit SIGPIPEs the producer
+    # and the check would read as "not found". A failing nm must not pass as "no Vulkan".
+    if ! _vk_undef=$(nm -u "$RUNTIME_LIB" 2>&1); then
+        echo "PS3_MAC_VULKAN=0: nm -u failed on $RUNTIME_LIB:" >&2
+        echo "$_vk_undef" >&2
+        exit 1
+    fi
+    if [[ "$_vk_undef" == *_vkCreateInstance* ]]; then
+        echo "PS3_MAC_VULKAN=0 but $RUNTIME_LIB references _vkCreateInstance." >&2
+        echo "Build a Vulkan-free runtime and point RUNTIME_LIB at it:" >&2
+        echo "  cmake -B $PS3/build-macos-novk -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=TRUE $PS3" >&2
+        echo "  cmake --build $PS3/build-macos-novk && RUNTIME_LIB=$PS3/build-macos-novk/libps3recomp_runtime.a PS3_MAC_VULKAN=0 ./build_macos.sh" >&2
+        exit 1
+    fi
+fi
 
 INC=(-I "$LIFT"
      -I "$PS3/include"
@@ -715,23 +738,7 @@ if [ -z "$SDL_FLAGS" ]; then
     echo "  SDL: stubs headless (sem libSDL2)"
 fi   # SDL_FLAGS="" para um binario sem SDL (corridas headless com TSan)
 VK_FLAGS=""
-PS3_MAC_VULKAN="${PS3_MAC_VULKAN:-auto}"
-case "$PS3_MAC_VULKAN" in
-    auto|0) ;;
-    *) echo "PS3_MAC_VULKAN must be auto|0 (got '$PS3_MAC_VULKAN')" >&2; exit 1 ;;
-esac
-if [ "$PS3_MAC_VULKAN" = 0 ]; then
-    # No pipe into `grep -q`: under pipefail its early exit SIGPIPEs the producer
-    # and the check would read as "not found".
-    _vk_undef=$(nm -u "$RUNTIME_LIB" 2>/dev/null || true)
-    if [[ "$_vk_undef" == *_vkCreateInstance* ]]; then
-        echo "PS3_MAC_VULKAN=0 but $RUNTIME_LIB references _vkCreateInstance." >&2
-        echo "Build a Vulkan-free runtime and point RUNTIME_LIB at it:" >&2
-        echo "  cmake -B $PS3/build-macos-novk -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=TRUE $PS3" >&2
-        echo "  cmake --build $PS3/build-macos-novk && RUNTIME_LIB=$PS3/build-macos-novk/libps3recomp_runtime.a PS3_MAC_VULKAN=0 ./build_macos.sh" >&2
-        exit 1
-    fi
-else
+if [ "$PS3_MAC_VULKAN" != 0 ]; then
     if [ -f /opt/homebrew/lib/libvulkan.dylib ]; then
         VK_FLAGS="-L/opt/homebrew/lib -lvulkan"
         # The runtime archive's Vulkan backend requires shaderc (it is only compiled in when CMake found it).

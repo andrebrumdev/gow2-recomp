@@ -49,6 +49,9 @@ def main():
     r, lines = run({"GOW2_MACOS_MIN": "13.0"})
     if r.returncode != 0 or not any("-mmacosx-version-min=13.0" in l for l in lines):
         fails.append("GOW2_MACOS_MIN=13.0 not honoured")
+    r, lines = run({"GOW2_MACOS_MIN": "13.0", "MACOSX_DEPLOYMENT_TARGET": "15.0"})
+    if r.returncode != 0 or not any("-mmacosx-version-min=13.0" in l for l in lines):
+        fails.append("GOW2_MACOS_MIN must win over MACOSX_DEPLOYMENT_TARGET")
     r, lines = run({"MACOSX_DEPLOYMENT_TARGET": "15.0"})
     if r.returncode != 0 or not any("-mmacosx-version-min=15.0" in l for l in lines):
         fails.append("MACOSX_DEPLOYMENT_TARGET=15.0 not honoured")
@@ -57,7 +60,14 @@ def main():
     if "PS3_MAC_VULKAN" not in SCRIPT:
         fails.append("PS3_MAC_VULKAN not referenced in build_macos.sh")
     else:
-        r, lines = run({"PS3_MAC_VULKAN": "0"})
+        # A real (Vulkan-free) archive: the gate runs nm on RUNTIME_LIB and a
+        # failing nm must abort, so the harness's placeholder file cannot be used.
+        with tempfile.TemporaryDirectory(prefix="gow2_novk_") as tmp:
+            c = Path(tmp) / "n.c"
+            c.write_text("int f(void){return 0;}\n")
+            subprocess.run(["/usr/bin/clang", "-c", str(c), "-o", f"{tmp}/n.o"], check=True)
+            subprocess.run(["/usr/bin/ar", "rcs", f"{tmp}/libnovk.a", f"{tmp}/n.o"], check=True)
+            r, lines = run({"PS3_MAC_VULKAN": "0", "RUNTIME_LIB": f"{tmp}/libnovk.a"})
         link = [l for l in lines if " -framework Metal " in l]
         if r.returncode != 0 or not link:
             fails.append(f"PS3_MAC_VULKAN=0 run failed ({r.returncode}): {r.stderr[-800:]}")
@@ -72,8 +82,15 @@ def main():
             subprocess.run(["/usr/bin/clang", "-c", str(c), "-o", f"{tmp}/v.o"], check=True)
             subprocess.run(["/usr/bin/ar", "rcs", f"{tmp}/libvk.a", f"{tmp}/v.o"], check=True)
             r, _ = run({"PS3_MAC_VULKAN": "0", "RUNTIME_LIB": f"{tmp}/libvk.a"})
-            if r.returncode == 0 or "novk" not in r.stderr:
+            if r.returncode == 0 or "PS3_MAC_VULKAN=0 but" not in r.stderr:
                 fails.append(f"PS3_MAC_VULKAN=0 did not abort on Vulkan runtime (rc={r.returncode})")
+            # The abort must come before any compile (cheap failure).
+            if any(" -c " in l for l in _):
+                fails.append("PS3_MAC_VULKAN=0 abort ran after compiling")
+        # Invalid value aborts.
+        r, _ = run({"PS3_MAC_VULKAN": "yes"})
+        if r.returncode == 0 or "must be auto|0" not in r.stderr:
+            fails.append(f"PS3_MAC_VULKAN=yes was accepted (rc={r.returncode})")
 
     if fails:
         print("FAIL")
